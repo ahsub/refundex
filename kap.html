@@ -911,8 +911,10 @@ function recalculate() {
   const d = rawData;
 
   // Priorität: pdfData > divData > Jahresauszug (Schätzung)
-  const divEur = pdfData
-    ? (pdfData.line19 + pdfData.line18) * share
+  // Priorität: pdfData (wenn Werte >0) > divData > Jahresauszug
+  const _pdfDivTotal = pdfData ? (pdfData.line19 || 0) + (pdfData.line18 || 0) : 0;
+  const divEur = (_pdfDivTotal > 0)
+    ? _pdfDivTotal * share
     : divData
       ? divData.totalDivEur * share
       : toEur(d.divNAV, 'USD', year) * share;
@@ -921,13 +923,17 @@ function recalculate() {
     : divData
       ? divData.totalWhtEur * share
       : toEur(d.whtNAV, 'USD', year) * share;
-  const divSource = pdfData ? '(exakt PDF)' : divData ? '(exakt)' : '~';
+  const divSource = (_pdfDivTotal > 0) ? '(exakt PDF)' : divData ? '(exakt)' : '~';
 
   const zinsEur  = pdfData
     ? pdfData.zinsenEur * share
     : d.zinsenGesamt * share;
-  const optGain  = toEur(d.optionen.gain, 'USD', year) * share;
-  const optLoss  = toEur(d.optionen.loss, 'USD', year) * share;  // negativ
+  const optGain  = pdfData?.optGain
+    ? Math.abs(pdfData.optGain) * share
+    : toEur(d.optionen.gain, 'USD', year) * share;
+  const optLoss  = pdfData?.optLoss
+    ? -Math.abs(pdfData.optLoss) * share
+    : toEur(d.optionen.loss, 'USD', year) * share;
   const optSaldo = optGain + optLoss;
   const akGain   = toEur(d.aktien.gain, 'USD', year) * share;
   const akLoss   = toEur(d.aktien.loss, 'USD', year) * share;
@@ -1232,7 +1238,7 @@ async function buildDOCXinBrowser(data) {
   if (!window.docx) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://unpkg.com/docx@9.0.2/build/index.umd.js';
+      s.src = 'https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.umd.min.js';
       s.onload = resolve; s.onerror = reject;
       document.head.appendChild(s);
     });
@@ -1391,8 +1397,17 @@ async function buildDOCXinBrowser(data) {
     }]
   });
 
-  const buffer = await Packer.toBase64String(doc);
-  return buffer;
+  try {
+    const buffer = await Packer.toBase64String(doc);
+    return buffer;
+  } catch(e) {
+    // Fallback: toBuffer + manuelle Base64
+    const buf = await Packer.toBuffer(doc);
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
 }
 
 function b64toBlob(b64, type) {
