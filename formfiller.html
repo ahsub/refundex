@@ -77,7 +77,10 @@
   .field-label { font-size: 11px; color: var(--muted); font-weight: 500; }
   .field-input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; width: 100%; }
   .field-input:focus { border-color: var(--accent); }
-  .field-input.auto { border-color: var(--green-bg); color: var(--green); }
+  .field-input.auto     { border-color: var(--green-bg); color: var(--green); }
+  .field-input.prefilled { border-color: #1a4a2a; background: #0d1f14; }
+  .field-input.needs-input { border-color: #5a4a10; }
+  .field-label .required { color: var(--amber); margin-left: 3px; font-size: 10px; }
   .field-hint { font-size: 10px; color: var(--muted); }
   .full-width { grid-column: 1 / -1; }
 
@@ -199,33 +202,39 @@
         ⚠️ Gemeinschaftskonto aktiv — Rückforderungsbeträge werden automatisch <strong>50/50</strong> aufgeteilt. Es werden <strong>zwei separate Cheatsheets</strong> generiert (je ein Antrag pro Inhaber).
       </div>
 
+      <!-- AUTOFILL BUTTON -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;padding:0.6rem 0.75rem;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--muted);flex:1">Felder mit gelbem Rand müssen ausgefüllt werden. Grün = bereits gesetzt. Alle Felder sind editierbar.</span>
+        <button class="btn btn-secondary" onclick="autofillFromCSV()" style="font-size:12px;padding:5px 12px;white-space:nowrap">📋 Aus Kontoauszug übernehmen</button>
+      </div>
+
       <!-- INHABER 1 -->
       <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem" id="label-inhaber1">Kontoinhaber</div>
       <div class="field-grid">
         <div class="field-group">
           <label class="field-label">Vollständiger Name</label>
-          <input type="text" class="field-input" id="f-name" placeholder="Dr. Axel Hildebrand">
+          <input type="text" class="field-input needs-input" id="f-name" placeholder="Name exakt wie im Konto (z.B. AXEL HILDEBRAND)">
         </div>
         <div class="field-group">
           <label class="field-label">Geburtsdatum</label>
-          <input type="text" class="field-input" id="f-dob" placeholder="15.02.1960">
+          <input type="text" class="field-input needs-input" id="f-dob" placeholder="TT.MM.JJJJ">
         </div>
         <div class="field-group full-width">
           <label class="field-label">Adresse</label>
-          <input type="text" class="field-input" id="f-address" placeholder="Musterstraße 1, 47800 Krefeld, Deutschland">
+          <input type="text" class="field-input needs-input" id="f-address" placeholder="Straße, PLZ Ort, Deutschland">
         </div>
         <div class="field-group">
           <label class="field-label">Steuer-IdNr. (Deutschland)</label>
-          <input type="text" class="field-input" id="f-taxid" placeholder="12 345 678 901">
+          <input type="text" class="field-input needs-input" id="f-taxid" placeholder="11-stellige Steuer-IdNr.">
         </div>
         <div class="field-group">
           <label class="field-label">IBAN</label>
-          <input type="text" class="field-input" id="f-iban" placeholder="DE12 3456 7890 1234 5678 90">
+          <input type="text" class="field-input needs-input" id="f-iban" placeholder="DE...">
           <span class="field-hint">Für Erstattungsüberweisung</span>
         </div>
         <div class="field-group">
           <label class="field-label">BIC / SWIFT</label>
-          <input type="text" class="field-input" id="f-bic" placeholder="BELADEBEXXX">
+          <input type="text" class="field-input needs-input" id="f-bic" placeholder="8 oder 11 Zeichen">
         </div>
         <div class="field-group">
           <label class="field-label">Depot-Nr. (CapTrader)</label>
@@ -243,19 +252,19 @@
         <div class="field-grid">
           <div class="field-group">
             <label class="field-label">Vollständiger Name</label>
-            <input type="text" class="field-input" id="f2-name" placeholder="Christa F Hildebrand">
+            <input type="text" class="field-input needs-input" id="f2-name" placeholder="Name exakt wie im Konto">
           </div>
           <div class="field-group">
             <label class="field-label">Geburtsdatum</label>
-            <input type="text" class="field-input" id="f2-dob" placeholder="TT.MM.JJJJ">
+            <input type="text" class="field-input needs-input" id="f2-dob" placeholder="TT.MM.JJJJ">
           </div>
           <div class="field-group">
             <label class="field-label">Steuer-IdNr. (Deutschland)</label>
-            <input type="text" class="field-input" id="f2-taxid" placeholder="12 345 678 902">
+            <input type="text" class="field-input needs-input" id="f2-taxid" placeholder="11-stellige Steuer-IdNr.">
           </div>
           <div class="field-group">
             <label class="field-label">IBAN (Erstattung 2. Inhaber)</label>
-            <input type="text" class="field-input" id="f2-iban" placeholder="DE12 3456 7890 1234 5678 90">
+            <input type="text" class="field-input needs-input" id="f2-iban" placeholder="DE... (kann identisch mit Inhaber 1 sein)">
             <span class="field-hint">Kann identisch mit Inhaber 1 sein</span>
           </div>
           <div class="field-group">
@@ -714,6 +723,80 @@ function loadSessionData() {
 }
 
 loadSessionData();
+
+// ============================================================
+// AUTOFILL AUS KONTOAUSZUG-DATEN
+// ============================================================
+
+// Kontodaten aus sessionStorage (werden vom Dashboard übergeben)
+// oder aus dem zuletzt hochgeladenen Jahresauszug
+let accountMeta = {};
+try {
+  const raw = sessionStorage.getItem('refundex_account_meta');
+  if (raw) accountMeta = JSON.parse(raw);
+} catch(e) {}
+
+function autofillFromCSV() {
+  // Namen aus Kontoinformation parsen
+  // Format CapTrader: "Axel Hildebrand and Christa F Hildebrand"
+  const fullName = accountMeta.name || '';
+  const depot    = accountMeta.account || '';
+
+  if (!fullName && !depot) {
+    alert('Keine Kontodaten verfügbar. Bitte zuerst im Dashboard einen Kontoauszug hochladen, dann erneut versuchen.\n\nAlternativ: Felder manuell ausfüllen.');
+    return;
+  }
+
+  // Namen aufteilen bei " and "
+  const nameParts = fullName.split(/ and /i).map(n => n.trim().toUpperCase());
+
+  if (nameParts[0]) setField('f-name',  nameParts[0]);
+  if (nameParts[1]) setField('f2-name', nameParts[1]);
+  if (depot)        setField('f-depot', depot);
+
+  // Gemeinschaftskonto automatisch erkennen
+  if (nameParts.length >= 2 && nameParts[1]) {
+    const toggle = document.getElementById('joint-toggle');
+    if (!toggle.checked) {
+      toggle.checked = true;
+      toggleJoint();
+    }
+  }
+
+  showAutofillToast(nameParts, depot);
+}
+
+function setField(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = value;
+  el.classList.remove('needs-input');
+  el.classList.add('prefilled');
+}
+
+function markFilled(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.value.trim()) {
+    el.classList.remove('needs-input');
+    el.classList.add('prefilled');
+  }
+}
+
+// Alle Felder beim Verlassen automatisch grün markieren wenn ausgefüllt
+document.addEventListener('DOMContentLoaded', () => {
+  const ids = ['f-name','f-dob','f-address','f-taxid','f-iban','f-bic','f-depot',
+               'f2-name','f2-dob','f2-taxid','f2-iban'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('blur', () => markFilled(id));
+  });
+});
+
+function showAutofillToast(names, depot) {
+  const msg = `✅ Übernommen:\n• Inhaber 1: ${names[0]||'–'}\n${names[1]?'• Inhaber 2: '+names[1]+'\n':''}• Depot: ${depot}\n\nBitte fehlende Felder (gelb) noch ausfüllen.`;
+  alert(msg);
+}
 </script>
 </body>
 </html>
