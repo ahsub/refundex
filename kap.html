@@ -434,10 +434,7 @@ function fmtRaw(n) { return n >= 0 ? fmt(n) : fmt(n); }
 // ============================================================
 // STATE
 // ============================================================
-let rawData = null;   // Jahresauszug CSV
-let divData = null;   // Dividendenbericht HTML (exakte EUR-Kurse)
-let fxData  = null;   // FX-Einkünfte CSV (Anlage SO)
-let pdfData = null;   // Informativer Steuerbericht PDF (höchste Priorität)
+// State bereits in Header deklariert (rawData, divData, fxData, pdfData)
 
 // ============================================================
 // CSV LADEN
@@ -656,145 +653,100 @@ function loadPWCpdf(event) {
 }
 
 async function parsePWCpdf(arrayBuffer) {
-    // PDF.js 3.x UMD laden (setzt window.pdfjsLib global)
-  if (!window.pdfjsLib) {
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  // Strategie: PDF als base64 an Claude API senden
+  // Claude kann PDFs nativ lesen — zuverlässiger als PDF.js im Browser
+  const apiKey = window._kapApiKey || prompt(
+    'Anthropic API-Key für PDF-Analyse:\n(sk-ant-...)',
+    ''
+  );
+  if (!apiKey || !apiKey.startsWith('sk-ant-')) {
+    throw new Error('Kein gültiger API-Key eingegeben');
   }
-  const lib = window.pdfjsLib; const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  window._kapApiKey = apiKey;  // Für diese Session merken
 
-  const result = {
-    kontoName: '', kontoNr: '', year: '',
-    line7: 0, line18: 0, line19: 0,
-    line22: 0, line23: 0,
-    divBrutto: 0, whtTotal: 0, creditableWht: 0,
-    optGain: 0, optLoss: 0,
-    zinsenEur: 0,
-    source: 'pwc_pdf',
+  // ArrayBuffer → base64
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const b64 = btoa(binary);
+
+  const systemPrompt = `Du analysierst einen CapTrader/IBKR "Informativen Steuerbericht (Deutsch)" PDF.
+Extrahiere exakt die folgenden Werte und antworte NUR mit einem JSON-Objekt, kein Text davor oder danach.
+
+STRIKTE REGELN:
+- Erfinde keine Werte. Wenn ein Wert nicht gefunden wird, setze 0.
+- Alle Beträge in EUR (nicht USD).
+- Negative Werte als negative Zahlen (z.B. -20273.83).
+
+Gesuchte Felder:
+{
+  "kontoName": "Name des Kontoinhabers",
+  "kontoNr": "Konto-ID (z.B. U12074449)",
+  "year": "Steuerjahr als String (z.B. 2025)",
+  "line18": Zeile 18 German capital income (Zinsen),
+  "line19": Zeile 19 Foreign capital income (Dividenden),
+  "line22": Zeile 22 losses from disposal of non-share capital (Termingeschäftsverluste, positiv),
+  "line23": Zeile 23 losses from the sale of shares (Aktienverluste, positiv),
+  "creditableWht": "Creditable Tax (EUR)" aus Total foreign-registered assets (= Anlage KAP Zeile 41),
+  "whtTotal": "Tax Withheld (EUR)" aus Total foreign-registered assets,
+  "divBrutto": "Gross (EUR)" aus Total foreign-registered assets,
+  "optGain": Summe aller Gewinne aus "Disposals of foreign non-share assets" (Gains Spalte),
+  "optLoss": Summe aller Verluste aus "Disposals of foreign non-share assets" (Loss Spalte, als negative Zahl),
+  "zinsenEur": Total German-registered assets Gross EUR (Zinsen)
+}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{
+        role: 'user',
+        content: [{
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: b64,
+          }
+        }, {
+          type: 'text',
+          text: 'Extrahiere die Steuerwerte aus diesem CapTrader Steuerbericht.'
+        }]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API Fehler ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.find(c => c.type === 'text')?.text || '';
+
+  // JSON aus Antwort extrahieren
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Kein JSON in API-Antwort gefunden');
+
+  const result = JSON.parse(jsonMatch[0]);
+  result.source = 'pwc_pdf_claude';
+
+  // Sicherstellen dass alle Felder vorhanden
+  const defaults = {
+    kontoName:'', kontoNr:'', year:'',
+    line18:0, line19:0, line22:0, line23:0,
+    creditableWht:0, whtTotal:0, divBrutto:0,
+    optGain:0, optLoss:0, zinsenEur:0,
   };
-
-  function pn(s) {
-    if (!s) return 0;
-    const neg = String(s).includes('(');
-    const v = parseFloat(String(s).replace(/[,()]/g,''));
-    return isNaN(v) ? 0 : (neg ? -v : v);
-  }
-
-  // Seiten-Text mit Positionen extrahieren
-  async function getPageItems(pageNum) {
-    const page = await pdf.getPage(pageNum);
-    const tc = await page.getTextContent();
-    return tc.items.map(item => ({
-      text: item.str.trim(),
-      x: Math.round(item.transform[4]),
-      y: Math.round(item.transform[5]),
-    })).filter(i => i.text);
-  }
-
-  function groupByY(items, tol=3) {
-    const rows = {};
-    for (const item of items) {
-      const y = Math.round(item.y / tol) * tol;
-      if (!rows[y]) rows[y] = [];
-      rows[y].push(item);
-    }
-    return rows;
-  }
-
-  function findNum(rows, keyword, xMin=600) {
-    for (const [y, row] of Object.entries(rows)) {
-      const text = row.map(i => i.text).join(' ');
-      if (text.toLowerCase().includes(keyword.toLowerCase())) {
-        const nums = row.filter(i => i.x >= xMin && /^[\(]?[\d,]+\.\d{2}[\)]?$/.test(i.text));
-        if (nums.length) return pn(nums[0].text);
-      }
-    }
-    return 0;
-  }
-
-  // SEITE 1: Metadaten + Summary
-  const p1items = await getPageItems(1);
-  const p1rows  = groupByY(p1items);
-
-  // Kontoname aus ersten Zeilen
-  for (const items of Object.values(p1rows)) {
-    const text = items.map(i => i.text).join(' ');
-    if (text.includes('Hildebrand') && !result.kontoName) result.kontoName = text;
-    if (/^U\d{8}$/.test(items.find(i => /^U\d+$/.test(i.text))?.text || ''))
-      result.kontoNr = items.find(i => /^U\d+$/.test(i.text)).text;
-  }
-
-  // Jahr aus Periode
-  for (const items of Object.values(p1rows)) {
-    const text = items.map(i => i.text).join(' ');
-    const m = text.match(/\d{1,2} \w+ (\d{4}) - \d{1,2} \w+ (\d{4})/);
-    if (m) { result.year = m[2]; break; }
-  }
-
-  result.line7  = findNum(p1rows, 'Line 7');
-  result.line18 = findNum(p1rows, 'Line 18');
-
-  // Line 19: Wert steht auf Zeile mit "Foreign capital income"
-  for (const [y, row] of Object.entries(p1rows)) {
-    const text = row.map(i => i.text).join(' ');
-    if (text.includes('Foreign capital income')) {
-      const nums = row.filter(i => i.x > 600 && /^[\d,]+\.\d{2}$/.test(i.text));
-      if (nums.length) { result.line19 = pn(nums[0].text); break; }
-    }
-  }
-
-  result.line22 = findNum(p1rows, 'non-share capital', 600);
-  result.line23 = findNum(p1rows, 'sale of shares', 600);
-
-  // SEITE 2: Zinsen
-  const p2items = await getPageItems(2);
-  const p2rows  = groupByY(p2items);
-  for (const [y, row] of Object.entries(p2rows)) {
-    const text = row.map(i => i.text).join(' ');
-    if (text.includes('Total German')) {
-      const nums = row.filter(i => i.x > 400 && /^[\d,]+\.\d{2}$/.test(i.text));
-      if (nums.length) { result.zinsenEur = pn(nums[0].text); break; }
-    }
-  }
-
-  // SEITE 6: Dividenden Total + WHT + Creditable (Line 41)
-  const p6items = await getPageItems(6);
-  const p6rows  = groupByY(p6items);
-  for (const [y, row] of Object.entries(p6rows)) {
-    const text = row.map(i => i.text).join(' ');
-    if (text.includes('Total foreign')) {
-      const nums = row.filter(i => i.x > 350 && /^[\d,]+\.\d{2}$/.test(i.text));
-      if (nums.length >= 3) {
-        result.divBrutto    = pn(nums[0].text);
-        result.whtTotal     = pn(nums[1].text);
-        result.creditableWht= pn(nums[2].text);
-        break;
-      }
-    }
-  }
-
-  // SEITE 18: Optionen Totals (Seite kann variieren — suche in Seiten 15-25)
-  for (let pageNum = 15; pageNum <= Math.min(25, pdf.numPages); pageNum++) {
-    const items = await getPageItems(pageNum);
-    const rows  = groupByY(items);
-    let found = false;
-    for (const [y, row] of Object.entries(rows)) {
-      const text = row.map(i => i.text).join(' ');
-      if (text === 'Totals' || (text.startsWith('Totals') && !text.includes('distribution'))) {
-        const nums = row.filter(i => /^[\(]?[\d,]+\.\d{2}[\)]?$/.test(i.text));
-        if (nums.length >= 2) {
-          result.optGain = pn(nums[0].text);
-          result.optLoss = pn(nums[1].text);
-          found = true; break;
-        }
-      }
-    }
-    if (found) break;
-  }
-
-  return result;
+  return { ...defaults, ...result };
 }
 
 async function loadScript(src) {
@@ -928,13 +880,26 @@ function splitLine(line) {
 // BERECHNUNG
 // ============================================================
 function recalculate() {
-  if (!rawData) return;
+  console.log('recalculate:', {rawData:!!rawData, pdfData:!!pdfData});
+  if (!rawData && !pdfData) return;
 
-  const year    = document.getElementById('tax-year').value || rawData.year;
+  const year    = document.getElementById('tax-year').value
+                  || pdfData?.year || rawData?.year || '2024';
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
   const fsa     = parseFloat(document.getElementById('fsa').value) || 1000;
   const spouse  = document.getElementById('spouse-select').value;
+
+  // Leeres rawData wenn nur PDF vorhanden
+  if (!rawData) {
+    rawData = {
+      kontoName: pdfData.kontoName || '',
+      kontoNr:   pdfData.kontoNr   || '',
+      year:      pdfData.year      || year,
+      divNAV:0, whtNAV:0, zinsenGesamt:0,
+      optionen:{gain:0,loss:0}, aktien:{gain:0,loss:0}, fx:{gain:0,loss:0},
+    };
+  }
 
   // Badge aktualisieren
   const badge = document.getElementById('account-badge');
@@ -1014,6 +979,7 @@ function recalculate() {
     hinweis.style.display = 'none';
   }
 
+  console.log('Rendering results...');
   document.getElementById('result-section').style.display = 'block';
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('docx-btn').style.display = 'inline-flex';
@@ -1173,7 +1139,11 @@ function downloadDOCX() {
 
   // Daten sammeln
   // PDF allein reicht als Datenquelle
-  if (!rawData && !pdfData) { console.log("recalculate: no data"); return; }
+  console.log('recalculate called', {rawData: !!rawData, pdfData: !!pdfData, divData: !!divData});
+  if (!rawData && !pdfData) {
+    console.log("recalculate: no data available");
+    return;
+  }
 
   const year    = document.getElementById('tax-year').value ||
                   (pdfData?.year) || (rawData?.year) || '2024';
@@ -1193,7 +1163,7 @@ function downloadDOCX() {
 
   const divEur   = divData ? divData.totalDivEur * share : toEur(d.divNAV,'USD',year) * share;
   const whtEur   = divData ? divData.totalWhtEur * share : toEur(d.whtNAV,'USD',year) * share;
-  const zinsEur  = d.zinsenGesamt * share;
+  const zinsEur  = pdfData ? pdfData.zinsenEur * share : d.zinsenGesamt * share;
   const optGain  = pdfData
     ? pdfData.optGain * share
     : toEur(d.optionen.gain,'USD',year) * share;
@@ -1201,8 +1171,12 @@ function downloadDOCX() {
     ? pdfData.optLoss * share
     : toEur(d.optionen.loss,'USD',year) * share;
   const optSaldo = optGain + optLoss;
-  const akGain   = toEur(d.aktien.gain,'USD',year) * share;
-  const akLoss   = toEur(d.aktien.loss,'USD',year) * share;
+  const akGain   = pdfData
+    ? 0  // Aktiengewinne nicht direkt im PDF Summary
+    : toEur(d.aktien.gain,'USD',year) * share;
+  const akLoss   = pdfData
+    ? pdfData.line23 * share
+    : toEur(d.aktien.loss,'USD',year) * share;
   const fxSaldo  = fxData ? fxData.total * share : toEur(d.fx.gain+d.fx.loss,'USD',year) * share;
   const optVortrag = Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain + 20000));
 
