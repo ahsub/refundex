@@ -15,28 +15,34 @@
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.6;}
-
   .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;}
   .logo{font-size:18px;font-weight:700;letter-spacing:-0.5px;}
   .logo span{color:var(--accent);}
   .logo-sub{font-size:11px;color:var(--muted);margin-left:10px;font-weight:400;}
-  .nav-link{font-size:12px;color:var(--accent);text-decoration:none;}
-
+  .nav-link{font-size:12px;color:var(--accent);text-decoration:none;margin-left:1rem;}
   .main{max-width:1000px;margin:0 auto;padding:2rem;}
 
-  /* UPLOAD */
-  .upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:2rem;text-align:center;cursor:pointer;background:var(--bg2);margin-bottom:1.5rem;transition:border-color 0.2s;}
-  .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:var(--bg3);}
-  .upload-title{font-size:15px;font-weight:600;margin-bottom:0.4rem;}
-  .upload-hint{font-size:12px;color:var(--muted);}
-  #file-input{display:none;}
+  /* UPLOAD GRID */
+  .upload-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1rem;}
+  .upload-card{background:var(--bg2);border:2px dashed var(--border);border-radius:var(--radius);padding:1.25rem;text-align:center;cursor:pointer;transition:border-color 0.2s;}
+  .upload-card:hover{border-color:var(--accent);background:var(--bg3);}
+  .upload-card.loaded{border-color:var(--green);border-style:solid;}
+  .upload-card.loaded-pdf{border-color:var(--accent);border-style:solid;}
+  .uc-icon{font-size:1.75rem;margin-bottom:0.4rem;}
+  .uc-title{font-size:13px;font-weight:600;margin-bottom:4px;}
+  .uc-hint{font-size:11px;color:var(--muted);}
+  .uc-status{font-size:11px;margin-top:6px;color:var(--accent);}
 
-  /* STEUERJAHR + EINSTELLUNGEN */
+  /* EXECUTE BAR */
+  .execute-bar{display:none;align-items:center;gap:12px;padding:0.75rem 1rem;background:var(--amber-bg);border:1px solid #7a5a10;border-radius:8px;margin-bottom:1rem;}
+  .execute-bar.visible{display:flex;}
+
+  /* SETTINGS */
   .settings-bar{display:flex;gap:1rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;}
-  .setting-group{display:flex;align-items:center;gap:8px;font-size:13px;}
-  .setting-label{color:var(--muted);}
-  .setting-input{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:13px;outline:none;width:80px;}
-  .setting-select{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:13px;outline:none;}
+  .sg{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .sg label{color:var(--muted);}
+  .sg input,.sg select{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:13px;outline:none;}
+  .sg input{width:80px;}
   .badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;}
   .badge-joint{background:var(--amber-bg);color:var(--amber);}
   .badge-single{background:var(--green-bg);color:var(--green);}
@@ -44,14 +50,12 @@
   /* SECTION */
   .section{margin-bottom:2rem;}
   .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.75rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-  .kap-ref{font-size:10px;font-weight:500;padding:2px 8px;border-radius:4px;background:#0d1a35;color:var(--accent);font-family:var(--mono);}
+  .kap-ref{font-size:10px;padding:2px 8px;border-radius:4px;background:#0d1a35;color:var(--accent);font-family:var(--mono);}
 
-  /* KAP CARDS */
+  /* OVERVIEW CARDS */
   .kap-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
   .kap-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;}
-  .kap-card.highlight{border-color:var(--accent);background:#0d1a35;}
-  .kap-card.warn{border-color:var(--amber);}
-  .kap-card.positive{border-color:var(--green);}
+  .kap-card.hl{border-color:var(--accent);background:#0d1a35;}
   .kc-label{font-size:11px;color:var(--muted);margin-bottom:4px;}
   .kc-value{font-size:22px;font-weight:700;font-family:var(--mono);}
   .kc-value.green{color:var(--green);}
@@ -60,7 +64,7 @@
   .kc-sub{font-size:11px;color:var(--muted);margin-top:4px;}
   .kc-zeile{font-size:10px;font-family:var(--mono);color:var(--accent);margin-top:6px;background:#0d1a35;padding:2px 6px;border-radius:4px;display:inline-block;}
 
-  /* VERLUSTTOEPFE */
+  /* TÖPFE */
   .topf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;}
   .topf{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;}
   .topf-name{font-size:12px;font-weight:600;margin-bottom:0.5rem;}
@@ -71,17 +75,16 @@
   .topf-row .val.neg{color:var(--red);}
   .topf-row .val.warn{color:var(--amber);}
 
-  /* ANLAGE KAP FORMULAR */
+  /* KAP FORMULAR */
   .kap-form{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
   .kap-form-header{background:linear-gradient(135deg,#0d1a35,#0d2040);padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
   .kap-form-title{font-size:15px;font-weight:700;}
   .kap-form-sub{font-size:12px;color:var(--muted);margin-top:2px;}
-  .kap-form-body{padding:0;}
-  .kap-row{display:grid;grid-template-columns:80px 1fr 200px;gap:0;border-bottom:1px solid var(--bg3);align-items:stretch;}
+  .kap-row{display:grid;grid-template-columns:80px 1fr 200px;border-bottom:1px solid var(--bg3);}
   .kap-row:last-child{border-bottom:none;}
   .kap-row:hover{background:var(--bg3);}
   .kap-zeile{font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 12px;background:#0d1020;display:flex;align-items:center;border-right:1px solid var(--bg3);font-weight:600;}
-  .kap-beschr{font-size:12px;color:var(--text);padding:10px 12px;display:flex;align-items:center;}
+  .kap-beschr{font-size:12px;padding:10px 12px;display:flex;align-items:center;}
   .kap-betrag{font-family:var(--mono);font-size:13px;font-weight:600;padding:10px 16px;text-align:right;display:flex;align-items:center;justify-content:flex-end;}
   .kap-betrag.pos{color:var(--green);}
   .kap-betrag.neg{color:var(--red);}
@@ -95,14 +98,19 @@
   .hinweis.info{background:#0d1a35;border:1px solid #1a3060;color:#7eb3f7;}
   .hinweis.ok{background:var(--green-bg);border:1px solid #1a4a2a;color:#6ee7a0;}
 
-  /* PRINT */
+  /* BUTTONS */
   .btn{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:12px;}
   .btn:hover{background:var(--bg3);}
-  .btn-primary{background:var(--accent);color:#fff;border-color:transparent;}
+  .btn-primary{background:var(--accent);color:#fff;border-color:transparent;font-size:13px;font-weight:500;}
   .btn-primary:hover{opacity:0.88;}
 
+  /* EMPTY */
+  .empty{text-align:center;padding:3rem 2rem;color:var(--muted);}
+  .empty-icon{font-size:3rem;margin-bottom:1rem;}
+  .empty-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:0.5rem;}
+
   @media print {
-    .header,.upload-zone,.settings-bar,.hinweis,.btn{display:none!important;}
+    .header,.upload-grid,.execute-bar,.settings-bar,.hinweis,.btn{display:none!important;}
     body{background:#fff;color:#000;}
     .kap-form{border:1px solid #ccc;}
     .kap-form-header{background:#f5f5f5!important;}
@@ -110,8 +118,8 @@
     .kap-betrag.pos{color:#16a34a;}
     .kap-betrag.neg{color:#dc2626;}
   }
-
   @media(max-width:700px){
+    .upload-grid{grid-template-columns:1fr 1fr;}
     .kap-grid,.topf-grid{grid-template-columns:1fr;}
     .kap-row{grid-template-columns:60px 1fr 120px;}
   }
@@ -123,7 +131,7 @@
   <div style="display:flex;align-items:center">
     <div class="logo"><span>R</span>efundex <span class="logo-sub">KAP-Assistent</span></div>
   </div>
-  <div style="display:flex;gap:1rem;align-items:center">
+  <div>
     <a href="formfiller.html" class="nav-link">FormFiller</a>
     <a href="index.html" class="nav-link">← Dashboard</a>
   </div>
@@ -131,97 +139,99 @@
 
 <main class="main">
 
-  <!-- UPLOAD -->
-  <!-- UPLOAD BEREICH: 4 Dateitypen -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
-    <div class="upload-zone" onclick="document.getElementById('file-main').click()" title="Jahresauszug CSV">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">📊</div>
-      <div class="upload-title" style="font-size:13px">Jahresauszug</div>
-      <div class="upload-hint">U12074449_2024_2024.csv</div>
-      <div id="status-main" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Nicht geladen</div>
-    </div>
-    <div class="upload-zone" onclick="document.getElementById('file-div').click()" title="Dividendenbericht HTML">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">💰</div>
-      <div class="upload-title" style="font-size:13px">Dividendenbericht</div>
-      <div class="upload-hint">*_dividends.html · Exakte EUR-Beträge</div>
-      <div id="status-div" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
-    </div>
-    <div class="upload-zone" onclick="document.getElementById('file-fx').click()" title="FX-Einkünfte CSV">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">💱</div>
-      <div class="upload-title" style="font-size:13px">FX-Einkünfte</div>
-      <div class="upload-hint">*_fx.csv · Anlage SO Devisengewinne</div>
-      <div id="status-fx" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
-    </div>
-    <div class="upload-zone" onclick="document.getElementById('file-pdf').click()" title="Informativer Steuerbericht PDF">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">📑</div>
-      <div class="upload-title" style="font-size:13px">Steuerbericht PDF</div>
-      <div class="upload-hint">*_PWC_DE.pdf · Alle Werte exakt</div>
-      <div id="status-pdf" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt andere</div>
-    </div>
-  </div>
-  <input type="file" id="file-main" accept=".csv" onchange="loadCSV(event,'main')">
-  <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)">
-  <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)">
-  <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)">
+  <!-- ═══════════════════════════════════════════════════════
+       UPLOAD GRID — 4 Karten, alle gleichwertig im Grid
+  ════════════════════════════════════════════════════════ -->
+  <div class="upload-grid">
 
-  <!-- EXECUTE BAR -->
-  <div id="execute-bar" style="display:none;margin-bottom:1rem;padding:0.75rem 1rem;background:var(--amber-bg);border:1px solid #7a5a10;border-radius:8px;align-items:center;gap:12px">
-    <span style="font-size:12px;color:#fbbf60;flex:1">📑 Steuerbericht PDF geladen — Jahresauszug CSV nicht erforderlich wenn PDF vollständig ist.</span>
-    <button class="btn btn-primary" onclick="recalculate()" style="white-space:nowrap">▶ Berechnung starten</button>
+    <div class="upload-card" id="card-main" onclick="document.getElementById('inp-main').click()">
+      <div class="uc-icon">📊</div>
+      <div class="uc-title">Jahresauszug</div>
+      <div class="uc-hint">U12074449_2024_2024.csv</div>
+      <div class="uc-status" id="st-main">Nicht geladen</div>
+    </div>
+
+    <div class="upload-card" id="card-div" onclick="document.getElementById('inp-div').click()">
+      <div class="uc-icon">💰</div>
+      <div class="uc-title">Dividendenbericht</div>
+      <div class="uc-hint">*_dividends.html · Exakte EUR</div>
+      <div class="uc-status" id="st-div">Optional</div>
+    </div>
+
+    <div class="upload-card" id="card-fx" onclick="document.getElementById('inp-fx').click()">
+      <div class="uc-icon">💱</div>
+      <div class="uc-title">FX-Einkünfte</div>
+      <div class="uc-hint">*_fx.csv · Anlage SO</div>
+      <div class="uc-status" id="st-fx">Optional</div>
+    </div>
+
+    <div class="upload-card" id="card-pdf" onclick="document.getElementById('inp-pdf').click()">
+      <div class="uc-icon">📑</div>
+      <div class="uc-title">Steuerbericht PDF</div>
+      <div class="uc-hint">*_PWC_DE.pdf · Alle Werte exakt</div>
+      <div class="uc-status" id="st-pdf">Optional · höchste Priorität</div>
+    </div>
+
+  </div>
+
+  <!-- Versteckte File-Inputs — außerhalb des Grids, aber im DOM -->
+  <input type="file" id="inp-main" accept=".csv"       style="display:none" onchange="onFileMain(event)">
+  <input type="file" id="inp-div"  accept=".html,.htm" style="display:none" onchange="onFileDiv(event)">
+  <input type="file" id="inp-fx"   accept=".csv"       style="display:none" onchange="onFileFx(event)">
+  <input type="file" id="inp-pdf"  accept=".pdf"       style="display:none" onchange="onFilePdf(event)">
+
+  <!-- EXECUTE BAR (nur wenn PDF ohne CSV geladen) -->
+  <div class="execute-bar" id="execute-bar">
+    <span style="font-size:12px;color:#fbbf60;flex:1">
+      📑 Steuerbericht PDF geladen. Jahresauszug CSV ist optional —
+      PDF enthält alle KAP-Werte exakt.
+    </span>
+    <button class="btn btn-primary" onclick="recalculate()">▶ Berechnung starten</button>
   </div>
 
   <!-- EINSTELLUNGEN -->
   <div class="settings-bar">
-    <div class="setting-group">
-      <span class="setting-label">Steuerjahr:</span>
-      <input type="text" class="setting-input" id="tax-year" value="2024" maxlength="4">
-    </div>
-    <div class="setting-group">
-      <span class="setting-label">Freistellungsauftrag:</span>
-      <input type="text" class="setting-input" id="fsa" value="1000" style="width:90px"> €
-    </div>
-    <div class="setting-group">
-      <span class="setting-label">Kontoart:</span>
-      <select class="setting-select" id="account-type" onchange="recalculate()">
+    <div class="sg"><label>Steuerjahr:</label>
+      <input type="text" id="tax-year" value="2024" maxlength="4"></div>
+    <div class="sg"><label>Freistellungsauftrag:</label>
+      <input type="text" id="fsa" value="1000" style="width:90px"> €</div>
+    <div class="sg"><label>Kontoart:</label>
+      <select id="account-type" onchange="recalculate()">
         <option value="single">Einzelkonto</option>
         <option value="joint" selected>Gemeinschaftskonto (50/50)</option>
-      </select>
-    </div>
-    <div class="setting-group">
-      <span class="setting-label">Ehegatte:</span>
-      <select class="setting-select" id="spouse-select" onchange="recalculate()">
+      </select></div>
+    <div class="sg"><label>Ehegatte:</label>
+      <select id="spouse-select" onchange="recalculate()">
         <option value="1">Inhaber 1 (Axel)</option>
         <option value="2">Inhaber 2 (Christa)</option>
         <option value="both">Beide (Übersicht)</option>
-      </select>
-    </div>
+      </select></div>
     <span id="account-badge" class="badge badge-joint">Gemeinschaftskonto</span>
   </div>
 
   <!-- ERGEBNIS -->
   <div id="result-section" style="display:none">
 
-    <!-- ÜBERSICHT KACHELN -->
     <div class="section">
-      <div class="section-title">Kapitalerträge 2024 — Übersicht <span class="kap-ref">Anlage KAP</span></div>
+      <div class="section-title">Kapitalerträge — Übersicht <span class="kap-ref">Anlage KAP</span></div>
       <div class="kap-grid">
-        <div class="kap-card highlight">
+        <div class="kap-card hl">
           <div class="kc-label">Dividenden (brutto)</div>
           <div class="kc-value green" id="ov-div">—</div>
           <div class="kc-sub" id="ov-div-sub"></div>
-          <div class="kc-zeile">KAP Zeile 7</div>
+          <div class="kc-zeile">KAP Zeile 7 / 19</div>
         </div>
         <div class="kap-card">
           <div class="kc-label">Anrechenbare Quellensteuer</div>
           <div class="kc-value" id="ov-wht">—</div>
-          <div class="kc-sub">Max. 15% DBA-Satz anrechenbar</div>
+          <div class="kc-sub">DBA-Satz max. 15%</div>
           <div class="kc-zeile">KAP Zeile 41</div>
         </div>
-        <div class="kap-card positive">
+        <div class="kap-card">
           <div class="kc-label">Zinserträge</div>
           <div class="kc-value green" id="ov-zins">—</div>
-          <div class="kc-sub">Guthabenzinsen CapTrader</div>
-          <div class="kc-zeile">KAP Zeile 14</div>
+          <div class="kc-sub">Guthabenzinsen</div>
+          <div class="kc-zeile">KAP Zeile 14 / 18</div>
         </div>
         <div class="kap-card" id="opt-card">
           <div class="kc-label">Termingeschäfte Saldo (§20 Abs.6)</div>
@@ -229,14 +239,14 @@
           <div class="kc-sub" id="ov-opt-sub"></div>
           <div class="kc-zeile">KAP Zeile 12/13</div>
         </div>
-        <div class="kap-card" id="aktien-card">
+        <div class="kap-card">
           <div class="kc-label">Aktiengewinne/-verluste</div>
           <div class="kc-value" id="ov-aktien">—</div>
           <div class="kc-sub" id="ov-aktien-sub"></div>
           <div class="kc-zeile">KAP Zeile 8/9</div>
         </div>
-        <div class="kap-card" id="fx-card">
-          <div class="kc-label">Devisengewinne (Anlage SO)</div>
+        <div class="kap-card">
+          <div class="kc-label">Devisensaldo (Anlage SO)</div>
           <div class="kc-value" id="ov-fx">—</div>
           <div class="kc-sub" id="ov-fx-sub"></div>
           <div class="kc-zeile">Anlage SO Zeile 43</div>
@@ -244,7 +254,6 @@
       </div>
     </div>
 
-    <!-- VERLUSTVERRECHNUNGSTÖPFE -->
     <div class="section">
       <div class="section-title">Verlustverrechnungstöpfe <span class="kap-ref">§20 EStG</span></div>
       <div class="topf-grid">
@@ -260,7 +269,7 @@
           <div class="topf-row"><span>Verluste</span><span class="val neg" id="t2-loss">—</span></div>
           <div class="topf-row"><span>Saldo</span><span class="val" id="t2-saldo">—</span></div>
         </div>
-        <div class="topf" id="topf3">
+        <div class="topf">
           <div class="topf-name" style="color:var(--amber)">Topf 3 — Termingeschäfte §20 Abs.6</div>
           <div class="topf-row"><span>Prämieneinnahmen</span><span class="val pos" id="t3-gain">—</span></div>
           <div class="topf-row"><span>Verluste</span><span class="val neg" id="t3-loss">—</span></div>
@@ -270,59 +279,139 @@
       </div>
     </div>
 
-    <!-- §20 ABS.6 HINWEIS -->
     <div id="para20-hinweis" style="display:none">
       <div class="hinweis warn">
         <span>⚠️</span>
         <div>
           <strong>§20 Abs. 6 Satz 5 EStG — Termingeschäfte Verlustbeschränkung:</strong><br>
-          Verluste aus Termingeschäften (Optionen) dürfen nur mit Gewinnen aus Termingeschäften verrechnet werden,
-          darüber hinaus max. <strong>€20.000</strong> mit anderen Kapitaleinkünften.
-          Überschreitende Verluste werden in das Folgejahr vorgetragen.
+          Verluste aus Termingeschäften dürfen nur mit Gewinnen aus Termingeschäften
+          sowie max. <strong>€20.000</strong> mit anderen Kapitaleinkünften verrechnet werden.
           <span id="para20-detail"></span>
         </div>
       </div>
     </div>
 
-    <!-- ANLAGE KAP FORMULAR -->
     <div class="section">
       <div class="section-title">
         Anlage KAP — Vorausgefüllte Werte
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;align-items:center">
           <span id="spouse-label" class="badge badge-joint"></span>
           <button class="btn" onclick="window.print()">🖨️ Drucken</button>
-          <button class="btn btn-primary" onclick="downloadDOCX()" id="docx-btn" style="display:none">📄 DOCX herunterladen</button>
+          <button class="btn btn-primary" id="docx-btn" style="display:none" onclick="downloadDOCX()">📄 DOCX</button>
         </div>
       </div>
-
       <div class="hinweis info">
         <span>ℹ️</span>
-        <span>Alle Werte basieren auf dem CapTrader-Jahresauszug — keine KI-generierten Zahlen.
-        USD-Beträge wurden mit EZB-Jahresdurchschnittskurs umgerechnet (Schätzung, ~).
-        Vor Eintrag in die Steuererklärung gegen die offizielle CapTrader-Steuerbescheinigung abgleichen.</span>
+        <span id="data-source-note">Alle Werte aus CapTrader-Jahresauszug · ~ = EZB-Schätzung</span>
       </div>
-
       <div class="kap-form" id="kap-form-output"></div>
     </div>
 
-    <!-- CHECKLISTE -->
     <div class="section">
-      <div class="section-title">Checkliste für die Steuererklärung</div>
+      <div class="section-title">Checkliste</div>
       <div id="checklist-output"></div>
     </div>
 
   </div>
 
-  <!-- LEER -->
-  <div id="empty-state" style="text-align:center;padding:3rem;color:var(--muted)">
-    <div style="font-size:3rem;margin-bottom:1rem">📋</div>
-    <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:0.5rem">Jahresauszug hochladen</div>
-    <div>CapTrader Kontoauszug-CSV für das Steuerjahr hochladen um die Anlage KAP Werte zu berechnen</div>
+  <!-- EMPTY STATE -->
+  <div id="empty-state" class="empty">
+    <div class="empty-icon">📋</div>
+    <div class="empty-title">Jahresauszug hochladen</div>
+    <div>CapTrader CSV oder Informativen Steuerbericht PDF hochladen</div>
   </div>
 
 </main>
 
 <script>
+// ── STATE ────────────────────────────────────────────────────
+let rawData = null;
+let divData = null;
+let fxData  = null;
+let pdfData = null;
+
+// ── FILE HANDLER (sauber, ohne Namenskonflikte) ───────────────
+function onFileMain(e) {
+  const file = e.target.files[0]; if (!file) return;
+  setStatus('main', `Lade ${file.name}…`, 'muted');
+  const r = new FileReader();
+  r.onload = ev => {
+    rawData = parseJahresCSV(ev.target.result, file.name);
+    setStatus('main', `✅ ${file.name}`, 'green');
+    setCardLoaded('card-main');
+    document.getElementById('execute-bar').classList.remove('visible');
+    recalculate();
+  };
+  r.readAsText(file, 'utf-8');
+}
+
+function onFileDiv(e) {
+  const file = e.target.files[0]; if (!file) return;
+  setStatus('div', `Lade ${file.name}…`, 'muted');
+  const r = new FileReader();
+  r.onload = ev => {
+    divData = parseDividendHTML(ev.target.result);
+    setStatus('div', `✅ ${file.name}`, 'green');
+    setCardLoaded('card-div');
+    recalculate();
+  };
+  r.readAsText(file, 'utf-8');
+}
+
+function onFileFx(e) {
+  const file = e.target.files[0]; if (!file) return;
+  setStatus('fx', `Lade ${file.name}…`, 'muted');
+  const r = new FileReader();
+  r.onload = ev => {
+    fxData = parseFXCSV(ev.target.result);
+    const sign = fxData.total >= 0 ? '+' : '';
+    setStatus('fx', `✅ ${file.name} · ${sign}€${fxData.total.toFixed(2)}`, 'green');
+    setCardLoaded('card-fx');
+    recalculate();
+  };
+  r.readAsText(file, 'utf-8');
+}
+
+function onFilePdf(e) {
+  const file = e.target.files[0]; if (!file) return;
+  setStatus('pdf', `⏳ PDF wird analysiert…`, 'muted');
+  const r = new FileReader();
+  r.onload = async ev => {
+    try {
+      pdfData = await parsePWCpdf(ev.target.result);
+      if (pdfData.year) document.getElementById('tax-year').value = pdfData.year;
+      setStatus('pdf', `✅ ${file.name} · Exakt`, 'green');
+      setCardLoaded('card-pdf', true);
+      if (!rawData) {
+        document.getElementById('execute-bar').classList.add('visible');
+      }
+      recalculate();
+    } catch(err) {
+      console.error('PDF Error:', err);
+      setStatus('pdf', `❌ ${err.message}`, 'red');
+    }
+  };
+  r.readAsArrayBuffer(file);
+}
+
+function setStatus(id, text, color) {
+  const el = document.getElementById('st-' + id);
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = color === 'green' ? 'var(--green)'
+    : color === 'red' ? 'var(--red)'
+    : color === 'muted' ? 'var(--muted)'
+    : 'var(--accent)';
+}
+
+function setCardLoaded(cardId, isPdf=false) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.remove('loaded', 'loaded-pdf');
+  card.classList.add(isPdf ? 'loaded-pdf' : 'loaded');
+}
+
+
 // ============================================================
 // FX-SCHÄTZWERTE (EZB-Jahresdurchschnitte)
 // ============================================================
@@ -567,15 +656,14 @@ function loadPWCpdf(event) {
 }
 
 async function parsePWCpdf(arrayBuffer) {
-  // PDF.js UMD via CDN (setzt window.pdfjsLib)
+    // PDF.js 3.x UMD laden (setzt window.pdfjsLib global)
   if (!window.pdfjsLib) {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
-
-  const lib = window.pdfjsLib;
-  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  const lib = window.pdfjsLib; const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
 
   const result = {
     kontoName: '', kontoNr: '', year: '',
@@ -1085,7 +1173,7 @@ function downloadDOCX() {
 
   // Daten sammeln
   // PDF allein reicht als Datenquelle
-  if (!rawData && !pdfData) return;
+  if (!rawData && !pdfData) { console.log("recalculate: no data"); return; }
 
   const year    = document.getElementById('tax-year').value ||
                   (pdfData?.year) || (rawData?.year) || '2024';
@@ -1342,6 +1430,11 @@ function b64toBlob(b64, type) {
 ['tax-year','fsa'].forEach(id => {
   document.getElementById(id).addEventListener('change', recalculate);
 });
+
+
+// ── SETTINGS LISTENERS ──────────────────────────────────────
+document.getElementById('tax-year').addEventListener('change', recalculate);
+document.getElementById('fsa').addEventListener('change', recalculate);
 </script>
 </body>
 </html>
