@@ -243,10 +243,7 @@
   <div style="display:flex;align-items:center">
     <div class="logo"><span>R</span>efundex<span class="logo-sub">Quellensteuer-Analyse</span></div>
   </div>
-  <div style="display:flex;align-items:center;gap:1rem">
-  <a href="formfiller.html" style="font-size:12px;color:#4f8ef7;text-decoration:none">FormFiller →</a>
-  <div class="version">v1.1 · ahsub</div>
-</div>
+  <div class="version">v1.0 · ahsub</div>
 </header>
 
 <main class="main">
@@ -373,6 +370,18 @@ function extractCountry(desc){ const m=desc.match(/[-–]\s*([A-Z]{2})\s+Steuer/
 function parseCSV(text, fileName) {
   const lines = text.split(/\r?\n/);
   const divMap = new Map(), taxMap = new Map();
+
+  // Kontometa aus Kontoauszug extrahieren (für FormFiller autofill)
+  for (const line of lines) {
+    const p = splitLine(line.trim());
+    if (p[0]==='Kontoinformation' && p[1]==='Data') {
+      const meta = JSON.parse(sessionStorage.getItem('refundex_account_meta')||'{}');
+      if (p[2]==='Name')    meta.name    = p[3];
+      if (p[2]==='Account') meta.account = p[3];
+      sessionStorage.setItem('refundex_account_meta', JSON.stringify(meta));
+    }
+  }
+
   for (const line of lines) {
     const p = splitLine(line.trim());
     if (p.length < 3 || p[1] !== 'Data') continue;
