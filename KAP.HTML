@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refundex — KAP-Assistent</title>
+<style>
+  :root {
+    --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
+    --text:#e8eaf0; --muted:#7a85a0; --accent:#4f8ef7;
+    --green:#22c55e; --green-bg:#0d2a1a;
+    --amber:#f59e0b; --amber-bg:#2a1f08;
+    --red:#ef4444; --red-bg:#2a0d0d;
+    --radius:10px; --mono:'JetBrains Mono','Fira Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.6;}
+
+  .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;}
+  .logo{font-size:18px;font-weight:700;letter-spacing:-0.5px;}
+  .logo span{color:var(--accent);}
+  .logo-sub{font-size:11px;color:var(--muted);margin-left:10px;font-weight:400;}
+  .nav-link{font-size:12px;color:var(--accent);text-decoration:none;}
+
+  .main{max-width:1000px;margin:0 auto;padding:2rem;}
+
+  /* UPLOAD */
+  .upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:2rem;text-align:center;cursor:pointer;background:var(--bg2);margin-bottom:1.5rem;transition:border-color 0.2s;}
+  .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:var(--bg3);}
+  .upload-title{font-size:15px;font-weight:600;margin-bottom:0.4rem;}
+  .upload-hint{font-size:12px;color:var(--muted);}
+  #file-input{display:none;}
+
+  /* STEUERJAHR + EINSTELLUNGEN */
+  .settings-bar{display:flex;gap:1rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;}
+  .setting-group{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .setting-label{color:var(--muted);}
+  .setting-input{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:13px;outline:none;width:80px;}
+  .setting-select{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--text);font-size:13px;outline:none;}
+  .badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;}
+  .badge-joint{background:var(--amber-bg);color:var(--amber);}
+  .badge-single{background:var(--green-bg);color:var(--green);}
+
+  /* SECTION */
+  .section{margin-bottom:2rem;}
+  .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.75rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .kap-ref{font-size:10px;font-weight:500;padding:2px 8px;border-radius:4px;background:#0d1a35;color:var(--accent);font-family:var(--mono);}
+
+  /* KAP CARDS */
+  .kap-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  .kap-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;}
+  .kap-card.highlight{border-color:var(--accent);background:#0d1a35;}
+  .kap-card.warn{border-color:var(--amber);}
+  .kap-card.positive{border-color:var(--green);}
+  .kc-label{font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .kc-value{font-size:22px;font-weight:700;font-family:var(--mono);}
+  .kc-value.green{color:var(--green);}
+  .kc-value.amber{color:var(--amber);}
+  .kc-value.red{color:var(--red);}
+  .kc-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+  .kc-zeile{font-size:10px;font-family:var(--mono);color:var(--accent);margin-top:6px;background:#0d1a35;padding:2px 6px;border-radius:4px;display:inline-block;}
+
+  /* VERLUSTTOEPFE */
+  .topf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;}
+  .topf{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;}
+  .topf-name{font-size:12px;font-weight:600;margin-bottom:0.5rem;}
+  .topf-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--bg3);}
+  .topf-row:last-child{border-bottom:none;font-weight:600;}
+  .topf-row .val{font-family:var(--mono);}
+  .topf-row .val.pos{color:var(--green);}
+  .topf-row .val.neg{color:var(--red);}
+  .topf-row .val.warn{color:var(--amber);}
+
+  /* ANLAGE KAP FORMULAR */
+  .kap-form{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .kap-form-header{background:linear-gradient(135deg,#0d1a35,#0d2040);padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .kap-form-title{font-size:15px;font-weight:700;}
+  .kap-form-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .kap-form-body{padding:0;}
+  .kap-row{display:grid;grid-template-columns:80px 1fr 200px;gap:0;border-bottom:1px solid var(--bg3);align-items:stretch;}
+  .kap-row:last-child{border-bottom:none;}
+  .kap-row:hover{background:var(--bg3);}
+  .kap-zeile{font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 12px;background:#0d1020;display:flex;align-items:center;border-right:1px solid var(--bg3);font-weight:600;}
+  .kap-beschr{font-size:12px;color:var(--text);padding:10px 12px;display:flex;align-items:center;}
+  .kap-betrag{font-family:var(--mono);font-size:13px;font-weight:600;padding:10px 16px;text-align:right;display:flex;align-items:center;justify-content:flex-end;}
+  .kap-betrag.pos{color:var(--green);}
+  .kap-betrag.neg{color:var(--red);}
+  .kap-betrag.neutral{color:var(--muted);}
+  .kap-betrag.warn{color:var(--amber);}
+  .kap-section-header{background:var(--bg3);padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);grid-column:1/-1;}
+
+  /* HINWEISE */
+  .hinweis{display:flex;gap:10px;padding:0.75rem 1rem;border-radius:8px;font-size:12px;margin-bottom:0.75rem;}
+  .hinweis.warn{background:var(--amber-bg);border:1px solid #7a5a10;color:#fbbf60;}
+  .hinweis.info{background:#0d1a35;border:1px solid #1a3060;color:#7eb3f7;}
+  .hinweis.ok{background:var(--green-bg);border:1px solid #1a4a2a;color:#6ee7a0;}
+
+  /* PRINT */
+  .btn{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:12px;}
+  .btn:hover{background:var(--bg3);}
+  .btn-primary{background:var(--accent);color:#fff;border-color:transparent;}
+  .btn-primary:hover{opacity:0.88;}
+
+  @media print {
+    .header,.upload-zone,.settings-bar,.hinweis,.btn{display:none!important;}
+    body{background:#fff;color:#000;}
+    .kap-form{border:1px solid #ccc;}
+    .kap-form-header{background:#f5f5f5!important;}
+    .kap-zeile{background:#f0f4ff!important;color:#2563eb;}
+    .kap-betrag.pos{color:#16a34a;}
+    .kap-betrag.neg{color:#dc2626;}
+  }
+
+  @media(max-width:700px){
+    .kap-grid,.topf-grid{grid-template-columns:1fr;}
+    .kap-row{grid-template-columns:60px 1fr 120px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div style="display:flex;align-items:center">
+    <div class="logo"><span>R</span>efundex <span class="logo-sub">KAP-Assistent</span></div>
+  </div>
+  <div style="display:flex;gap:1rem;align-items:center">
+    <a href="formfiller.html" class="nav-link">FormFiller</a>
+    <a href="index.html" class="nav-link">← Dashboard</a>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- UPLOAD -->
+  <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <div style="font-size:2rem;margin-bottom:0.5rem">📊</div>
+    <div class="upload-title">CapTrader Jahresauszug hochladen</div>
+    <div class="upload-hint">Jahres-CSV (z.B. U12074449_2024_2024.csv) · Enthält alle steuerrelevanten Abschnitte</div>
+    <div id="upload-status" style="margin-top:0.75rem;font-size:12px;color:var(--accent)"></div>
+  </div>
+  <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
+
+  <!-- EINSTELLUNGEN -->
+  <div class="settings-bar">
+    <div class="setting-group">
+      <span class="setting-label">Steuerjahr:</span>
+      <input type="text" class="setting-input" id="tax-year" value="2024" maxlength="4">
+    </div>
+    <div class="setting-group">
+      <span class="setting-label">Freistellungsauftrag:</span>
+      <input type="text" class="setting-input" id="fsa" value="1000" style="width:90px"> €
+    </div>
+    <div class="setting-group">
+      <span class="setting-label">Kontoart:</span>
+      <select class="setting-select" id="account-type" onchange="recalculate()">
+        <option value="single">Einzelkonto</option>
+        <option value="joint" selected>Gemeinschaftskonto (50/50)</option>
+      </select>
+    </div>
+    <div class="setting-group">
+      <span class="setting-label">Ehegatte:</span>
+      <select class="setting-select" id="spouse-select" onchange="recalculate()">
+        <option value="1">Inhaber 1 (Axel)</option>
+        <option value="2">Inhaber 2 (Christa)</option>
+        <option value="both">Beide (Übersicht)</option>
+      </select>
+    </div>
+    <span id="account-badge" class="badge badge-joint">Gemeinschaftskonto</span>
+  </div>
+
+  <!-- ERGEBNIS -->
+  <div id="result-section" style="display:none">
+
+    <!-- ÜBERSICHT KACHELN -->
+    <div class="section">
+      <div class="section-title">Kapitalerträge 2024 — Übersicht <span class="kap-ref">Anlage KAP</span></div>
+      <div class="kap-grid">
+        <div class="kap-card highlight">
+          <div class="kc-label">Dividenden (brutto)</div>
+          <div class="kc-value green" id="ov-div">—</div>
+          <div class="kc-sub" id="ov-div-sub"></div>
+          <div class="kc-zeile">KAP Zeile 7</div>
+        </div>
+        <div class="kap-card">
+          <div class="kc-label">Anrechenbare Quellensteuer</div>
+          <div class="kc-value" id="ov-wht">—</div>
+          <div class="kc-sub">Max. 15% DBA-Satz anrechenbar</div>
+          <div class="kc-zeile">KAP Zeile 41</div>
+        </div>
+        <div class="kap-card positive">
+          <div class="kc-label">Zinserträge</div>
+          <div class="kc-value green" id="ov-zins">—</div>
+          <div class="kc-sub">Guthabenzinsen CapTrader</div>
+          <div class="kc-zeile">KAP Zeile 14</div>
+        </div>
+        <div class="kap-card" id="opt-card">
+          <div class="kc-label">Termingeschäfte Saldo (§20 Abs.6)</div>
+          <div class="kc-value" id="ov-opt">—</div>
+          <div class="kc-sub" id="ov-opt-sub"></div>
+          <div class="kc-zeile">KAP Zeile 12/13</div>
+        </div>
+        <div class="kap-card" id="aktien-card">
+          <div class="kc-label">Aktiengewinne/-verluste</div>
+          <div class="kc-value" id="ov-aktien">—</div>
+          <div class="kc-sub" id="ov-aktien-sub"></div>
+          <div class="kc-zeile">KAP Zeile 8/9</div>
+        </div>
+        <div class="kap-card" id="fx-card">
+          <div class="kc-label">Devisengewinne (Anlage SO)</div>
+          <div class="kc-value" id="ov-fx">—</div>
+          <div class="kc-sub" id="ov-fx-sub"></div>
+          <div class="kc-zeile">Anlage SO Zeile 43</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VERLUSTVERRECHNUNGSTÖPFE -->
+    <div class="section">
+      <div class="section-title">Verlustverrechnungstöpfe <span class="kap-ref">§20 EStG</span></div>
+      <div class="topf-grid">
+        <div class="topf">
+          <div class="topf-name" style="color:var(--accent)">Topf 1 — Allgemein</div>
+          <div class="topf-row"><span>Dividenden</span><span class="val pos" id="t1-div">—</span></div>
+          <div class="topf-row"><span>Zinsen</span><span class="val pos" id="t1-zins">—</span></div>
+          <div class="topf-row"><span>Saldo</span><span class="val" id="t1-saldo">—</span></div>
+        </div>
+        <div class="topf">
+          <div class="topf-name" style="color:var(--green)">Topf 2 — Aktien</div>
+          <div class="topf-row"><span>Gewinne</span><span class="val pos" id="t2-gain">—</span></div>
+          <div class="topf-row"><span>Verluste</span><span class="val neg" id="t2-loss">—</span></div>
+          <div class="topf-row"><span>Saldo</span><span class="val" id="t2-saldo">—</span></div>
+        </div>
+        <div class="topf" id="topf3">
+          <div class="topf-name" style="color:var(--amber)">Topf 3 — Termingeschäfte §20 Abs.6</div>
+          <div class="topf-row"><span>Prämieneinnahmen</span><span class="val pos" id="t3-gain">—</span></div>
+          <div class="topf-row"><span>Verluste</span><span class="val neg" id="t3-loss">—</span></div>
+          <div class="topf-row"><span>Verrechenbar</span><span class="val warn" id="t3-verr">—</span></div>
+          <div class="topf-row"><span>Saldo</span><span class="val" id="t3-saldo">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- §20 ABS.6 HINWEIS -->
+    <div id="para20-hinweis" style="display:none">
+      <div class="hinweis warn">
+        <span>⚠️</span>
+        <div>
+          <strong>§20 Abs. 6 Satz 5 EStG — Termingeschäfte Verlustbeschränkung:</strong><br>
+          Verluste aus Termingeschäften (Optionen) dürfen nur mit Gewinnen aus Termingeschäften verrechnet werden,
+          darüber hinaus max. <strong>€20.000</strong> mit anderen Kapitaleinkünften.
+          Überschreitende Verluste werden in das Folgejahr vorgetragen.
+          <span id="para20-detail"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANLAGE KAP FORMULAR -->
+    <div class="section">
+      <div class="section-title">
+        Anlage KAP — Vorausgefüllte Werte
+        <div style="display:flex;gap:8px">
+          <span id="spouse-label" class="badge badge-joint"></span>
+          <button class="btn" onclick="window.print()">🖨️ Drucken</button>
+        </div>
+      </div>
+
+      <div class="hinweis info">
+        <span>ℹ️</span>
+        <span>Alle Werte basieren auf dem CapTrader-Jahresauszug — keine KI-generierten Zahlen.
+        USD-Beträge wurden mit EZB-Jahresdurchschnittskurs umgerechnet (Schätzung, ~).
+        Vor Eintrag in die Steuererklärung gegen die offizielle CapTrader-Steuerbescheinigung abgleichen.</span>
+      </div>
+
+      <div class="kap-form" id="kap-form-output"></div>
+    </div>
+
+    <!-- CHECKLISTE -->
+    <div class="section">
+      <div class="section-title">Checkliste für die Steuererklärung</div>
+      <div id="checklist-output"></div>
+    </div>
+
+  </div>
+
+  <!-- LEER -->
+  <div id="empty-state" style="text-align:center;padding:3rem;color:var(--muted)">
+    <div style="font-size:3rem;margin-bottom:1rem">📋</div>
+    <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:0.5rem">Jahresauszug hochladen</div>
+    <div>CapTrader Kontoauszug-CSV für das Steuerjahr hochladen um die Anlage KAP Werte zu berechnen</div>
+  </div>
+
+</main>
+
+<script>
+// ============================================================
+// FX-SCHÄTZWERTE (EZB-Jahresdurchschnitte)
+// ============================================================
+const FX_AVG = {
+  USD: {"2022":0.9498,"2023":0.9247,"2024":0.9236,"2025":0.9200},
+  GBP: {"2022":1.1703,"2023":1.1513,"2024":1.1826,"2025":1.1700},
+};
+function toEur(amount, currency, year) {
+  if (!amount || currency === 'EUR') return amount || 0;
+  const rate = (FX_AVG[currency]?.[year]) || 0.92;
+  return Math.round(amount * rate * 100) / 100;
+}
+function fmt(n, decimals=2) {
+  const abs = Math.abs(n);
+  const str = abs.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (n < 0 ? '-' : '') + '€' + str;
+}
+function fmtRaw(n) { return n >= 0 ? fmt(n) : fmt(n); }
+
+// ============================================================
+// STATE
+// ============================================================
+let rawData = null;
+
+// ============================================================
+// CSV LADEN
+// ============================================================
+function loadCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('upload-status').textContent = `Lade ${file.name}…`;
+  const reader = new FileReader();
+  reader.onload = e => {
+    rawData = parseJahresCSV(e.target.result, file.name);
+    document.getElementById('upload-status').textContent = `✅ ${file.name} geladen`;
+    document.getElementById('upload-status').style.color = 'var(--green)';
+    recalculate();
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+// ============================================================
+// PARSER
+// ============================================================
+function parseJahresCSV(text, fileName) {
+  const lines = text.split(/\r?\n/);
+  const d = {
+    kontoName: '', kontoNr: '', kontoTyp: '',
+    dividenden: [], quellensteuer: [],
+    zinsen: { eur: 0, usd: 0 },
+    zinsenGesamt: 0,
+    optionen: { gain: 0, loss: 0 },
+    aktien: { gain: 0, loss: 0 },
+    fx: { gain: 0, loss: 0 },
+    year: '2024',
+    fileName,
+  };
+
+  // Steuerjahr aus Dateiname extrahieren
+  const yearMatch = fileName.match(/(\d{4})_\d{4}/);
+  if (yearMatch) d.year = yearMatch[1];
+  document.getElementById('tax-year').value = d.year;
+
+  for (const line of lines) {
+    const p = splitLine(line.trim());
+    if (p.length < 3) continue;
+    const sec = p[0], typ = p[1];
+
+    // Kontoinformation
+    if (sec === 'Kontoinformation' && typ === 'Data') {
+      if (p[2] === 'Name')       d.kontoName = p[3]?.trim() || '';
+      if (p[2] === 'Account')    d.kontoNr   = p[3]?.trim() || '';
+      if (p[2] === 'Kundentyp')  d.kontoTyp  = p[3]?.trim() || '';
+    }
+
+    // Dividenden aus NAV (einfachste zuverlässige Quelle)
+    if (sec === 'Veränderung des NAV' && typ === 'Data') {
+      if (p[2] === 'Dividenden')    d.divNAV  = Math.abs(parseFloat(p[3]) || 0);
+      if (p[2] === 'Quellensteuer') d.whtNAV  = Math.abs(parseFloat(p[3]) || 0);
+    }
+
+    // Zinsen gesamt EUR
+    if (sec === 'Zinsen' && typ === 'Data' && p[2] === 'Gesamt Zinsen in EUR') {
+      d.zinsenGesamt = parseFloat(p[p.length-1]) || 0;
+    }
+
+    // Performance: Optionen + Aktien + FX
+    if (sec === 'Übersicht  zur realisierten und unrealisierten Performance' && typ === 'Data') {
+      const kat = p[2], sym = p[3];
+      // Spalten: [4]=Kostenanp [5]=ST-Gain [6]=ST-Loss [7]=LT-Gain [8]=LT-Loss [9]=Real-Total
+      const stGain  = parseFloat(p[5])  || 0;
+      const stLoss  = parseFloat(p[6])  || 0;
+      const ltGain  = parseFloat(p[7])  || 0;
+      const ltLoss  = parseFloat(p[8])  || 0;
+      const realGes = parseFloat(p[9])  || 0;
+
+      if (sym === 'Gesamt') {
+        if (kat === 'Aktien- und Indexoptionen') {
+          d.optionen.gain = stGain + ltGain;
+          d.optionen.loss = stLoss + ltLoss;
+        }
+        if (kat === 'Aktien') {
+          d.aktien.gain = stGain + ltGain;
+          d.aktien.loss = stLoss + ltLoss;
+        }
+        if (kat === 'Devisen') {
+          d.fx.gain = stGain + ltGain;
+          d.fx.loss = stLoss + ltLoss;
+        }
+      }
+    }
+
+    // Dividenden-Details für Länderliste
+    if (sec === 'Dividenden' && typ === 'Data') {
+      const cur = p[2], date = p[3], desc = p[4];
+      const amt = parseFloat(p[5]) || 0;
+      if (date?.match(/^\d{4}-\d{2}-\d{2}$/) && amt > 0) {
+        d.dividenden.push({ cur, date, desc, amt });
+      }
+    }
+
+    // Quellensteuer-Details
+    if (sec === 'Quellensteuer' && typ === 'Data') {
+      const cur = p[2], date = p[3], desc = p[4];
+      const amt = parseFloat(p[5]) || 0;
+      if (date?.match(/^\d{4}-\d{2}-\d{2}$/) && amt !== 0) {
+        const country = (desc?.match(/[-–]\s*([A-Z]{2})\s+Steuer/i)||[])[1]?.toUpperCase() || '';
+        d.quellensteuer.push({ cur, date, desc, amt: Math.abs(amt), country });
+      }
+    }
+  }
+
+  // Gemeinschaftskonto erkennen
+  if (d.kontoTyp === 'Gemeinschaft') {
+    document.getElementById('account-type').value = 'joint';
+  } else {
+    document.getElementById('account-type').value = 'single';
+  }
+
+  return d;
+}
+
+function splitLine(line) {
+  const r=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+    else if(c===','&&!inQ){r.push(cur);cur='';}
+    else cur+=c;
+  }
+  r.push(cur); return r;
+}
+
+// ============================================================
+// BERECHNUNG
+// ============================================================
+function recalculate() {
+  if (!rawData) return;
+
+  const year    = document.getElementById('tax-year').value || rawData.year;
+  const isJoint = document.getElementById('account-type').value === 'joint';
+  const share   = isJoint ? 0.5 : 1.0;
+  const fsa     = parseFloat(document.getElementById('fsa').value) || 1000;
+  const spouse  = document.getElementById('spouse-select').value;
+
+  // Badge aktualisieren
+  const badge = document.getElementById('account-badge');
+  badge.textContent = isJoint ? 'Gemeinschaftskonto 50/50' : 'Einzelkonto';
+  badge.className = 'badge ' + (isJoint ? 'badge-joint' : 'badge-single');
+  document.getElementById('spouse-select').parentElement.style.display = isJoint ? 'flex' : 'none';
+
+  // USD → EUR
+  const d = rawData;
+  const divEur   = toEur(d.divNAV,  'USD', year) * share;
+  const whtEur   = toEur(d.whtNAV,  'USD', year) * share;
+  const zinsEur  = d.zinsenGesamt * share;
+  const optGain  = toEur(d.optionen.gain, 'USD', year) * share;
+  const optLoss  = toEur(d.optionen.loss, 'USD', year) * share;  // negativ
+  const optSaldo = optGain + optLoss;
+  const akGain   = toEur(d.aktien.gain, 'USD', year) * share;
+  const akLoss   = toEur(d.aktien.loss, 'USD', year) * share;
+  const akSaldo  = akGain + akLoss;
+  const fxGain   = toEur(d.fx.gain, 'USD', year) * share;
+  const fxLoss   = toEur(d.fx.loss, 'USD', year) * share;
+  const fxSaldo  = fxGain + fxLoss;
+
+  // §20 Abs.6 Verlustbeschränkung
+  const optLossAbs   = Math.abs(optLoss);
+  const optGainAbs   = optGain;
+  const verrLimit    = 20000;
+  const verrechenbar = Math.min(optLossAbs, optGainAbs + verrLimit);
+  const vortrag      = Math.max(0, optLossAbs - verrechenbar);
+
+  // Anlage KAP Werte
+  const kapWerte = {
+    z7_div:         round2(divEur),
+    z8_aktienGain:  round2(Math.max(0, akGain)),
+    z9_aktienLoss:  round2(Math.abs(Math.min(0, akSaldo))),
+    z12_optGain:    round2(optGainAbs),
+    z13_optLoss:    round2(optLossAbs),
+    z14_zinsen:     round2(zinsEur),
+    z17_fsa:        round2(fsa * share),
+    z41_wht:        round2(whtEur),
+    opt_saldo:      round2(optSaldo),
+    opt_vortrag:    round2(vortrag),
+    ak_saldo:       round2(akSaldo),
+    fx_saldo:       round2(fxSaldo),
+  };
+
+  // UI rendern
+  renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo);
+  renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo);
+  renderKAPForm(kapWerte, year, isJoint, spouse, d.kontoName, d.kontoNr);
+  renderChecklist(kapWerte, isJoint, d.kontoName);
+
+  // §20 Hinweis
+  const hinweis = document.getElementById('para20-hinweis');
+  if (optLossAbs > 0) {
+    hinweis.style.display = 'block';
+    document.getElementById('para20-detail').innerHTML =
+      vortrag > 0
+        ? ` <strong>Vortrag ins Folgejahr: ${fmt(vortrag)}</strong>`
+        : ' Verluste vollständig verrechenbar.';
+  } else {
+    hinweis.style.display = 'none';
+  }
+
+  document.getElementById('result-section').style.display = 'block';
+  document.getElementById('empty-state').style.display = 'none';
+
+  // Spouse Label
+  const spouseLabels = { '1': d.kontoName.split(/ AND /i)[0] || 'Inhaber 1', '2': d.kontoName.split(/ AND /i)[1] || 'Inhaber 2', 'both': 'Beide Inhaber' };
+  document.getElementById('spouse-label').textContent = isJoint ? (spouseLabels[spouse] || '') : '';
+}
+
+function round2(n) { return Math.round(n * 100) / 100; }
+
+// ============================================================
+// RENDER OVERVIEW
+// ============================================================
+function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo) {
+  setText('ov-div',     fmt(div) + '~');
+  setText('ov-div-sub', `WHT einbehalten: ${fmt(wht)}~`);
+  setText('ov-wht',     fmt(wht) + '~');
+  setText('ov-zins',    fmt(zins));
+  setText('ov-opt',     fmt(optSaldo) + '~');
+  setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}~ | Verluste: ${fmt(optL)}~`);
+  setText('ov-aktien',  fmt(akSaldo) + '~');
+  setText('ov-aktien-sub', `Gewinne: ${fmt(akG)}~ | Verluste: ${fmt(akL)}~`);
+  setText('ov-fx',      fmt(fxSaldo) + '~');
+  setText('ov-fx-sub',  fxSaldo > 0 ? 'Anlage SO — steuerpflichtig wenn >600€' : 'Kein Gewinn');
+  setColor('ov-opt',    optSaldo >= 0 ? 'green' : 'red');
+  setColor('ov-aktien', akSaldo >= 0 ? 'green' : 'red');
+  setColor('ov-fx',     fxSaldo >= 0 ? 'green' : 'amber');
+}
+
+// ============================================================
+// RENDER TÖPFE
+// ============================================================
+function renderToepfe(kap, div, zins, optG, optL, verr, optSaldo, akG, akL, akSaldo) {
+  const t1 = div + zins;
+  setText('t1-div',   fmt(div)  + '~'); setColor('t1-div',   'pos');
+  setText('t1-zins',  fmt(zins));       setColor('t1-zins',  'pos');
+  setText('t1-saldo', fmt(t1)   + '~'); setColor('t1-saldo', t1>=0?'pos':'neg');
+  setText('t2-gain',  fmt(akG)  + '~'); setColor('t2-gain',  'pos');
+  setText('t2-loss',  fmt(-akL) + '~'); setColor('t2-loss',  'neg');
+  setText('t2-saldo', fmt(akSaldo)+'~'); setColor('t2-saldo', akSaldo>=0?'pos':'neg');
+  setText('t3-gain',  fmt(optG) + '~'); setColor('t3-gain',  'pos');
+  setText('t3-loss',  fmt(optL) + '~'); setColor('t3-loss',  'neg');
+  setText('t3-verr',  fmt(verr) + '~'); setColor('t3-verr',  'warn');
+  setText('t3-saldo', fmt(optSaldo)+'~'); setColor('t3-saldo', optSaldo>=0?'pos':'neg');
+}
+
+// ============================================================
+// RENDER KAP FORMULAR
+// ============================================================
+function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr) {
+  const jointNote = isJoint ? ' (50%-Anteil)' : '';
+  const rows = [
+    { type:'header', text:'A — Angaben zu Kapitalerträgen' },
+    { z:'7',  text:`Kapitalerträge (ohne Dividenden aus Aktien nach Z. 8) — Dividenden${jointNote}`,    val:kap.z7_div,       cls: kap.z7_div > 0 ? 'pos' : 'neutral' },
+    { z:'8',  text:`Gewinne aus der Veräußerung von Aktien${jointNote}`,                               val:kap.z8_aktienGain, cls: kap.z8_aktienGain > 0 ? 'pos' : 'neutral' },
+    { z:'9',  text:`Verluste aus der Veräußerung von Aktien${jointNote}`,                              val:-kap.z9_aktienLoss, cls: kap.z9_aktienLoss > 0 ? 'neg' : 'neutral' },
+    { z:'12', text:`Gewinne aus Termingeschäften (Optionsprämien)${jointNote}`,                        val:kap.z12_optGain,   cls: kap.z12_optGain > 0 ? 'pos' : 'neutral' },
+    { z:'13', text:`Verluste aus Termingeschäften §20 Abs.6${jointNote}`,                              val:-kap.z13_optLoss,  cls: kap.z13_optLoss > 0 ? 'neg' : 'neutral' },
+    { z:'14', text:`Zinsen und sonstige Kapitalerträge${jointNote}`,                                   val:kap.z14_zinsen,    cls: kap.z14_zinsen > 0 ? 'pos' : 'neutral' },
+    { type:'header', text:'B — Freistellungsauftrag' },
+    { z:'17', text:`Freistellungsauftrag (gesamt ${fmt(parseFloat(document.getElementById('fsa').value)||1000)})${jointNote}`, val:kap.z17_fsa, cls:'neutral' },
+    { type:'header', text:'C — Anrechenbare Steuerabzugsbeträge' },
+    { z:'41', text:`Anrechenbare Kapitalertragsteuer (Quellensteuer aus Ausland)${jointNote}`,         val:kap.z41_wht,       cls: kap.z41_wht > 0 ? 'pos' : 'neutral' },
+  ];
+
+  const form = document.getElementById('kap-form-output');
+  form.innerHTML = `
+    <div class="kap-form-header">
+      <div>
+        <div class="kap-form-title">Anlage KAP — Steuerjahr ${year}</div>
+        <div class="kap-form-sub">${kontoName} · Depot ${kontoNr} · ${isJoint?'Gemeinschaftskonto — je 50% pro Ehegatte':' Einzelkonto'}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);text-align:right">~ = FX-Schätzung (EZB-Jahresdurchschnitt)<br>Vor Eintrag gegen Steuerbescheinigung prüfen</div>
+    </div>
+    <div class="kap-form-body">
+      ${rows.map(r => {
+        if (r.type === 'header') return `<div class="kap-row"><div class="kap-section-header">${r.text}</div></div>`;
+        const isFx = parseFloat(r.val) !== 0;
+        return `
+          <div class="kap-row">
+            <div class="kap-zeile">Z. ${r.z}</div>
+            <div class="kap-beschr">${r.text}</div>
+            <div class="kap-betrag ${r.cls}">${isFx ? fmt(r.val)+'~' : fmt(0)}</div>
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+// ============================================================
+// CHECKLISTE
+// ============================================================
+function renderChecklist(kap, isJoint, kontoName) {
+  const items = [
+    { ok: true,  text: 'CapTrader Jahresauszug CSV hochgeladen' },
+    { ok: true,  text: `Kontoart korrekt: ${isJoint?'Gemeinschaftskonto (50/50)':'Einzelkonto'}` },
+    { ok: false, text: 'Offizielle CapTrader-Steuerbescheinigung herunterladen (Performance & Berichte → Steuerbescheinigung)' },
+    { ok: false, text: 'USD-Beträge (~) gegen Steuerbescheinigung abgleichen — dort stehen die offiziellen EUR-Beträge' },
+    { ok: false, text: 'Freistellungsauftrag prüfen: Wie viel bei CapTrader, wie viel bei anderen Banken?' },
+    { ok: kap.z41_wht > 0, text: `Anlage KAP: Quellensteuer-Anrechnung ${fmt(kap.z41_wht)}~ in Zeile 41 eintragen` },
+    { ok: kap.z13_optLoss > 0, text: `§20 Abs.6: Optionsverluste ${fmt(kap.z13_optLoss)}~ separat in Zeile 13 — nicht mit Aktienverlusten vermischen`, warn: kap.z13_optLoss > 0 },
+    { ok: false, text: isJoint ? `Gemeinschaftskonto: Anlage KAP für jeden Ehegatten separat ausfüllen (je 50%): ${kontoName.split(/ AND /i).join(' + ')}` : '' },
+    { ok: false, text: 'WISO Steuer / ELSTER: Werte manuell in die entsprechenden Zeilen übertragen' },
+  ].filter(i => i.text);
+
+  document.getElementById('checklist-output').innerHTML = items.map(i => `
+    <div class="hinweis ${i.ok?'ok':i.warn?'warn':'info'}" style="margin-bottom:0.5rem">
+      <span>${i.ok?'✅':i.warn?'⚠️':'☐'}</span>
+      <span>${i.text}</span>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function setText(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
+function setColor(id, cls) {
+  const el=document.getElementById(id); if(!el) return;
+  el.classList.remove('green','red','amber','pos','neg');
+  if(cls) el.classList.add(cls);
+}
+
+// DRAG & DROP
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave', ()=>dz.classList.remove('drag'));
+dz.addEventListener('drop', e=>{
+  e.preventDefault(); dz.classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f) { document.getElementById('file-input').files=e.dataTransfer.files; loadCSV({target:{files:e.dataTransfer.files}}); }
+});
+
+// Settings live update
+['tax-year','fsa'].forEach(id => {
+  document.getElementById(id).addEventListener('change', recalculate);
+});
+</script>
+</body>
+</html>
