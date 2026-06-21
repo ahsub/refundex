@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refundex — FormFiller</title>
+<style>
+  :root {
+    --bg:      #0f1117; --bg2: #181c27; --bg3: #1e2333;
+    --border:  #2a3050; --text: #e8eaf0; --muted: #7a85a0;
+    --accent:  #4f8ef7; --green: #22c55e; --green-bg: #0d2a1a;
+    --amber:   #f59e0b; --amber-bg: #2a1f08;
+    --red:     #ef4444; --red-bg: #2a0d0d;
+    --radius:  10px;   --mono: 'JetBrains Mono','Fira Mono',monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size: 14px; line-height: 1.6; }
+
+  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .logo-sub { font-size: 11px; color: var(--muted); margin-left: 10px; font-weight: 400; }
+  .nav-link { font-size: 12px; color: var(--accent); text-decoration: none; }
+  .nav-link:hover { text-decoration: underline; }
+
+  .main { max-width: 900px; margin: 0 auto; padding: 2rem; }
+
+  /* API KEY SETUP */
+  .setup-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 2rem; }
+  .setup-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem; }
+  .key-row { display: flex; gap: 8px; }
+  .key-input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; }
+  .key-input:focus { border-color: var(--accent); }
+  .key-input::placeholder { color: var(--muted); }
+  .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
+  .key-status { font-size: 12px; margin-top: 6px; }
+  .key-status.ok { color: var(--green); }
+  .key-status.err { color: var(--red); }
+
+  /* STEP FLOW */
+  .steps { display: flex; gap: 0; margin-bottom: 2rem; }
+  .step { flex: 1; padding: 10px 14px; background: var(--bg2); border: 1px solid var(--border); font-size: 12px; color: var(--muted); position: relative; }
+  .step:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .step:last-child  { border-radius: 0 var(--radius) var(--radius) 0; }
+  .step.active { background: var(--bg3); color: var(--text); border-color: var(--accent); }
+  .step.done   { color: var(--green); border-color: var(--green-bg); }
+  .step-num { font-weight: 700; margin-right: 6px; }
+
+  /* COUNTRY SELECT */
+  .country-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 2rem; }
+  .country-btn {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem; cursor: pointer; text-align: left; transition: border-color 0.15s;
+  }
+  .country-btn:hover { border-color: var(--accent); }
+  .country-btn.selected { border-color: var(--accent); background: #0d1a35; }
+  .country-btn.no-data { opacity: 0.4; cursor: not-allowed; }
+  .cb-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .cb-meta { font-size: 11px; color: var(--muted); }
+  .cb-amount { font-size: 15px; font-weight: 700; color: var(--green); margin-top: 6px; font-family: var(--mono); }
+  .cb-type { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; display: inline-block; margin-top: 4px; }
+  .type-eportal  { background: #1a2d50; color: #7eb3f7; }
+  .type-online   { background: #1a2d20; color: #6ee7a0; }
+  .type-pdf      { background: #2a1a50; color: #c4b5fd; }
+  .type-paper    { background: #2a2010; color: #fbbf60; }
+
+  /* DATA INPUT */
+  .data-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .ds-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  .field-label { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .field-input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; width: 100%; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input.auto { border-color: var(--green-bg); color: var(--green); }
+  .field-hint { font-size: 10px; color: var(--muted); }
+  .full-width { grid-column: 1 / -1; }
+
+  /* EVENTS TABLE */
+  .events-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 0.5rem; }
+  .events-table th { text-align: left; padding: 6px 8px; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; }
+  .events-table td { padding: 7px 8px; border-bottom: 1px solid var(--bg3); font-family: var(--mono); }
+  .events-table tr:last-child td { border-bottom: none; }
+  .mono-val { font-family: var(--mono); }
+
+  /* GENERATE BTN */
+  .generate-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 2rem; }
+  .spinner { display: none; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  .spinner.active { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* CHEATSHEET OUTPUT */
+  .cheatsheet { background: var(--bg2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 0; overflow: hidden; margin-bottom: 1.5rem; }
+  .cs-header { background: linear-gradient(135deg, #0d1a35, #0d2040); padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
+  .cs-title { font-size: 16px; font-weight: 700; color: var(--text); }
+  .cs-subtitle { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .cs-amount { text-align: right; }
+  .cs-amount-val { font-size: 22px; font-weight: 700; color: var(--green); font-family: var(--mono); }
+  .cs-amount-label { font-size: 11px; color: var(--muted); }
+  .cs-body { padding: 1.5rem; }
+  .cs-section { margin-bottom: 1.5rem; }
+  .cs-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+  .cs-content { font-size: 13px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+  .cs-content strong { color: var(--accent); font-weight: 600; }
+
+  /* PRINT */
+  .print-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .print-btn:hover { background: var(--border); }
+
+  @media print {
+    .header, .setup-card, .steps, .country-grid, .data-section, .generate-bar, .print-btn, .setup-card { display: none !important; }
+    body { background: #fff; color: #000; }
+    .cheatsheet { border: 1px solid #ccc; }
+    .cs-header { background: #f5f5f5 !important; }
+    .cs-title, .cs-content { color: #000; }
+    .cs-section-title { color: #2563eb; }
+    .cs-amount-val { color: #16a34a; }
+  }
+
+  .warning-box { background: var(--amber-bg); border: 1px solid #7a5a10; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 12px; color: #fbbf60; display: flex; gap: 8px; }
+  .info-box { background: #0d1a35; border: 1px solid #1a3060; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 12px; color: #7eb3f7; display: flex; gap: 8px; }
+
+  @media (max-width: 600px) {
+    .country-grid { grid-template-columns: 1fr 1fr; }
+    .field-grid { grid-template-columns: 1fr; }
+    .steps { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div style="display:flex;align-items:center">
+    <div class="logo"><span>R</span>efundex <span class="logo-sub">FormFiller</span></div>
+  </div>
+  <a href="index.html" class="nav-link">← Zurück zum Dashboard</a>
+</header>
+
+<main class="main">
+
+  <!-- STEP INDICATOR -->
+  <div class="steps">
+    <div class="step active" id="step1"><span class="step-num">1</span>API-Key</div>
+    <div class="step" id="step2"><span class="step-num">2</span>Land wählen</div>
+    <div class="step" id="step3"><span class="step-num">3</span>Daten prüfen</div>
+    <div class="step" id="step4"><span class="step-num">4</span>Cheatsheet</div>
+  </div>
+
+  <!-- API KEY -->
+  <div class="setup-card" id="api-setup">
+    <div class="setup-title">Anthropic API-Key</div>
+    <div class="key-row">
+      <input type="password" class="key-input" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off">
+      <button class="btn btn-primary" onclick="saveKey()">Bestätigen</button>
+    </div>
+    <div class="key-status" id="key-status">Key wird nur im Arbeitsspeicher gehalten — nicht gespeichert, nach Tab-Schließen weg.</div>
+  </div>
+
+  <!-- COUNTRY SELECT -->
+  <div id="country-section" style="display:none">
+    <div class="warning-box">
+      <span>⚠️</span>
+      <span>Alle Beträge stammen aus deinen CapTrader-Exporten oder manueller Eingabe — kein KI-generierter Wert fließt in die Berechnung ein. Claude übersetzt und erklärt nur.</span>
+    </div>
+
+    <div style="font-size:13px;font-weight:600;margin-bottom:1rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Land wählen</div>
+
+    <div id="csv-hint" class="info-box" style="display:none">
+      <span>💡</span>
+      <span id="csv-hint-text"></span>
+    </div>
+
+    <div class="country-grid" id="country-grid"></div>
+
+    <div class="info-box">
+      <span>ℹ️</span>
+      <span>Keine CSV-Daten geladen? Öffne zuerst das <a href="index.html" style="color:var(--accent)">Dashboard</a>, lade deine CSVs, und kehre dann hierher zurück. Oder gib die Werte unten manuell ein.</span>
+    </div>
+  </div>
+
+  <!-- DATA ENTRY -->
+  <div id="data-section" style="display:none">
+    <div class="data-section">
+      <div class="ds-title">Persönliche Daten (Antragsteller)</div>
+      <div class="field-grid">
+        <div class="field-group">
+          <label class="field-label">Vollständiger Name</label>
+          <input type="text" class="field-input" id="f-name" placeholder="Dr. Axel Hildebrand">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Geburtsdatum</label>
+          <input type="text" class="field-input" id="f-dob" placeholder="15.02.1960">
+        </div>
+        <div class="field-group full-width">
+          <label class="field-label">Adresse</label>
+          <input type="text" class="field-input" id="f-address" placeholder="Musterstraße 1, 47800 Krefeld, Deutschland">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Steuer-IdNr. (Deutschland)</label>
+          <input type="text" class="field-input" id="f-taxid" placeholder="12 345 678 901">
+        </div>
+        <div class="field-group">
+          <label class="field-label">IBAN</label>
+          <input type="text" class="field-input" id="f-iban" placeholder="DE12 3456 7890 1234 5678 90">
+          <span class="field-hint">Für Erstattungsüberweisung</span>
+        </div>
+        <div class="field-group">
+          <label class="field-label">BIC / SWIFT</label>
+          <input type="text" class="field-input" id="f-bic" placeholder="BELADEBEXXX">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Depot-Nr. (CapTrader)</label>
+          <input type="text" class="field-input" id="f-depot" placeholder="U12074449">
+        </div>
+        <div class="field-group">
+          <label class="field-label">ABZ-Nummer (falls bekannt)</label>
+          <input type="text" class="field-input" id="f-abz" placeholder="Nur für Österreich-Folgeanträge">
+        </div>
+      </div>
+    </div>
+
+    <div class="data-section" id="events-data-section">
+      <div class="ds-title">Dividenden-Events <span id="events-country-name" style="color:var(--accent)"></span></div>
+      <div id="events-from-csv"></div>
+      <div id="manual-event" style="margin-top:1rem">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:0.5rem">Manuell ergänzen / überschreiben:</div>
+        <div class="field-grid">
+          <div class="field-group">
+            <label class="field-label">Ticker</label>
+            <input type="text" class="field-input" id="m-ticker" placeholder="NVO">
+          </div>
+          <div class="field-group">
+            <label class="field-label">ISIN</label>
+            <input type="text" class="field-input" id="m-isin" placeholder="DK0062498333">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Zahldatum</label>
+            <input type="text" class="field-input" id="m-date" placeholder="2025-04-08">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Brutto (EUR)</label>
+            <input type="text" class="field-input" id="m-gross" placeholder="105.12">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Einbehaltene WHT (EUR)</label>
+            <input type="text" class="field-input" id="m-wht" placeholder="28.38">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Rückforderbar (EUR)</label>
+            <input type="text" class="field-input auto" id="m-recover" placeholder="wird berechnet" readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="generate-bar">
+      <button class="btn btn-primary" onclick="generateCheatsheet()" id="gen-btn">
+        ✨ Cheatsheet generieren
+      </button>
+      <div class="spinner" id="spinner"></div>
+      <span id="gen-status" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- CHEATSHEET OUTPUT -->
+  <div id="cheatsheet-section" style="display:none">
+    <div class="cheatsheet" id="cheatsheet-output"></div>
+    <div style="display:flex;gap:8px;margin-top:1rem">
+      <button class="print-btn" onclick="window.print()">🖨️ Drucken / Als PDF speichern</button>
+      <button class="btn btn-secondary" onclick="resetToData()">← Zurück / Ändern</button>
+      <button class="btn btn-secondary" onclick="resetAll()">Neu starten</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ============================================================
+// DBA-DATEN (inline, rückforderbare Länder aus ko-dba v1.1)
+// ============================================================
+const DBA = [{"iso":"CH","name":"Schweiz","domestic":35,"dba":15,"excess":20,"deadline_years":3,"form_type":"eportal","output":"cheatsheet","authority":"Eidgenössische Steuerverwaltung (ESTV)","form_name":"Antrag auf Rückerstattung der Verrechnungssteuer (ePortal / Snapform)","form_url":"https://www.estv.admin.ch/estv/de/home/verrechnungssteuer/antraege.html","min_eur":40,"complexity":"high","notes":["Formulare 21 und 25 als PDF-Drucksachen seit 2023 abgeschafft.","Antrag ausschließlich über ESTV ePortal oder Snapform-Formular.","Ansässigkeitsbescheinigung (Formular 301) beim deutschen FA beantragen — Bearbeitungszeit 4–8 Wochen einplanen.","Bearbeitungsdauer ESTV: 12–24 Monate üblich (notorisch langsam).","Erstattung erfolgt in CHF auf ein angegebenes Konto.","Rückforderungsfrist: 3 Jahre ab Ende des Kalenderjahres der Dividendenzahlung."]},{"iso":"SE","name":"Schweden","domestic":30,"dba":15,"excess":15,"deadline_years":5,"form_type":"online","output":"online_guide","authority":"Schwedische Steuerbehörde","form_name":"SKV 3740 (online)","form_url":"https://www.skatteverket.se/servicelankar/otherlanguages/inenglish/individualsandemployees/livinginsweden/refundofswedishtax.4.7be5268414bea063694512.html","min_eur":30,"complexity":"medium","notes":["Online-Antrag über Skatteverket-Website — Englische Oberfläche verfügbar.","Ansässigkeitsbescheinigung erforderlich (vom deutschen FA).","Lange Frist von 5 Jahren."]},{"iso":"AT","name":"Österreich","domestic":27.5,"dba":15,"excess":12.5,"deadline_years":5,"form_type":"eportal","output":"cheatsheet","authority":"Österreichisches Finanzamt Österreich","form_name":"Web-Formular Vorausmeldung (Antragsart DIAG für Dividenden)","form_url":"https://www.bmf.gv.at/themen/steuern/internationales-steuerrecht/rueckerstattung/rueckerstattung-oesterreichischer-abzugsteuer.html","min_eur":30,"complexity":"medium","notes":["Seit 01.01.2019: Zwingend elektronische Vorausmeldung über BMF Web-Formular (§ 240a BAO).","Antragsart für Dividenden aus Aktien: DIAG.","Antrag erst nach Ablauf des Einbehaltungsjahres zulässig.","Vorausmeldung ausdrucken + unterschreiben + Ansässigkeitsbestätigung vom deutschen FA einholen.","Ausschließlich postalisch einreichen — kein Fax, keine E-Mail.","Bei Erstantrag: ABZ-Nummer wird zugeteilt — in Folgeanträgen verpflichtend."]},{"iso":"NO","name":"Norwegen","domestic":25,"dba":15,"excess":10,"deadline_years":3,"form_type":"acroform_pdf","output":"pdf_fill","authority":"Norwegische Steuerbehörde","form_name":"RF-1147 (Claim for refund of Norwegian withholding tax)","form_url":"https://www.skatteetaten.no/en/forms/rf-1147-claim-for-refund-of-norwegian-withholding-tax-on-dividends/","min_eur":30,"complexity":"medium","notes":["RF-1147 als PDF verfügbar (Stand 2024) — alternativ über Altinn-Online-Portal.","Frist 3 Jahre."]},{"iso":"CA","name":"Kanada","domestic":25,"dba":15,"excess":10,"deadline_years":2,"form_type":"acroform_pdf","output":"pdf_fill","authority":"Canada Revenue Agency (CRA)","form_name":"NR7-R (Application for Refund of Part XIII Tax Withheld)","form_url":"https://www.canada.ca/en/revenue-agency/services/forms-publications/forms/nr7-r.html","min_eur":40,"complexity":"medium","notes":["KURZE FRIST: nur 2 Jahre ab Zahlung.","Einreichung per Post an CRA International Tax Services Office, Ottawa."]},{"iso":"DK","name":"Dänemark","domestic":27,"dba":15,"excess":12,"deadline_years":3,"form_type":"online","output":"online_guide","authority":"Dänische Steuerbehörde (SKAT)","form_name":"Blanket 06.003 (online)","form_url":"https://www.skat.dk/skat.aspx?oid=2244","min_eur":30,"complexity":"medium","notes":["Online-Antrag über SKAT-Portal.","Häufige Titel: Novo Nordisk, Ørsted, Vestas, Danske Bank, Maersk.","Erstattung in DKK."]},{"iso":"FI","name":"Finnland","domestic":30,"dba":15,"excess":15,"deadline_years":3,"form_type":"online","output":"online_guide","authority":"Finnisches Steueramt (Verohallinto)","form_name":"OmaVero (MyTax) Online-Portal","form_url":"https://www.vero.fi/en/e-file/mytax/","min_eur":30,"complexity":"medium","notes":["Anträge über OmaVero (MyTax) Online-Portal.","Englische Oberfläche. Erstattung in EUR."]},{"iso":"IT","name":"Italien","domestic":26,"dba":15,"excess":11,"deadline_years":2,"form_type":"paper_only","output":"cheatsheet","authority":"Agenzia delle Entrate","form_name":"Modello A / Istanza di rimborso","form_url":"https://www.agenziaentrate.gov.it/portale/web/english/nse/businesses/withholding-tax-refund","min_eur":60,"complexity":"high","notes":["KURZE FRIST: nur 2 Jahre.","Papierformulare erforderlich."]},{"iso":"FR","name":"Frankreich","domestic":28,"dba":15,"excess":13,"deadline_years":2,"form_type":"paper_only","output":"cheatsheet","authority":"Direction générale des Finances publiques (DGFiP)","form_name":"Formulaire 5000 + 5001","form_url":"https://www.impots.gouv.fr/portail/formulaire/5000-sd/cerfa-ndeg-12816","min_eur":80,"complexity":"high","notes":["KURZE FRIST: nur 2 Jahre.","Formulare 5000+5001 (CERFA) — komplex.","Französische Dokumente meist nur auf Französisch."]},{"iso":"IE","name":"Irland","domestic":25,"dba":15,"excess":10,"deadline_years":4,"form_type":"online","output":"online_guide","authority":"Revenue Commissioners","form_name":"Revenue Online Service (ROS) / myAccount","form_url":"https://www.revenue.ie/en/online-services/services/common/manage-your-tax-registrations.aspx","min_eur":30,"complexity":"medium","notes":["DWT-Rückforderung über ROS oder myAccount.","Erstattung in EUR."]},{"iso":"AU","name":"Australien","domestic":30,"dba":15,"excess":15,"deadline_years":4,"form_type":"online","output":"online_guide","authority":"Australian Taxation Office (ATO)","form_name":"Online via ATO myTax","form_url":"https://www.ato.gov.au/individuals-and-families/investments-and-assets/investments-and-tax/dividends","min_eur":40,"complexity":"medium","notes":["Franking Credits können WHT reduzieren.","Englischsprachige ATO-Webseite."]}];
+
+// ============================================================
+// STATE
+// ============================================================
+let apiKey = '';
+let selectedCountry = null;
+let csvEvents = [];  // aus sessionStorage falls vorhanden
+
+function fmt(n){ return '€' + parseFloat(n).toFixed(2); }
+
+// ============================================================
+// API KEY
+// ============================================================
+function saveKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val.startsWith('sk-ant-')) {
+    document.getElementById('key-status').textContent = '❌ Ungültiger Key — muss mit sk-ant- beginnen.';
+    document.getElementById('key-status').className = 'key-status err';
+    return;
+  }
+  apiKey = val;
+  document.getElementById('key-status').textContent = '✅ Key gesetzt (nur im Arbeitsspeicher).';
+  document.getElementById('key-status').className = 'key-status ok';
+  document.getElementById('api-key-input').value = '••••••••••••••••';
+  setStep(2);
+  document.getElementById('country-section').style.display = 'block';
+  renderCountryGrid();
+}
+
+// ============================================================
+// COUNTRY GRID
+// ============================================================
+function renderCountryGrid() {
+  const grid = document.getElementById('country-grid');
+  const typeLabel = { eportal:'ePortal', online:'Online', acroform_pdf:'PDF', paper_only:'Papier' };
+  const typeClass = { eportal:'type-eportal', online:'type-online', acroform_pdf:'type-pdf', paper_only:'type-paper' };
+
+  grid.innerHTML = DBA.map(r => {
+    const ev = csvEvents.filter(e => e.country === r.iso);
+    const total = ev.reduce((s,e) => s + (e.recoverEur||0), 0);
+    const hasData = ev.length > 0;
+    return `
+      <button class="country-btn${hasData?'':' no-data'}" onclick="selectCountry('${r.iso}')" id="cb-${r.iso}">
+        <div class="cb-name">${r.name} <span style="color:var(--muted);font-size:11px">(${r.iso})</span></div>
+        <div class="cb-meta">DBA-Überschuss ${r.excess}% · Frist ${r.deadline_years}J</div>
+        ${hasData ? `<div class="cb-amount">${fmt(total)}</div>` : '<div style="font-size:11px;color:var(--muted);margin-top:6px">Keine CSV-Daten</div>'}
+        <span class="cb-type ${typeClass[r.form_type]||'type-eportal'}">${typeLabel[r.form_type]||r.form_type}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function selectCountry(iso) {
+  document.querySelectorAll('.country-btn').forEach(b => b.classList.remove('selected'));
+  const btn = document.getElementById('cb-' + iso);
+  if (btn) btn.classList.add('selected');
+  selectedCountry = DBA.find(r => r.iso === iso);
+  setStep(3);
+  document.getElementById('data-section').style.display = 'block';
+  document.getElementById('events-country-name').textContent = '— ' + selectedCountry.name;
+  renderEventsTable();
+  document.getElementById('data-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ============================================================
+// EVENTS TABLE
+// ============================================================
+function renderEventsTable() {
+  const container = document.getElementById('events-from-csv');
+  const ev = csvEvents.filter(e => e.country === selectedCountry?.iso);
+  if (!ev.length) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:0.5rem 0">Keine CSV-Daten für dieses Land — bitte manuell eingeben.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="events-table">
+      <thead><tr>
+        <th>Datum</th><th>Ticker</th><th>Brutto (EUR~)</th>
+        <th>WHT (EUR~)</th><th>Rückforderbar</th>
+      </tr></thead>
+      <tbody>
+        ${ev.map(e => `<tr>
+          <td>${e.date}</td>
+          <td style="font-weight:600">${e.ticker}</td>
+          <td>${fmt(e.grossEur)}<span style="color:var(--muted);font-size:10px">~</span></td>
+          <td>${fmt(e.whtEur)}<span style="color:var(--muted);font-size:10px">~</span></td>
+          <td style="color:var(--green);font-weight:600">${fmt(e.recoverEur)}</td>
+        </tr>`).join('')}
+        <tr style="border-top:1px solid var(--border)">
+          <td colspan="4" style="color:var(--muted);font-size:11px">Gesamt rückforderbar</td>
+          <td style="color:var(--green);font-weight:700;font-size:14px">${fmt(ev.reduce((s,e)=>s+(e.recoverEur||0),0))}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">~ FX-Kurs geschätzt (EZB-Jahresdurchschnitt)</div>
+  `;
+  // Manuelle Felder vorausfüllen
+  if (ev.length === 1) {
+    document.getElementById('m-ticker').value = ev[0].ticker || '';
+    document.getElementById('m-date').value   = ev[0].date || '';
+    document.getElementById('m-gross').value  = ev[0].grossEur?.toFixed(2) || '';
+    document.getElementById('m-wht').value    = ev[0].whtEur?.toFixed(2) || '';
+    updateRecover();
+  }
+}
+
+function updateRecover() {
+  const gross = parseFloat(document.getElementById('m-gross').value) || 0;
+  const wht   = parseFloat(document.getElementById('m-wht').value) || 0;
+  if (!selectedCountry || !gross) return;
+  const dbaMax  = Math.round(gross * selectedCountry.dba / 100 * 100) / 100;
+  const recover = Math.max(0, Math.round((wht - dbaMax) * 100) / 100);
+  document.getElementById('m-recover').value = recover.toFixed(2);
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('m-gross').addEventListener('input', updateRecover);
+  document.getElementById('m-wht').addEventListener('input', updateRecover);
+});
+
+// ============================================================
+// CHEATSHEET GENERIEREN
+// ============================================================
+async function generateCheatsheet() {
+  if (!apiKey) { alert('Bitte zuerst API-Key eingeben.'); return; }
+  if (!selectedCountry) { alert('Bitte zuerst ein Land wählen.'); return; }
+
+  const btn = document.getElementById('gen-btn');
+  const spinner = document.getElementById('spinner');
+  const status  = document.getElementById('gen-status');
+  btn.disabled = true;
+  spinner.classList.add('active');
+  status.textContent = 'Claude generiert Cheatsheet…';
+
+  // Daten sammeln — ALLE Werte aus Formular/CSV, nie von KI
+  const name    = document.getElementById('f-name').value.trim();
+  const dob     = document.getElementById('f-dob').value.trim();
+  const address = document.getElementById('f-address').value.trim();
+  const taxid   = document.getElementById('f-taxid').value.trim();
+  const iban    = document.getElementById('f-iban').value.trim();
+  const bic     = document.getElementById('f-bic').value.trim();
+  const depot   = document.getElementById('f-depot').value.trim();
+  const abz     = document.getElementById('f-abz').value.trim();
+  const ticker  = document.getElementById('m-ticker').value.trim();
+  const isin    = document.getElementById('m-isin').value.trim();
+  const mdate   = document.getElementById('m-date').value.trim();
+  const gross   = document.getElementById('m-gross').value.trim();
+  const wht     = document.getElementById('m-wht').value.trim();
+  const recover = document.getElementById('m-recover').value.trim();
+
+  const eventsFromCSV = csvEvents.filter(e => e.country === selectedCountry.iso);
+  const eventsText = eventsFromCSV.length
+    ? eventsFromCSV.map(e => `  ${e.date} | ${e.ticker} | Brutto €${e.grossEur?.toFixed(2)} | WHT €${e.whtEur?.toFixed(2)} | Rückforderbar €${e.recoverEur?.toFixed(2)}`).join('\n')
+    : `  ${mdate} | ${ticker} | Brutto €${gross} | WHT €${wht} | Rückforderbar €${recover}`;
+
+  const totalRecover = eventsFromCSV.length
+    ? eventsFromCSV.reduce((s,e) => s + (e.recoverEur||0), 0).toFixed(2)
+    : recover;
+
+  const systemPrompt = `Du bist ein Assistent für die Rückforderung ausländischer Quellensteuer für deutsche Privatanleger.
+
+STRIKTE REGELN — HALLUZINATIONS-VERBOT:
+- Du darfst KEINE Beträge, Steuersätze, Fristen oder Gesetze erfinden.
+- Alle Zahlen kommen aus den dir übergebenen Daten. Du verwendest sie unverändert.
+- Wenn ein Wert fehlt, schreibe [BITTE ERGÄNZEN] — erfinde nichts.
+- Du gibst KEINEN Rechtsrat. Deine Ausgabe ist eine Ausfüllhilfe.
+- Schreibe auf Deutsch, klar und handlungsorientiert.
+
+Deine Aufgabe: Erstelle ein strukturiertes Cheatsheet mit exakt diesen Abschnitten:
+1. ZUSAMMENFASSUNG — Überblick was zurückgefordert wird und warum
+2. VORBEREITUNGS-CHECKLISTE — Alle Dokumente die beschafft werden müssen (mit konkreten Hinweisen wie man sie bekommt)
+3. SCHRITT-FÜR-SCHRITT ANLEITUNG — Genaue Schritte für das Antragsverfahren dieses Landes
+4. EINZUTRAGENDE WERTE — Alle Felder die im Formular/Portal auszufüllen sind, mit den konkreten Werten aus den Eingabedaten
+5. WICHTIGE HINWEISE — Länderspezifische Fallstricke und Besonderheiten
+6. FRISTEN & NÄCHSTE SCHRITTE — Konkrete Deadlines und was als nächstes zu tun ist
+
+Formatiere jeden Abschnitt mit dem Titel in GROSSBUCHSTABEN, dann den Inhalt darunter.
+Verwende Nummerierungen und Aufzählungspunkte für Lesbarkeit.`;
+
+  const userPrompt = `Land: ${selectedCountry.name} (${selectedCountry.iso})
+Behörde: ${selectedCountry.authority}
+Formular/Portal: ${selectedCountry.form_name}
+Portal-URL: ${selectedCountry.form_url}
+DBA-Quellensteuer-Satz: ${selectedCountry.dba}%
+Einheimischer WHT-Satz: ${selectedCountry.domestic}%
+Überschuss rückforderbar: ${selectedCountry.excess}%
+Antragsfrist: ${selectedCountry.deadline_years} Jahre ab Zahldatum
+Mindestbetrag: €${selectedCountry.min_eur}
+
+ANTRAGSTELLER:
+Name: ${name || '[BITTE ERGÄNZEN]'}
+Geburtsdatum: ${dob || '[BITTE ERGÄNZEN]'}
+Adresse: ${address || '[BITTE ERGÄNZEN]'}
+Deutsche Steuer-IdNr.: ${taxid || '[BITTE ERGÄNZEN]'}
+IBAN: ${iban || '[BITTE ERGÄNZEN]'}
+BIC: ${bic || '[BITTE ERGÄNZEN]'}
+Depot-Nr. (CapTrader): ${depot || '[BITTE ERGÄNZEN]'}
+${abz ? 'ABZ-Nummer: ' + abz : ''}
+
+DIVIDENDEN-EVENTS (aus CapTrader-Export — Beträge nicht verändern):
+${eventsText}
+
+GESAMTBETRAG RÜCKFORDERBAR: €${totalRecover}
+
+LÄNDERSPEZIFISCHE HINWEISE (aus DBA-Datenbank — diese gelten als verifiziert):
+${selectedCountry.notes.map((n,i) => `${i+1}. ${n}`).join('\n')}
+
+Erstelle jetzt das vollständige Cheatsheet für diesen Antrag.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const text = data.content?.find(c => c.type === 'text')?.text || '';
+
+    renderCheatsheet(text, selectedCountry, name, totalRecover);
+    setStep(4);
+    document.getElementById('cheatsheet-section').style.display = 'block';
+    document.getElementById('cheatsheet-section').scrollIntoView({ behavior: 'smooth' });
+
+  } catch(e) {
+    status.textContent = '❌ Fehler: ' + e.message;
+    status.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+    spinner.classList.remove('active');
+    if (!status.textContent.startsWith('❌')) status.textContent = '';
+  }
+}
+
+// ============================================================
+// CHEATSHEET RENDERN
+// ============================================================
+function renderCheatsheet(text, country, name, totalRecover) {
+  // Abschnitte aufteilen
+  const sections = [];
+  const lines = text.split('\n');
+  let current = null;
+
+  for (const line of lines) {
+    if (line.match(/^[A-ZÄÖÜ\s&\/—–]{8,}$/) && !line.startsWith(' ')) {
+      if (current) sections.push(current);
+      current = { title: line.trim(), body: [] };
+    } else if (current) {
+      current.body.push(line);
+    }
+  }
+  if (current) sections.push(current);
+
+  const today = new Date().toLocaleDateString('de-DE');
+  const csHtml = `
+    <div class="cs-header">
+      <div>
+        <div class="cs-title">Rückforderungs-Cheatsheet: ${country.name}</div>
+        <div class="cs-subtitle">${country.form_name} · Erstellt ${today}</div>
+        ${name ? `<div class="cs-subtitle" style="margin-top:2px">Antragsteller: ${name}</div>` : ''}
+      </div>
+      <div class="cs-amount">
+        <div class="cs-amount-val">€${parseFloat(totalRecover).toFixed(2)}</div>
+        <div class="cs-amount-label">rückforderbar</div>
+      </div>
+    </div>
+    <div class="cs-body">
+      ${sections.length > 0
+        ? sections.map(s => `
+            <div class="cs-section">
+              <div class="cs-section-title">${s.title}</div>
+              <div class="cs-content">${escHtml(s.body.join('\n').trim())}</div>
+            </div>
+          `).join('')
+        : `<div class="cs-content">${escHtml(text)}</div>`
+      }
+      <div class="cs-section" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <div class="cs-section-title">DATENQUELLE & HAFTUNGSAUSSCHLUSS</div>
+        <div class="cs-content" style="font-size:11px;color:var(--muted)">Alle Beträge stammen aus dem CapTrader-Export (unveränderter Originalwert). DBA-Sätze aus BMF-Merkblatt 2024. Claude API wurde nur für Übersetzung und Strukturierung verwendet — keine KI-generierten Zahlen. Kein Steuerrat. Vor Antragstellung Originalquellen prüfen. Refundex v1.1 · ahsub</div>
+      </div>
+    </div>
+  `;
+  document.getElementById('cheatsheet-output').innerHTML = csHtml;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function setStep(n) {
+  for (let i=1;i<=4;i++) {
+    const el = document.getElementById('step'+i);
+    el.className = 'step' + (i<n?' done':i===n?' active':'');
+  }
+}
+
+function resetToData() {
+  document.getElementById('cheatsheet-section').style.display = 'none';
+  setStep(3);
+  document.getElementById('data-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetAll() {
+  selectedCountry = null;
+  document.getElementById('cheatsheet-section').style.display = 'none';
+  document.getElementById('data-section').style.display = 'none';
+  document.querySelectorAll('.country-btn').forEach(b => b.classList.remove('selected'));
+  setStep(2);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ============================================================
+// CSV-DATEN AUS SESSIONSSTORAGE (falls vom Dashboard übergeben)
+// ============================================================
+function loadSessionData() {
+  try {
+    const raw = sessionStorage.getItem('refundex_events');
+    if (raw) {
+      csvEvents = JSON.parse(raw);
+      const count = csvEvents.filter(e => (e.recoverEur||0) > 0).length;
+      if (count > 0) {
+        document.getElementById('csv-hint').style.display = 'flex';
+        document.getElementById('csv-hint-text').textContent =
+          `${count} Dividend-Events mit Rückforderungspotenzial aus dem Dashboard geladen.`;
+      }
+    }
+  } catch(e) { /* kein sessionStorage oder ungültige Daten */ }
+}
+
+loadSessionData();
+</script>
+</body>
+</html>
