@@ -186,7 +186,21 @@
   <!-- DATA ENTRY -->
   <div id="data-section" style="display:none">
     <div class="data-section">
-      <div class="ds-title">Persönliche Daten (Antragsteller)</div>
+      <div class="ds-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Persönliche Daten (Antragsteller)</span>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">
+          <input type="checkbox" id="joint-toggle" onchange="toggleJoint()" style="width:15px;height:15px;accent-color:var(--accent)">
+          Gemeinschaftskonto (50/50)
+        </label>
+      </div>
+
+      <!-- JOINT ACCOUNT BANNER -->
+      <div id="joint-banner" style="display:none;background:var(--amber-bg);border:1px solid #7a5a10;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:12px;color:#fbbf60">
+        ⚠️ Gemeinschaftskonto aktiv — Rückforderungsbeträge werden automatisch <strong>50/50</strong> aufgeteilt. Es werden <strong>zwei separate Cheatsheets</strong> generiert (je ein Antrag pro Inhaber).
+      </div>
+
+      <!-- INHABER 1 -->
+      <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem" id="label-inhaber1">Kontoinhaber</div>
       <div class="field-grid">
         <div class="field-group">
           <label class="field-label">Vollständiger Name</label>
@@ -220,6 +234,34 @@
         <div class="field-group">
           <label class="field-label">ABZ-Nummer (falls bekannt)</label>
           <input type="text" class="field-input" id="f-abz" placeholder="Nur für Österreich-Folgeanträge">
+        </div>
+      </div>
+
+      <!-- INHABER 2 (nur bei Gemeinschaftskonto) -->
+      <div id="joint-section" style="display:none;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Zweiter Kontoinhaber</div>
+        <div class="field-grid">
+          <div class="field-group">
+            <label class="field-label">Vollständiger Name</label>
+            <input type="text" class="field-input" id="f2-name" placeholder="Christa F Hildebrand">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Geburtsdatum</label>
+            <input type="text" class="field-input" id="f2-dob" placeholder="TT.MM.JJJJ">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Steuer-IdNr. (Deutschland)</label>
+            <input type="text" class="field-input" id="f2-taxid" placeholder="12 345 678 902">
+          </div>
+          <div class="field-group">
+            <label class="field-label">IBAN (Erstattung 2. Inhaber)</label>
+            <input type="text" class="field-input" id="f2-iban" placeholder="DE12 3456 7890 1234 5678 90">
+            <span class="field-hint">Kann identisch mit Inhaber 1 sein</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label">ABZ-Nummer (falls bekannt)</label>
+            <input type="text" class="field-input" id="f2-abz" placeholder="Nur für Österreich-Folgeanträge">
+          </div>
         </div>
       </div>
     </div>
@@ -390,6 +432,17 @@ function renderEventsTable() {
   }
 }
 
+// ============================================================
+// GEMEINSCHAFTSKONTO TOGGLE
+// ============================================================
+function toggleJoint() {
+  const isJoint = document.getElementById('joint-toggle').checked;
+  document.getElementById('joint-section').style.display  = isJoint ? 'block' : 'none';
+  document.getElementById('joint-banner').style.display   = isJoint ? 'flex' : 'none';
+  document.getElementById('label-inhaber1').textContent   = isJoint ? 'Erster Kontoinhaber' : 'Kontoinhaber';
+  document.getElementById('gen-btn').textContent          = isJoint ? '✨ Zwei Cheatsheets generieren' : '✨ Cheatsheet generieren';
+}
+
 function updateRecover() {
   const gross = parseFloat(document.getElementById('m-gross').value) || 0;
   const wht   = parseFloat(document.getElementById('m-wht').value) || 0;
@@ -418,6 +471,7 @@ async function generateCheatsheet() {
   status.textContent = 'Claude generiert Cheatsheet…';
 
   // Daten sammeln — ALLE Werte aus Formular/CSV, nie von KI
+  const isJoint = document.getElementById('joint-toggle').checked;
   const name    = document.getElementById('f-name').value.trim();
   const dob     = document.getElementById('f-dob').value.trim();
   const address = document.getElementById('f-address').value.trim();
@@ -433,14 +487,29 @@ async function generateCheatsheet() {
   const wht     = document.getElementById('m-wht').value.trim();
   const recover = document.getElementById('m-recover').value.trim();
 
-  const eventsFromCSV = csvEvents.filter(e => e.country === selectedCountry.iso);
-  const eventsText = eventsFromCSV.length
-    ? eventsFromCSV.map(e => `  ${e.date} | ${e.ticker} | Brutto €${e.grossEur?.toFixed(2)} | WHT €${e.whtEur?.toFixed(2)} | Rückforderbar €${e.recoverEur?.toFixed(2)}`).join('\n')
-    : `  ${mdate} | ${ticker} | Brutto €${gross} | WHT €${wht} | Rückforderbar €${recover}`;
+  // Zweiter Inhaber (nur bei Gemeinschaftskonto)
+  const name2   = isJoint ? document.getElementById('f2-name').value.trim()  : '';
+  const dob2    = isJoint ? document.getElementById('f2-dob').value.trim()   : '';
+  const taxid2  = isJoint ? document.getElementById('f2-taxid').value.trim() : '';
+  const iban2   = isJoint ? document.getElementById('f2-iban').value.trim()  : '';
+  const abz2    = isJoint ? document.getElementById('f2-abz').value.trim()   : '';
 
-  const totalRecover = eventsFromCSV.length
-    ? eventsFromCSV.reduce((s,e) => s + (e.recoverEur||0), 0).toFixed(2)
-    : recover;
+  const eventsFromCSV = csvEvents.filter(e => e.country === selectedCountry.iso);
+  const totalRecoverFull = eventsFromCSV.length
+    ? eventsFromCSV.reduce((s,e) => s + (e.recoverEur||0), 0)
+    : parseFloat(recover) || 0;
+
+  // 50/50 Aufteilung bei Gemeinschaftskonto
+  const share       = isJoint ? 0.5 : 1.0;
+  const shareLabel  = isJoint ? ' (50% Anteil)' : '';
+  const totalRecover = (totalRecoverFull * share).toFixed(2);
+
+  const eventsText = eventsFromCSV.length
+    ? eventsFromCSV.map(e => {
+        const recShare = (e.recoverEur * share);
+        return `  ${e.date} | ${e.ticker} | Brutto €${(e.grossEur*share).toFixed(2)}${shareLabel} | WHT €${(e.whtEur*share).toFixed(2)}${shareLabel} | Rückforderbar €${recShare.toFixed(2)}${shareLabel}`;
+      }).join('\n')
+    : `  ${mdate} | ${ticker} | Brutto €${(parseFloat(gross)*share).toFixed(2)}${shareLabel} | WHT €${(parseFloat(wht)*share).toFixed(2)}${shareLabel} | Rückforderbar €${totalRecover}${shareLabel}`;
 
   const systemPrompt = `Du bist ein Assistent für die Rückforderung ausländischer Quellensteuer für deutsche Privatanleger.
 
@@ -462,6 +531,19 @@ Deine Aufgabe: Erstelle ein strukturiertes Cheatsheet mit exakt diesen Abschnitt
 Formatiere jeden Abschnitt mit dem Titel in GROSSBUCHSTABEN, dann den Inhalt darunter.
 Verwende Nummerierungen und Aufzählungspunkte für Lesbarkeit.`;
 
+  // Bei Gemeinschaftskonto: zweiten Prompt für Inhaber 2 vorbereiten
+  const jointInfo = isJoint ? `
+KONTOART: Gemeinschaftskonto (Oder-Konto) — 50/50 Aufteilung
+ZWEITER KONTOINHABER:
+Name: ${name2 || '[BITTE ERGÄNZEN]'}
+Geburtsdatum: ${dob2 || '[BITTE ERGÄNZEN]'}
+Adresse: ${address || '[BITTE ERGÄNZEN]'} (identisch mit Inhaber 1)
+Deutsche Steuer-IdNr.: ${taxid2 || '[BITTE ERGÄNZEN]'}
+IBAN: ${iban2 || iban || '[BITTE ERGÄNZEN]'}
+${abz2 ? 'ABZ-Nummer: ' + abz2 : ''}
+HINWEIS: Dieser Antrag deckt den 50%-Anteil des zweiten Kontoinhabers ab.
+Es sind zwei separate Anträge erforderlich — einer pro Kontoinhaber.` : '';
+
   const userPrompt = `Land: ${selectedCountry.name} (${selectedCountry.iso})
 Behörde: ${selectedCountry.authority}
 Formular/Portal: ${selectedCountry.form_name}
@@ -471,8 +553,9 @@ Einheimischer WHT-Satz: ${selectedCountry.domestic}%
 Überschuss rückforderbar: ${selectedCountry.excess}%
 Antragsfrist: ${selectedCountry.deadline_years} Jahre ab Zahldatum
 Mindestbetrag: €${selectedCountry.min_eur}
+${isJoint ? 'KONTOART: Gemeinschaftskonto — Beträge sind bereits 50%-Anteile' : ''}
 
-ANTRAGSTELLER:
+ANTRAGSTELLER (${isJoint ? 'Erster Kontoinhaber — 50%-Anteil' : 'Alleiniger Kontoinhaber'}):
 Name: ${name || '[BITTE ERGÄNZEN]'}
 Geburtsdatum: ${dob || '[BITTE ERGÄNZEN]'}
 Adresse: ${address || '[BITTE ERGÄNZEN]'}
@@ -481,16 +564,19 @@ IBAN: ${iban || '[BITTE ERGÄNZEN]'}
 BIC: ${bic || '[BITTE ERGÄNZEN]'}
 Depot-Nr. (CapTrader): ${depot || '[BITTE ERGÄNZEN]'}
 ${abz ? 'ABZ-Nummer: ' + abz : ''}
+${jointInfo}
 
-DIVIDENDEN-EVENTS (aus CapTrader-Export — Beträge nicht verändern):
+DIVIDENDEN-EVENTS (aus CapTrader-Export — Beträge bereits auf 50%-Anteil reduziert, nicht verändern):
 ${eventsText}
 
-GESAMTBETRAG RÜCKFORDERBAR: €${totalRecover}
+GESAMTBETRAG RÜCKFORDERBAR (dieser Antrag): €${totalRecover}
+${isJoint ? `GESAMTBETRAG BEIDE ANTRÄGE: €${(totalRecoverFull).toFixed(2)}` : ''}
 
 LÄNDERSPEZIFISCHE HINWEISE (aus DBA-Datenbank — diese gelten als verifiziert):
 ${selectedCountry.notes.map((n,i) => `${i+1}. ${n}`).join('\n')}
+${isJoint ? `${selectedCountry.notes.length+1}. GEMEINSCHAFTSKONTO: Beide Kontoinhaber müssen separate Anträge stellen. Jeder Antrag über 50% des Gesamtbetrags. Für jeden Inhaber separate Ansässigkeitsbescheinigung beim Finanzamt beantragen.` : ''}
 
-Erstelle jetzt das vollständige Cheatsheet für diesen Antrag.`;
+Erstelle jetzt das vollständige Cheatsheet für diesen Antrag (Antragsteller: ${name || 'Inhaber 1'}).`;
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -512,7 +598,7 @@ Erstelle jetzt das vollständige Cheatsheet für diesen Antrag.`;
     const data = await resp.json();
     const text = data.content?.find(c => c.type === 'text')?.text || '';
 
-    renderCheatsheet(text, selectedCountry, name, totalRecover);
+    renderCheatsheet(text, selectedCountry, name, totalRecover, isJoint, name2, totalRecoverFull);
     setStep(4);
     document.getElementById('cheatsheet-section').style.display = 'block';
     document.getElementById('cheatsheet-section').scrollIntoView({ behavior: 'smooth' });
@@ -530,7 +616,7 @@ Erstelle jetzt das vollständige Cheatsheet für diesen Antrag.`;
 // ============================================================
 // CHEATSHEET RENDERN
 // ============================================================
-function renderCheatsheet(text, country, name, totalRecover) {
+function renderCheatsheet(text, country, name, totalRecover, isJoint, name2, totalRecoverFull) {
   // Abschnitte aufteilen
   const sections = [];
   const lines = text.split('\n');
@@ -553,6 +639,7 @@ function renderCheatsheet(text, country, name, totalRecover) {
         <div class="cs-title">Rückforderungs-Cheatsheet: ${country.name}</div>
         <div class="cs-subtitle">${country.form_name} · Erstellt ${today}</div>
         ${name ? `<div class="cs-subtitle" style="margin-top:2px">Antragsteller: ${name}</div>` : ''}
+        ${isJoint ? `<div class="cs-subtitle" style="margin-top:2px;color:var(--amber)">⚠ Gemeinschaftskonto — 2. Inhaber: ${name2||'[Name 2]'} · Gesamt beide Anträge: €${parseFloat(totalRecoverFull).toFixed(2)}</div>` : ''}
       </div>
       <div class="cs-amount">
         <div class="cs-amount-val">€${parseFloat(totalRecover).toFixed(2)}</div>
