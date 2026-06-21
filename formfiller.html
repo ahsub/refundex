@@ -202,10 +202,16 @@
         ⚠️ Gemeinschaftskonto aktiv — Rückforderungsbeträge werden automatisch <strong>50/50</strong> aufgeteilt. Es werden <strong>zwei separate Cheatsheets</strong> generiert (je ein Antrag pro Inhaber).
       </div>
 
-      <!-- AUTOFILL BUTTON -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;padding:0.6rem 0.75rem;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
-        <span style="font-size:12px;color:var(--muted);flex:1">Felder mit gelbem Rand müssen ausgefüllt werden. Grün = bereits gesetzt. Alle Felder sind editierbar.</span>
-        <button class="btn btn-secondary" onclick="autofillFromCSV()" style="font-size:12px;padding:5px 12px;white-space:nowrap">📋 Aus Kontoauszug übernehmen</button>
+      <!-- AUTOFILL: CSV UPLOAD -->
+      <div style="margin-bottom:1rem;padding:0.75rem;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted);flex:1">Felder mit gelbem Rand müssen ausgefüllt werden. Grün = gesetzt. Alle Felder editierbar.</span>
+          <label style="display:inline-flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;color:var(--text);white-space:nowrap">
+            📋 Kontoauszug laden &amp; übernehmen
+            <input type="file" id="meta-csv-input" accept=".csv" style="display:none" onchange="loadMetaCSV(event)">
+          </label>
+        </div>
+        <div id="meta-csv-status" style="font-size:11px;color:var(--muted);margin-top:6px;display:none"></div>
       </div>
 
       <!-- INHABER 1 -->
@@ -736,34 +742,54 @@ try {
   if (raw) accountMeta = JSON.parse(raw);
 } catch(e) {}
 
-function autofillFromCSV() {
-  // Namen aus Kontoinformation parsen
-  // Format CapTrader: "Axel Hildebrand and Christa F Hildebrand"
-  const fullName = accountMeta.name || '';
-  const depot    = accountMeta.account || '';
+function loadMetaCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('meta-csv-status');
+  status.style.display = 'block';
+  status.style.color = 'var(--muted)';
+  status.textContent = `Lese ${file.name}…`;
 
-  if (!fullName && !depot) {
-    alert('Keine Kontodaten verfügbar. Bitte zuerst im Dashboard einen Kontoauszug hochladen, dann erneut versuchen.\n\nAlternativ: Felder manuell ausfüllen.');
-    return;
-  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split(/\r?\n/);
+    let name = '', account = '';
 
-  // Namen aufteilen bei " and "
-  const nameParts = fullName.split(/ and /i).map(n => n.trim().toUpperCase());
-
-  if (nameParts[0]) setField('f-name',  nameParts[0]);
-  if (nameParts[1]) setField('f2-name', nameParts[1]);
-  if (depot)        setField('f-depot', depot);
-
-  // Gemeinschaftskonto automatisch erkennen
-  if (nameParts.length >= 2 && nameParts[1]) {
-    const toggle = document.getElementById('joint-toggle');
-    if (!toggle.checked) {
-      toggle.checked = true;
-      toggleJoint();
+    for (const line of lines) {
+      const p = line.split(',');
+      if (p[0]==='Kontoinformation' && p[1]==='Data') {
+        if (p[2]==='Name')    name    = p[3]?.trim() || '';
+        if (p[2]==='Account') account = p[3]?.trim() || '';
+      }
+      if (name && account) break;
     }
-  }
 
-  showAutofillToast(nameParts, depot);
+    if (!name && !account) {
+      status.style.color = 'var(--red)';
+      status.textContent = '❌ Keine Kontoinformation gefunden — bitte Kontoauszug-CSV hochladen (nicht Flex Query).';
+      return;
+    }
+
+    // Namen aufteilen: "Axel Hildebrand and Christa F Hildebrand"
+    const nameParts = name.split(/ and /i).map(n => n.trim().toUpperCase());
+
+    if (nameParts[0]) setField('f-name',  nameParts[0]);
+    if (nameParts[1]) setField('f2-name', nameParts[1]);
+    if (account)      setField('f-depot', account);
+
+    // Gemeinschaftskonto automatisch erkennen
+    if (nameParts.length >= 2 && nameParts[1]) {
+      const toggle = document.getElementById('joint-toggle');
+      if (!toggle.checked) { toggle.checked = true; toggleJoint(); }
+    }
+
+    status.style.color = 'var(--green)';
+    status.textContent = `✅ Übernommen: ${nameParts.join(' + ')} · Depot ${account}`;
+
+    // In sessionStorage cachen für nächstes Mal
+    sessionStorage.setItem('refundex_account_meta', JSON.stringify({ name, account }));
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 function setField(id, value) {
