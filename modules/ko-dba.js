@@ -14,7 +14,7 @@
  * Alle Werte sind manuell gegen offizielle BMF-Quellen geprüft.
  * Bei Zweifeln immer Originalquelle konsultieren.
  *
- * Version: 1.0.0 — 2025-06-19
+ * Version: 1.1.0 — 2026-06-21
  * Nächste Prüfung: 2026-01-01 (DBA-Änderungen zum Jahreswechsel)
  */
 
@@ -128,23 +128,25 @@ export const DBA_RULES = [
     excess_rate:              12.5,
     recovery_possible:        true,
     recovery_deadline_years:  5,
-    form_type:                "acroform_pdf",  // ZS-RD 1 — unser neuer PDF-Pilot
-    refundex_output:          "pdf_fill",
+    form_type:                "eportal",       // Seit 01.01.2019: Web-Formular Pflicht (§ 240a BAO)
+    refundex_output:          "cheatsheet",
     authority_name_de:        "Österreichisches Finanzamt Österreich",
     authority_name_local:     "Finanzamt Österreich",
-    form_name:                "ZS-RD 1 (Rückzahlung österreichischer Quellensteuer)",
-    form_url:                 "https://www.bmf.gv.at/dam/jcr:47b7b8a8-8d0d-4b63-a0e2-a40c9e0d4b0f/BMF_ZS-RD1_E.pdf",
+    form_name:                "Web-Formular Vorausmeldung (Antragsart DIAG für Dividenden)",
+    form_url:                 "https://www.bmf.gv.at/themen/steuern/internationales-steuerrecht/rueckerstattung/rueckerstattung-oesterreichischer-abzugsteuer.html",
     min_worthwhile_eur:       30,
     complexity:               "medium",
     dba_article:              "Art. 10 DBA-AT (Dividenden)",
     bmf_source_url:           "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Staatenbezogene_Informationen/Laender_A_Z/Oesterreich-DBA.html",
     notes_de: [
-      "ZS-RD 1 ist AcroForm-PDF — direktes Befüllen durch Refundex möglich.",
-      "Antrag beim Finanzamt Österreich (zentral für alle Ausländer).",
-      "Ansässigkeitsbescheinigung (dt. FA) + Dividendenbescheinigung erforderlich.",
+      "Seit 01.01.2019: Zwingend elektronische Vorausmeldung über BMF Web-Formular (§ 240a BAO).",
+      "Antragsart für Dividenden aus Aktien: DIAG.",
+      "Antrag erst nach Ablauf des Einbehaltungsjahres zulässig.",
+      "Vorausmeldung ausdrucken + unterschreiben + Ansässigkeitsbestätigung vom deutschen FA einholen.",
+      "Ausschließlich postalisch einreichen — kein Fax, keine E-Mail.",
+      "Bei Erstantrag: ABZ-Nummer wird zugeteilt, in allen Folgeanträgen verpflichtend.",
       "Häufige Titel: OMV, Verbund, Erste Group, BAWAG, Wienerberger.",
-      "Erstattung in EUR — unkomplizierter als CHF/SEK/NOK.",
-      "Bearbeitungsdauer: 3–6 Monate.",
+      "Erstattung in EUR. Bearbeitungsdauer: 3–6 Monate.",
     ],
     last_verified: "2025-06-19",
   },
@@ -169,11 +171,10 @@ export const DBA_RULES = [
     dba_article:              "Art. 10 DBA-NO (Dividenden)",
     bmf_source_url:           "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Staatenbezogene_Informationen/Laender_A_Z/Norwegen-DBA.html",
     notes_de: [
-      "RF-1147 als PDF verfügbar und befüllbar.",
+      "RF-1147 als PDF verfügbar (Stand 2024) — alternativ über Altinn-Online-Portal.",
       "Frist 3 Jahre — bei norwegischen Öl-/Energietiteln oft relevante Beträge.",
       "Häufige Titel: Equinor, DNB, Telenor, Yara, Orkla.",
-      "Erstattung in NOK.",
-      "Englischsprachige Formulare und Webseite verfügbar.",
+      "Erstattung in NOK. Englischsprachige Formulare verfügbar.",
     ],
     last_verified: "2025-06-19",
   },
@@ -211,6 +212,36 @@ export const DBA_RULES = [
   // =========================================================================
 
   {
+    country_iso:              "BR",
+    country_name_de:          "Brasilien",
+    country_name_local:       "Brasil",
+    domestic_wht_rate:        15,
+    dba_rate_de:              15,
+    excess_rate:              0,
+    recovery_possible:        false,
+    recovery_deadline_years:  0,
+    form_type:                "none",
+    refundex_output:          "none",
+    authority_name_de:        "Brasilianische Steuerbehörde (Receita Federal)",
+    authority_name_local:     "Receita Federal do Brasil",
+    form_name:                "–",
+    form_url:                 "",
+    min_worthwhile_eur:       0,
+    complexity:               "low",
+    dba_article:              "Kein klassisches DBA-DE-BR für Portfoliodividenden",
+    bmf_source_url:           "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Staatenbezogene_Informationen/Laender_A_Z/Brasilien-DBA.html",
+    notes_de: [
+      "Kein klassisches Dividenden-DBA zwischen Deutschland und Brasilien.",
+      "PBR (Petrobras): Ausschüttungen oft als JCP (Juros sobre Capital Próprio) — steuerlich wie Zinsen behandelt.",
+      "JCP-Quellensteuer in Brasilien: 15% — entspricht faktisch DBA-Niveau, kein Überschuss.",
+      "Bei Standard-WHT von 15%: Kein Rückforderungsanspruch für deutsche Anleger.",
+      "PBR-WHT im CapTrader-Export (~6-7%): Ungewöhnlich niedrig — möglicherweise bereits teilweise angerechnet oder JCP-Sondersatz.",
+      "Empfehlung: Dividendenbescheinigung von IBKR anfordern und WHT-Satz manuell prüfen.",
+    ],
+    last_verified: "2026-06-21",
+  },
+
+  {
     country_iso:              "DK",
     country_name_de:          "Dänemark",
     country_name_local:       "Danmark",
@@ -246,20 +277,21 @@ export const DBA_RULES = [
     excess_rate:              15,
     recovery_possible:        true,
     recovery_deadline_years:  3,
-    form_type:                "acroform_pdf",
-    refundex_output:          "pdf_fill",
+    form_type:                "online",        // OmaVero (MyTax) seit 2023
+    refundex_output:          "online_guide",
     authority_name_de:        "Finnisches Steueramt",
     authority_name_local:     "Verohallinto",
-    form_name:                "Lomake 6163e (Refund of Finnish Withholding Tax)",
-    form_url:                 "https://www.vero.fi/en/About-us/contact-us/forms/instructions/6163e--claim-for-refund-of-finnish-withholding-tax/",
+    form_name:                "OmaVero (MyTax) Online-Portal",
+    form_url:                 "https://www.vero.fi/en/e-file/mytax/",
     min_worthwhile_eur:       30,
     complexity:               "medium",
     dba_article:              "Art. 10 DBA-FI (Dividenden)",
     bmf_source_url:           "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Staatenbezogene_Informationen/Laender_A_Z/Finnland-DBA.html",
     notes_de: [
-      "PDF-Formular verfügbar, englischsprachig.",
+      "Seit 2023: Anträge über OmaVero (MyTax) Online-Portal der Verohallinto.",
+      "Englische Oberfläche verfügbar — vergleichsweise unkompliziert.",
       "Häufige Titel: Nokia, KONE, Neste, Fortum, Nordea.",
-      "Erstattung in EUR (Finnland ist Eurozone).",
+      "Erstattung in EUR (Finnland ist Eurozone). Frist 3 Jahre.",
     ],
     last_verified: "2025-06-19",
   },
@@ -475,21 +507,21 @@ export const DBA_RULES = [
     excess_rate:              10,
     recovery_possible:        true,
     recovery_deadline_years:  4,
-    form_type:                "acroform_pdf",
-    refundex_output:          "pdf_fill",
+    form_type:                "online",        // Revenue Online Service (ROS)
+    refundex_output:          "online_guide",
     authority_name_de:        "Irische Steuerbehörde",
     authority_name_local:     "Revenue Commissioners",
-    form_name:                "Form IC5 (Dividend Withholding Tax Refund)",
-    form_url:                 "https://www.revenue.ie/en/companies-and-charities/dividends-and-distributions/dividend-withholding-tax/claiming-a-refund.aspx",
+    form_name:                "Revenue Online Service (ROS) / myAccount",
+    form_url:                 "https://www.revenue.ie/en/online-services/services/common/manage-your-tax-registrations.aspx",
     min_worthwhile_eur:       30,
     complexity:               "medium",
     dba_article:              "Art. 10 DBA-IE (Dividenden)",
     bmf_source_url:           "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Staatenbezogene_Informationen/Laender_A_Z/Irland-DBA.html",
     notes_de: [
+      "DWT-Rückforderung über Revenue Online Service (ROS) oder myAccount.",
       "Relevant für in Irland domizilierte Fonds/ETFs (viele US-ETFs via Dublin).",
       "Häufige Titel: CRH, Kerry Group, AIB — aber auch viele US-Firmen mit IE-Holding.",
-      "Erstattung in EUR.",
-      "Revenue Commissioners haben englischsprachige Webseite.",
+      "Erstattung in EUR. Englischsprachige Oberfläche.",
     ],
     last_verified: "2025-06-19",
   },
@@ -656,9 +688,9 @@ export function getUrgency(daysRemaining) {
 // ---------------------------------------------------------------------------
 
 export const DBA_MODULE_META = {
-  version:       "1.0.0",
+  version:       "1.1.0",
   created:       "2025-06-19",
-  next_review:   "2026-01-01",
+  next_review:   "2027-01-01",
   country_count: DBA_RULES.length,
   recoverable:   DBA_RULES.filter(r => r.recovery_possible).length,
   pdf_fill:      DBA_RULES.filter(r => r.refundex_output === "pdf_fill").length,
