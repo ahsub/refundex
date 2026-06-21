@@ -132,8 +132,8 @@
 <main class="main">
 
   <!-- UPLOAD -->
-  <!-- UPLOAD BEREICH: 3 Dateitypen -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+  <!-- UPLOAD BEREICH: 4 Dateitypen -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
     <div class="upload-zone" onclick="document.getElementById('file-main').click()" title="Jahresauszug CSV">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">📊</div>
       <div class="upload-title" style="font-size:13px">Jahresauszug</div>
@@ -156,6 +156,7 @@
   <input type="file" id="file-main" accept=".csv" onchange="loadCSV(event,'main')">
   <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)">
   <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)">
+  <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)">
 
   <!-- EINSTELLUNGEN -->
   <div class="settings-bar">
@@ -335,6 +336,7 @@ function fmtRaw(n) { return n >= 0 ? fmt(n) : fmt(n); }
 let rawData = null;   // Jahresauszug CSV
 let divData = null;   // Dividendenbericht HTML (exakte EUR-Kurse)
 let fxData  = null;   // FX-Einkünfte CSV (Anlage SO)
+let pdfData = null;   // Informativer Steuerbericht PDF (höchste Priorität)
 
 // ============================================================
 // CSV LADEN
@@ -517,6 +519,195 @@ function parseFXCSV(text) {
 }
 
 // ============================================================
+// PWC PDF PARSER — Informativer Steuerbericht (Deutsch)
+// Verwendet PDF.js (Mozilla) direkt im Browser
+// ============================================================
+function loadPWCpdf(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('status-pdf');
+  statusEl.textContent = `Lade ${file.name}…`;
+  statusEl.style.color = 'var(--muted)';
+
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      statusEl.textContent = '⏳ PDF wird analysiert…';
+      const data = await parsePWCpdf(e.target.result);
+      pdfData = data;
+      statusEl.textContent = `✅ ${file.name} · Exakt`;
+      statusEl.style.color = 'var(--green)';
+      recalculate();
+    } catch(err) {
+      statusEl.textContent = `❌ Fehler: ${err.message}`;
+      statusEl.style.color = 'var(--red)';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function parsePWCpdf(arrayBuffer) {
+  // PDF.js via CDN laden
+  if (!window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+      s.type = 'module';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    // Fallback: ältere Version
+    if (!window.pdfjsLib) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  }
+
+  const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+
+  const result = {
+    kontoName: '', kontoNr: '', year: '',
+    line7: 0, line18: 0, line19: 0,
+    line22: 0, line23: 0,
+    divBrutto: 0, whtTotal: 0, creditableWht: 0,
+    optGain: 0, optLoss: 0,
+    zinsenEur: 0,
+    source: 'pwc_pdf',
+  };
+
+  function pn(s) {
+    if (!s) return 0;
+    const neg = String(s).includes('(');
+    const v = parseFloat(String(s).replace(/[,()]/g,''));
+    return isNaN(v) ? 0 : (neg ? -v : v);
+  }
+
+  // Seiten-Text mit Positionen extrahieren
+  async function getPageItems(pageNum) {
+    const page = await pdf.getPage(pageNum);
+    const tc = await page.getTextContent();
+    return tc.items.map(item => ({
+      text: item.str.trim(),
+      x: Math.round(item.transform[4]),
+      y: Math.round(item.transform[5]),
+    })).filter(i => i.text);
+  }
+
+  function groupByY(items, tol=3) {
+    const rows = {};
+    for (const item of items) {
+      const y = Math.round(item.y / tol) * tol;
+      if (!rows[y]) rows[y] = [];
+      rows[y].push(item);
+    }
+    return rows;
+  }
+
+  function findNum(rows, keyword, xMin=600) {
+    for (const [y, row] of Object.entries(rows)) {
+      const text = row.map(i => i.text).join(' ');
+      if (text.toLowerCase().includes(keyword.toLowerCase())) {
+        const nums = row.filter(i => i.x >= xMin && /^[\(]?[\d,]+\.\d{2}[\)]?$/.test(i.text));
+        if (nums.length) return pn(nums[0].text);
+      }
+    }
+    return 0;
+  }
+
+  // SEITE 1: Metadaten + Summary
+  const p1items = await getPageItems(1);
+  const p1rows  = groupByY(p1items);
+
+  // Kontoname aus ersten Zeilen
+  for (const items of Object.values(p1rows)) {
+    const text = items.map(i => i.text).join(' ');
+    if (text.includes('Hildebrand') && !result.kontoName) result.kontoName = text;
+    if (/^U\d{8}$/.test(items.find(i => /^U\d+$/.test(i.text))?.text || ''))
+      result.kontoNr = items.find(i => /^U\d+$/.test(i.text)).text;
+  }
+
+  // Jahr aus Periode
+  for (const items of Object.values(p1rows)) {
+    const text = items.map(i => i.text).join(' ');
+    const m = text.match(/\d{1,2} \w+ (\d{4}) - \d{1,2} \w+ (\d{4})/);
+    if (m) { result.year = m[2]; break; }
+  }
+
+  result.line7  = findNum(p1rows, 'Line 7');
+  result.line18 = findNum(p1rows, 'Line 18');
+
+  // Line 19: Wert steht auf Zeile mit "Foreign capital income"
+  for (const [y, row] of Object.entries(p1rows)) {
+    const text = row.map(i => i.text).join(' ');
+    if (text.includes('Foreign capital income')) {
+      const nums = row.filter(i => i.x > 600 && /^[\d,]+\.\d{2}$/.test(i.text));
+      if (nums.length) { result.line19 = pn(nums[0].text); break; }
+    }
+  }
+
+  result.line22 = findNum(p1rows, 'non-share capital', 600);
+  result.line23 = findNum(p1rows, 'sale of shares', 600);
+
+  // SEITE 2: Zinsen
+  const p2items = await getPageItems(2);
+  const p2rows  = groupByY(p2items);
+  for (const [y, row] of Object.entries(p2rows)) {
+    const text = row.map(i => i.text).join(' ');
+    if (text.includes('Total German')) {
+      const nums = row.filter(i => i.x > 400 && /^[\d,]+\.\d{2}$/.test(i.text));
+      if (nums.length) { result.zinsenEur = pn(nums[0].text); break; }
+    }
+  }
+
+  // SEITE 6: Dividenden Total + WHT + Creditable (Line 41)
+  const p6items = await getPageItems(6);
+  const p6rows  = groupByY(p6items);
+  for (const [y, row] of Object.entries(p6rows)) {
+    const text = row.map(i => i.text).join(' ');
+    if (text.includes('Total foreign')) {
+      const nums = row.filter(i => i.x > 350 && /^[\d,]+\.\d{2}$/.test(i.text));
+      if (nums.length >= 3) {
+        result.divBrutto    = pn(nums[0].text);
+        result.whtTotal     = pn(nums[1].text);
+        result.creditableWht= pn(nums[2].text);
+        break;
+      }
+    }
+  }
+
+  // SEITE 18: Optionen Totals (Seite kann variieren — suche in Seiten 15-25)
+  for (let pageNum = 15; pageNum <= Math.min(25, pdf.numPages); pageNum++) {
+    const items = await getPageItems(pageNum);
+    const rows  = groupByY(items);
+    let found = false;
+    for (const [y, row] of Object.entries(rows)) {
+      const text = row.map(i => i.text).join(' ');
+      if (text === 'Totals' || (text.startsWith('Totals') && !text.includes('distribution'))) {
+        const nums = row.filter(i => /^[\(]?[\d,]+\.\d{2}[\)]?$/.test(i.text));
+        if (nums.length >= 2) {
+          result.optGain = pn(nums[0].text);
+          result.optLoss = pn(nums[1].text);
+          found = true; break;
+        }
+      }
+    }
+    if (found) break;
+  }
+
+  return result;
+}
+
+async function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ============================================================
 // PARSER (JAHRESAUSZUG)
 // ============================================================
 function parseJahresCSV(text, fileName) {
@@ -655,16 +846,22 @@ function recalculate() {
 
   const d = rawData;
 
-  // Dividenden: divData (exakt) hat Vorrang vor Jahresauszug (Schätzung)
-  const divEur = divData
-    ? divData.totalDivEur * share
-    : toEur(d.divNAV, 'USD', year) * share;
-  const whtEur = divData
-    ? divData.totalWhtEur * share
-    : toEur(d.whtNAV, 'USD', year) * share;
-  const divSource = divData ? '(exakt)' : '~';
+  // Priorität: pdfData > divData > Jahresauszug (Schätzung)
+  const divEur = pdfData
+    ? (pdfData.line19 + pdfData.line18) * share
+    : divData
+      ? divData.totalDivEur * share
+      : toEur(d.divNAV, 'USD', year) * share;
+  const whtEur = pdfData
+    ? pdfData.creditableWht * share
+    : divData
+      ? divData.totalWhtEur * share
+      : toEur(d.whtNAV, 'USD', year) * share;
+  const divSource = pdfData ? '(exakt PDF)' : divData ? '(exakt)' : '~';
 
-  const zinsEur  = d.zinsenGesamt * share;
+  const zinsEur  = pdfData
+    ? pdfData.zinsenEur * share
+    : d.zinsenGesamt * share;
   const optGain  = toEur(d.optionen.gain, 'USD', year) * share;
   const optLoss  = toEur(d.optionen.loss, 'USD', year) * share;  // negativ
   const optSaldo = optGain + optLoss;
@@ -774,7 +971,9 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
   const noteEl = document.getElementById('data-source-note');
   if (noteEl) {
     const d1 = (divSrc==='(exakt)')
-      ? '<span style="color:#22c55e">&#10003; Dividenden: Tageskurs (Dividendenbericht)</span>'
+      ? (divSrc==='(exakt PDF)')
+      ? '<span style="color:#22c55e">&#10003; Dividenden + Optionen: Informativer Steuerbericht PDF (exakt)</span>'
+      : '<span style="color:#22c55e">&#10003; Dividenden: Tageskurs (Dividendenbericht)</span>'
       : '<span style="color:#f59e0b">~ Dividenden: EZB-Jahresdurchschnitt (Schätzung)</span>';
     const d2 = (fxSrc==='(exakt)')
       ? '<span style="color:#22c55e">&#10003; FX: Tageskurs (FX-Bericht)</span>'
@@ -882,8 +1081,12 @@ function downloadDOCX() {
   const divEur   = divData ? divData.totalDivEur * share : toEur(d.divNAV,'USD',year) * share;
   const whtEur   = divData ? divData.totalWhtEur * share : toEur(d.whtNAV,'USD',year) * share;
   const zinsEur  = d.zinsenGesamt * share;
-  const optGain  = toEur(d.optionen.gain,'USD',year) * share;
-  const optLoss  = toEur(d.optionen.loss,'USD',year) * share;
+  const optGain  = pdfData
+    ? pdfData.optGain * share
+    : toEur(d.optionen.gain,'USD',year) * share;
+  const optLoss  = pdfData
+    ? pdfData.optLoss * share
+    : toEur(d.optionen.loss,'USD',year) * share;
   const optSaldo = optGain + optLoss;
   const akGain   = toEur(d.aktien.gain,'USD',year) * share;
   const akLoss   = toEur(d.aktien.loss,'USD',year) * share;
