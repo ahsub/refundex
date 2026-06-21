@@ -152,6 +152,12 @@
       <div class="upload-hint">*_fx.csv · Anlage SO Devisengewinne</div>
       <div id="status-fx" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
     </div>
+    <div class="upload-zone" onclick="document.getElementById('file-pdf').click()" title="Informativer Steuerbericht PDF">
+      <div style="font-size:1.5rem;margin-bottom:0.4rem">📑</div>
+      <div class="upload-title" style="font-size:13px">Steuerbericht PDF</div>
+      <div class="upload-hint">*_PWC_DE.pdf · Alle Werte exakt</div>
+      <div id="status-pdf" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt andere</div>
+    </div>
   </div>
   <input type="file" id="file-main" accept=".csv" onchange="loadCSV(event,'main')">
   <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)">
@@ -548,11 +554,12 @@ function loadPWCpdf(event) {
       statusEl.style.color = 'var(--green)';
       // Execute-Bar nur anzeigen wenn noch kein rawData vorhanden
       if (!rawData) {
-        document.getElementById('execute-bar').style.display = 'flex';
+        const eb = document.getElementById('execute-bar'); eb.style.display = 'flex'; eb.style.alignItems = 'center'; eb.style.gap = '12px';
       }
       recalculate();
     } catch(err) {
-      statusEl.textContent = `❌ Fehler: ${err.message}`;
+      console.error('PDF Parse Error:', err);
+      statusEl.textContent = `❌ ${err.message || 'PDF-Fehler — Browser-Konsole prüfen'}`;
       statusEl.style.color = 'var(--red)';
     }
   };
@@ -560,24 +567,14 @@ function loadPWCpdf(event) {
 }
 
 async function parsePWCpdf(arrayBuffer) {
-  // PDF.js via CDN laden
+  // PDF.js UMD via CDN (setzt window.pdfjsLib)
   if (!window.pdfjsLib) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
-      s.type = 'module';
-      s.onload = resolve; s.onerror = reject;
-      document.head.appendChild(s);
-    });
-    // Fallback: ältere Version
-    if (!window.pdfjsLib) {
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
 
-  const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+  const lib = window.pdfjsLib;
   const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
 
   const result = {
@@ -1172,7 +1169,7 @@ async function buildDOCXinBrowser(data) {
   if (!window.docx) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/docx/9.0.2/docx.umd.min.js';
+      s.src = 'https://unpkg.com/docx@9.0.2/build/index.umd.js';
       s.onload = resolve; s.onerror = reject;
       document.head.appendChild(s);
     });
