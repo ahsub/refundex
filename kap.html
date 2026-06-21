@@ -158,6 +158,12 @@
   <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)">
   <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)">
 
+  <!-- EXECUTE BAR -->
+  <div id="execute-bar" style="display:none;margin-bottom:1rem;padding:0.75rem 1rem;background:var(--amber-bg);border:1px solid #7a5a10;border-radius:8px;align-items:center;gap:12px">
+    <span style="font-size:12px;color:#fbbf60;flex:1">📑 Steuerbericht PDF geladen — Jahresauszug CSV nicht erforderlich wenn PDF vollständig ist.</span>
+    <button class="btn btn-primary" onclick="recalculate()" style="white-space:nowrap">▶ Berechnung starten</button>
+  </div>
+
   <!-- EINSTELLUNGEN -->
   <div class="settings-bar">
     <div class="setting-group">
@@ -350,6 +356,7 @@ function loadCSV(event, src='main') {
     rawData = parseJahresCSV(e.target.result, file.name);
     document.getElementById('status-main').textContent = `✅ ${file.name}`;
     document.getElementById('status-main').style.color = 'var(--green)';
+    document.getElementById('execute-bar').style.display = 'none';
     recalculate();
   };
   reader.readAsText(file, 'utf-8');
@@ -535,8 +542,14 @@ function loadPWCpdf(event) {
       statusEl.textContent = '⏳ PDF wird analysiert…';
       const data = await parsePWCpdf(e.target.result);
       pdfData = data;
+      if (data.year) document.getElementById('tax-year').value = data.year;
+      // Depot-Nr. wird in recalculate() aus pdfData geholt
       statusEl.textContent = `✅ ${file.name} · Exakt`;
       statusEl.style.color = 'var(--green)';
+      // Execute-Bar nur anzeigen wenn noch kein rawData vorhanden
+      if (!rawData) {
+        document.getElementById('execute-bar').style.display = 'flex';
+      }
       recalculate();
     } catch(err) {
       statusEl.textContent = `❌ Fehler: ${err.message}`;
@@ -728,7 +741,7 @@ function parseJahresCSV(text, fileName) {
   // Steuerjahr aus Dateiname extrahieren
   const yearMatch = fileName.match(/(\d{4})_\d{4}/);
   if (yearMatch) d.year = yearMatch[1];
-  document.getElementById('tax-year').value = d.year;
+  if (d.year) document.getElementById('tax-year').value = d.year;
 
   for (const line of lines) {
     const p = splitLine(line.trim());
@@ -899,7 +912,9 @@ function recalculate() {
   // UI rendern
   renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo);
   renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo);
-  renderKAPForm(kapWerte, year, isJoint, spouse, d.kontoName, d.kontoNr, divSource||'~', fxSource||'~');
+  const kontoName = pdfData?.kontoName || d.kontoName || '';
+  const kontoNr   = pdfData?.kontoNr   || d.kontoNr   || '';
+  renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~');
   renderChecklist(kapWerte, isJoint, d.kontoName);
 
   // §20 Hinweis
@@ -1072,11 +1087,24 @@ function downloadDOCX() {
   btn.disabled = true;
 
   // Daten sammeln
-  const year    = document.getElementById('tax-year').value || rawData.year;
+  // PDF allein reicht als Datenquelle
+  if (!rawData && !pdfData) return;
+
+  const year    = document.getElementById('tax-year').value ||
+                  (pdfData?.year) || (rawData?.year) || '2024';
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
   const fsa     = parseFloat(document.getElementById('fsa').value) || 1000;
-  const d       = rawData;
+
+  // Leeres rawData-Objekt wenn nur PDF vorhanden
+  const d = rawData || {
+    kontoName: pdfData?.kontoName || '',
+    kontoNr:   pdfData?.kontoNr   || '',
+    divNAV: 0, whtNAV: 0, zinsenGesamt: 0,
+    optionen: { gain: 0, loss: 0 },
+    aktien:   { gain: 0, loss: 0 },
+    fx:       { gain: 0, loss: 0 },
+  };
 
   const divEur   = divData ? divData.totalDivEur * share : toEur(d.divNAV,'USD',year) * share;
   const whtEur   = divData ? divData.totalWhtEur * share : toEur(d.whtNAV,'USD',year) * share;
