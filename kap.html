@@ -20505,6 +20505,7 @@ function loadDivHTML(event) {
   const reader = new FileReader();
   reader.onload = e => {
     divData = parseDividendHTML(e.target.result);
+    console.log('divData geladen:', {totalDivEur: divData.totalDivEur, totalWhtEur: divData.totalWhtEur, events: divData.events?.length});
     document.getElementById('status-div').textContent = `✅ ${file.name} · €${divData.totalDivEur.toFixed(2)} Div`;
     document.getElementById('status-div').style.color = 'var(--green)';
     recalculate();
@@ -20943,6 +20944,7 @@ function recalculate() {
 
   // Priorität: pdfData > divData > Jahresauszug (Schätzung)
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
+  console.log('KAP Datenquellen:', {pdfData:!!pdfData, _pdfDiv, divData:!!divData, divTotal:divData?.totalDivEur, rawData:!!rawData});
   const divEur = (_pdfDiv>0) ? _pdfDiv*share : divData ? divData.totalDivEur*share : toEur(d.divNAV,'USD',year)*share;
   const whtEur = (_pdfDiv>0) ? (pdfData.creditableWht||0)*share : divData ? divData.totalWhtEur*share : toEur(d.whtNAV,'USD',year)*share;
   const divSource = (_pdfDiv>0)?'(exakt PDF)':divData?'(exakt)':'~';
@@ -20983,8 +20985,8 @@ function recalculate() {
   };
 
   // UI rendern
-  renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo);
-  renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo);
+  renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo, divSource, fxSource);
+  renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo, divSource, fxSource);
   const kontoName = pdfData?.kontoName || d.kontoName || '';
   const kontoNr   = pdfData?.kontoNr   || d.kontoNr   || '';
   renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~');
@@ -21016,16 +21018,19 @@ function round2(n) { return Math.round(n * 100) / 100; }
 // ============================================================
 // RENDER OVERVIEW
 // ============================================================
-function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo) {
-  setText('ov-div',     fmt(div) + '~');
-  setText('ov-div-sub', `WHT einbehalten: ${fmt(wht)}~`);
-  setText('ov-wht',     fmt(wht) + '~');
-  setText('ov-zins',    fmt(zins));
-  setText('ov-opt',     fmt(optSaldo) + '~');
-  setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}~ | Verluste: ${fmt(optL)}~`);
+function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo, divSrc, fxSrc) {
+  const ds = (divSrc && divSrc !== '~') ? '' : '~';
+  const fs = (fxSrc  && fxSrc  !== '~') ? '' : '~';
+  const os = pdfData?.optGain ? '' : '~';
+  setText('ov-div',     fmt(div) + ds);
+  setText('ov-div-sub', `WHT einbehalten: ${fmt(wht)}${ds}`);
+  setText('ov-wht',     fmt(wht) + ds);
+  setText('ov-zins',    fmt(zins) + (pdfData?.zinsenEur>0 ? '' : '~'));
+  setText('ov-opt',     fmt(optSaldo) + os);
+  setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}${os} | Verluste: ${fmt(optL)}${os}`);
   setText('ov-aktien',  fmt(akSaldo) + '~');
   setText('ov-aktien-sub', `Gewinne: ${fmt(akG)}~ | Verluste: ${fmt(akL)}~`);
-  setText('ov-fx',      fmt(fxSaldo) + '~');
+  setText('ov-fx',      fmt(fxSaldo) + fs);
   setText('ov-fx-sub',  fxSaldo > 0 ? 'Anlage SO — steuerpflichtig wenn >600€' : 'Kein Gewinn');
   setColor('ov-opt',    optSaldo >= 0 ? 'green' : 'red');
   setColor('ov-aktien', akSaldo >= 0 ? 'green' : 'red');
@@ -21035,18 +21040,20 @@ function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG,
 // ============================================================
 // RENDER TÖPFE
 // ============================================================
-function renderToepfe(kap, div, zins, optG, optL, verr, optSaldo, akG, akL, akSaldo) {
+function renderToepfe(kap, div, zins, optG, optL, verr, optSaldo, akG, akL, akSaldo, divSrc, fxSrc) {
   const t1 = div + zins;
-  setText('t1-div',   fmt(div)  + '~'); setColor('t1-div',   'pos');
-  setText('t1-zins',  fmt(zins));       setColor('t1-zins',  'pos');
-  setText('t1-saldo', fmt(t1)   + '~'); setColor('t1-saldo', t1>=0?'pos':'neg');
+  const ds = (divSrc && divSrc!=='~') ? '' : '~';
+  const os = pdfData?.optGain ? '' : '~';
+  setText('t1-div',   fmt(div)  + ds); setColor('t1-div',   'pos');
+  setText('t1-zins',  fmt(zins) + (pdfData?.zinsenEur>0?'':'~')); setColor('t1-zins',  'pos');
+  setText('t1-saldo', fmt(t1)   + ds); setColor('t1-saldo', t1>=0?'pos':'neg');
   setText('t2-gain',  fmt(akG)  + '~'); setColor('t2-gain',  'pos');
   setText('t2-loss',  fmt(-akL) + '~'); setColor('t2-loss',  'neg');
   setText('t2-saldo', fmt(akSaldo)+'~'); setColor('t2-saldo', akSaldo>=0?'pos':'neg');
-  setText('t3-gain',  fmt(optG) + '~'); setColor('t3-gain',  'pos');
-  setText('t3-loss',  fmt(optL) + '~'); setColor('t3-loss',  'neg');
-  setText('t3-verr',  fmt(verr) + '~'); setColor('t3-verr',  'warn');
-  setText('t3-saldo', fmt(optSaldo)+'~'); setColor('t3-saldo', optSaldo>=0?'pos':'neg');
+  setText('t3-gain',  fmt(optG) + os); setColor('t3-gain',  'pos');
+  setText('t3-loss',  fmt(optL) + os); setColor('t3-loss',  'neg');
+  setText('t3-verr',  fmt(verr) + os); setColor('t3-verr',  'warn');
+  setText('t3-saldo', fmt(optSaldo)+os); setColor('t3-saldo', optSaldo>=0?'pos':'neg');
 }
 
 // ============================================================
@@ -21071,16 +21078,16 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
 
   const rows = [
     { type:'header', text:'A — Angaben zu Kapitalerträgen' },
-    { z:'7',  text:`Kapitalerträge (ohne Dividenden aus Aktien nach Z. 8) — Dividenden${jointNote}`,    val:kap.z7_div,       cls: kap.z7_div > 0 ? 'pos' : 'neutral' },
+    { z:'7',  text:`Kapitalerträge (ohne Dividenden aus Aktien nach Z. 8) — Dividenden${jointNote}`,    val:kap.z7_div,       cls: kap.z7_div > 0 ? 'pos' : 'neutral', approx: divSrc==='~' },
     { z:'8',  text:`Gewinne aus der Veräußerung von Aktien${jointNote}`,                               val:kap.z8_aktienGain, cls: kap.z8_aktienGain > 0 ? 'pos' : 'neutral' },
     { z:'9',  text:`Verluste aus der Veräußerung von Aktien${jointNote}`,                              val:-kap.z9_aktienLoss, cls: kap.z9_aktienLoss > 0 ? 'neg' : 'neutral' },
-    { z:'12', text:`Gewinne aus Termingeschäften (Optionsprämien)${jointNote}`,                        val:kap.z12_optGain,   cls: kap.z12_optGain > 0 ? 'pos' : 'neutral' },
+    { z:'12', text:`Gewinne aus Termingeschäften (Optionsprämien)${jointNote}`,                        val:kap.z12_optGain,   cls: kap.z12_optGain > 0 ? 'pos' : 'neutral', approx: !pdfData?.optGain },
     { z:'13', text:`Verluste aus Termingeschäften §20 Abs.6${jointNote}`,                              val:-kap.z13_optLoss,  cls: kap.z13_optLoss > 0 ? 'neg' : 'neutral' },
     { z:'14', text:`Zinsen und sonstige Kapitalerträge${jointNote}`,                                   val:kap.z14_zinsen,    cls: kap.z14_zinsen > 0 ? 'pos' : 'neutral' },
     { type:'header', text:'B — Freistellungsauftrag' },
     { z:'17', text:`Freistellungsauftrag (gesamt ${fmt(parseFloat(document.getElementById('fsa').value)||1000)})${jointNote}`, val:kap.z17_fsa, cls:'neutral' },
     { type:'header', text:'C — Anrechenbare Steuerabzugsbeträge' },
-    { z:'41', text:`Anrechenbare Kapitalertragsteuer (Quellensteuer aus Ausland)${jointNote} ${divSrc}`,  val:kap.z41_wht, cls: kap.z41_wht > 0 ? 'pos' : 'neutral' },
+    { z:'41', text:`Anrechenbare Kapitalertragsteuer (Quellensteuer aus Ausland)${jointNote}`,  val:kap.z41_wht, cls: kap.z41_wht > 0 ? 'pos' : 'neutral', approx: divSrc==='~' },
   ];
 
   const form = document.getElementById('kap-form-output');
@@ -21102,7 +21109,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
           <div class="kap-row">
             <div class="kap-zeile">Z. ${r.z}</div>
             <div class="kap-beschr">${r.text}</div>
-            <div class="kap-betrag ${r.cls}">${isFx ? fmt(r.val)+'~' : fmt(0)}</div>
+            <div class="kap-betrag ${r.cls}">${isFx ? fmt(r.val)+(r.approx?'~':'') : fmt(0)}</div>
           </div>`;
       }).join('')}
     </div>
@@ -21153,86 +21160,63 @@ function setColor(id, cls) {
 // DOCX DOWNLOAD — Begleitdokument für Finanzamt
 // ============================================================
 function downloadDOCX() {
-  if (!rawData) { alert('Bitte zuerst Jahresauszug laden.'); return; }
-
   const btn = document.getElementById('docx-btn');
   btn.textContent = '⏳ Wird erstellt…';
   btn.disabled = true;
 
-  // Daten sammeln
-  // PDF allein reicht als Datenquelle
-  if (!rawData && !pdfData) return;
-
-  const year    = document.getElementById('tax-year').value ||
-                  (pdfData?.year) || (rawData?.year) || '2024';
+  const year    = document.getElementById('tax-year').value || rawData?.year || '2024';
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
-  const fsa     = parseFloat(document.getElementById('fsa').value) || 1000;
+  const fsa     = parseFloat(document.getElementById('fsa').value) || 0;
+  const d       = rawData || {};
+  const spouse  = document.getElementById('spouse-select').value;
 
-  // Leeres rawData-Objekt wenn nur PDF vorhanden
-  const d = rawData || {
-    kontoName: pdfData?.kontoName || '',
-    kontoNr:   pdfData?.kontoNr   || '',
-    divNAV: 0, whtNAV: 0, zinsenGesamt: 0,
-    optionen: { gain: 0, loss: 0 },
-    aktien:   { gain: 0, loss: 0 },
-    fx:       { gain: 0, loss: 0 },
-  };
-
-  const divEur   = divData ? divData.totalDivEur * share : toEur(d.divNAV,'USD',year) * share;
-  const whtEur   = divData ? divData.totalWhtEur * share : toEur(d.whtNAV,'USD',year) * share;
-  const zinsEur = pdfData?.zinsenEur ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
-  const optGain  = pdfData
-    ? pdfData.optGain * share
-    : toEur(d.optionen.gain,'USD',year) * share;
-  const optLoss  = pdfData
-    ? pdfData.optLoss * share
-    : toEur(d.optionen.loss,'USD',year) * share;
-  const optSaldo = optGain + optLoss;
-  const akGain   = toEur(d.aktien.gain,'USD',year) * share;
-  const akLoss   = toEur(d.aktien.loss,'USD',year) * share;
-  const fxSaldo  = fxData ? fxData.total * share : toEur(d.fx.gain+d.fx.loss,'USD',year) * share;
-  const optVortrag = Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain + 20000));
+  const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
+  const divEur  = (_pdfDiv>0) ? _pdfDiv*share : divData ? divData.totalDivEur*share : toEur(d.divNAV||0,'USD',year)*share;
+  const whtEur  = (_pdfDiv>0) ? (pdfData.creditableWht||0)*share : divData ? divData.totalWhtEur*share : toEur(d.whtNAV||0,'USD',year)*share;
+  const zinsEur = (pdfData?.zinsenEur>0) ? pdfData.zinsenEur*share : (d.zinsenGesamt||0)*share;
+  const optGain = (pdfData?.optGain) ? Math.abs(pdfData.optGain)*share : toEur(d.optionen?.gain||0,'USD',year)*share;
+  const optLoss = (pdfData?.optLoss) ? -Math.abs(pdfData.optLoss)*share : toEur(d.optionen?.loss||0,'USD',year)*share;
+  const akGain  = toEur(d.aktien?.gain||0,'USD',year)*share;
+  const akLoss  = toEur(d.aktien?.loss||0,'USD',year)*share;
+  const fxVal   = fxData ? fxData.total*share : toEur((d.fx?.gain||0)+(d.fx?.loss||0),'USD',year)*share;
+  const optVortrag = Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain+20000));
+  const divSrc  = (_pdfDiv>0)?'(exakt PDF)':divData?'(exakt)':'~';
+  const fxSrc   = fxData?'(exakt)':'~';
 
   const payload = {
-    kontoName:  d.kontoName,
-    kontoNr:    d.kontoNr,
-    year, isJoint, fsa,
-    divEur: round2(divEur),
-    whtEur: round2(whtEur),
-    zinsEur: round2(zinsEur),
-    optGain: round2(Math.max(0, optGain)),
-    optLoss: round2(Math.min(0, optLoss)),
-    optSaldo: round2(optSaldo),
-    optVortrag: round2(optVortrag),
-    akGain: round2(Math.max(0, akGain)),
-    akLoss: round2(Math.min(0, akLoss)),
-    akSaldo: round2(akGain + akLoss),
-    fxSaldo: round2(fxSaldo),
-    divSource: divData ? '(exakt)' : '~',
-    fxSource:  fxData  ? '(exakt)' : '~',
+    kontoName: pdfData?.kontoName || d.kontoName || '',
+    kontoNr:   pdfData?.kontoNr   || d.kontoNr   || '',
+    year, isJoint, fsa, spouse,
+    divEur:round2(divEur), whtEur:round2(whtEur), zinsEur:round2(zinsEur),
+    optGain:round2(Math.max(0,optGain)), optLoss:round2(Math.min(0,optLoss)),
+    optSaldo:round2(optGain+optLoss), optVortrag:round2(optVortrag),
+    akGain:round2(Math.max(0,akGain)), akLoss:round2(Math.min(0,akLoss)),
+    akSaldo:round2(akGain+akLoss), fxSaldo:round2(fxVal),
+    divSource:divSrc, fxSource:fxSrc,
   };
 
-  // Claude API: DOCX-Inhalt als strukturiertes HTML generieren,
-  // dann via browser-seitigem docx.js in DOCX umwandeln
-  generateDOCXviaClaude(payload)
-    .then(b64 => {
-      const blob = b64toBlob(b64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `KAP_${year}_${payload.kontoNr}.docx`;
+  buildDOCXinBrowser(payload)
+    .then(blob => {
+      // Packer.toBlob gibt direkt ein Blob zurück — kein base64 nötig
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `KAP_${year}_${payload.kontoNr || 'Refundex'}.docx`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      btn.textContent = '📄 DOCX herunterladen';
+      btn.textContent = '📄 DOCX';
       btn.disabled = false;
     })
     .catch(err => {
-      alert('Fehler: ' + err.message);
-      btn.textContent = '📄 DOCX herunterladen';
+      alert('DOCX Fehler: ' + err.message);
+      btn.textContent = '📄 DOCX';
       btn.disabled = false;
     });
 }
+
 
 async function generateDOCXviaClaude(data) {
   // Anthropic API: Claude generiert Node.js-Code + führt ihn serverseitig aus
@@ -21396,7 +21380,7 @@ async function buildDOCXinBrowser(data) {
     }]
   });
 
-  try { return await Packer.toBase64String(doc); } catch(e) { const b=await Packer.toBuffer(doc); const u=new Uint8Array(b); let s=''; for(let i=0;i<u.length;i++) s+=String.fromCharCode(u[i]); return btoa(s); }
+  return await Packer.toBlob(doc);
 }
 
 function b64toBlob(b64, type) {
