@@ -20698,147 +20698,100 @@ function loadPWCpdf(event) {
 }
 
 async function parsePWCpdf(arrayBuffer) {
-  // PDF.js UMD via CDN (setzt window.pdfjsLib)
-  if (!window.pdfjsLib) {
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  // PDF via Claude API analysieren - zuverlässiger als PDF.js im Browser
+  const apiKey = window._kapApiKey
+    || sessionStorage.getItem('refundex_api_key')
+    || document.getElementById('kap-api-key')?.value
+    || prompt('Anthropic API-Key für PDF-Analyse (sk-ant-...):', '');
+
+  if (!apiKey || !apiKey.startsWith('sk-ant-')) {
+    throw new Error('Kein gültiger API-Key. Bitte oben eingeben.');
+  }
+  window._kapApiKey = apiKey;
+  try { sessionStorage.setItem('refundex_api_key', apiKey); } catch(e) {}
+
+  // ArrayBuffer → base64
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+  }
+  const b64 = btoa(binary);
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      system: `Du analysierst einen CapTrader/IBKR "German Tax Report" PDF.
+Antworte NUR mit einem JSON-Objekt, kein Text davor oder danach, keine Backticks.
+
+REGELN:
+- Erfinde KEINE Werte. Wenn nicht gefunden: 0.
+- Alle Beträge in EUR (Spalte "Gross (EUR)" oder "(EUR)").
+- Negative Verluste als negative Zahlen.
+
+JSON-Format:
+{
+  "kontoName": "Name des Kontoinhabers exakt wie im PDF",
+  "kontoNr": "Konto-ID z.B. U12074449",
+  "year": "Steuerjahr z.B. 2025",
+  "line18": Zeile 18 German capital income (Zinsen EUR),
+  "line19": Zeile 19 Foreign capital income (Dividenden EUR),
+  "line22": Zeile 22 losses from disposal of non-share capital (positiver Wert),
+  "line23": Zeile 23 losses from sale of shares (positiver Wert),
+  "creditableWht": Creditable Tax EUR aus "Total foreign-registered assets",
+  "whtTotal": Tax Withheld EUR aus "Total foreign-registered assets",
+  "divBrutto": Gross EUR aus "Total foreign-registered assets",
+  "optGain": Summe Gains aus "Disposals of foreign non-share assets" Totals-Zeile,
+  "optLoss": Summe Losses aus "Disposals of foreign non-share assets" Totals-Zeile (negativ),
+  "zinsenEur": Gross EUR aus "Total German-registered assets"
+}`,
+      messages: [{
+        role: 'user',
+        content: [{
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: b64 }
+        }, {
+          type: 'text',
+          text: 'Extrahiere alle Steuerwerte aus diesem CapTrader German Tax Report.'
+        }]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API Fehler ${response.status}`);
   }
 
-  const lib = window.pdfjsLib;
-  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  const data = await response.json();
+  const text = data.content?.find(c => c.type === 'text')?.text || '';
 
-  const result = {
-    kontoName: '', kontoNr: '', year: '',
-    line7: 0, line18: 0, line19: 0,
-    line22: 0, line23: 0,
-    divBrutto: 0, whtTotal: 0, creditableWht: 0,
-    optGain: 0, optLoss: 0,
-    zinsenEur: 0,
-    source: 'pwc_pdf',
+  // JSON extrahieren - auch wenn in Backticks
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Kein JSON in API-Antwort: ' + text.slice(0, 100));
+
+  const result = JSON.parse(jsonMatch[0]);
+
+  // Defaults für fehlende Felder
+  const defaults = {
+    kontoName:'', kontoNr:'', year:'',
+    line7:0, line18:0, line19:0, line22:0, line23:0,
+    creditableWht:0, whtTotal:0, divBrutto:0,
+    optGain:0, optLoss:0, zinsenEur:0,
+    source: 'pwc_pdf_claude',
   };
-
-  function pn(s) {
-    if (!s) return 0;
-    const neg = String(s).includes('(');
-    const v = parseFloat(String(s).replace(/[,()]/g,''));
-    return isNaN(v) ? 0 : (neg ? -v : v);
-  }
-
-  // Seiten-Text mit Positionen extrahieren
-  async function getPageItems(pageNum) {
-    const page = await pdf.getPage(pageNum);
-    const tc = await page.getTextContent();
-    return tc.items.map(item => ({
-      text: item.str.trim(),
-      x: Math.round(item.transform[4]),
-      y: Math.round(item.transform[5]),
-    })).filter(i => i.text);
-  }
-
-  function groupByY(items, tol=3) {
-    const rows = {};
-    for (const item of items) {
-      const y = Math.round(item.y / tol) * tol;
-      if (!rows[y]) rows[y] = [];
-      rows[y].push(item);
-    }
-    return rows;
-  }
-
-  function findNum(rows, keyword, xMin=600) {
-    for (const [y, row] of Object.entries(rows)) {
-      const text = row.map(i => i.text).join(' ');
-      if (text.toLowerCase().includes(keyword.toLowerCase())) {
-        const nums = row.filter(i => i.x >= xMin && /^[\(]?[\d,]+\.\d{2}[\)]?$/.test(i.text));
-        if (nums.length) return pn(nums[0].text);
-      }
-    }
-    return 0;
-  }
-
-  // SEITE 1: Metadaten + Summary
-  const p1items = await getPageItems(1);
-  const p1rows  = groupByY(p1items);
-
-  // Kontoname aus ersten Zeilen
-  for (const items of Object.values(p1rows)) {
-    const text = items.map(i => i.text).join(' ');
-    if (text.includes('Hildebrand') && !result.kontoName) result.kontoName = text;
-    if (/^U\d{8}$/.test(items.find(i => /^U\d+$/.test(i.text))?.text || ''))
-      result.kontoNr = items.find(i => /^U\d+$/.test(i.text)).text;
-  }
-
-  // Jahr aus Periode
-  for (const items of Object.values(p1rows)) {
-    const text = items.map(i => i.text).join(' ');
-    const m = text.match(/\d{1,2} \w+ (\d{4}) - \d{1,2} \w+ (\d{4})/);
-    if (m) { result.year = m[2]; break; }
-  }
-
-  result.line7  = findNum(p1rows, 'Line 7');
-  result.line18 = findNum(p1rows, 'Line 18');
-
-  // Line 19: Wert steht auf Zeile mit "Foreign capital income"
-  for (const [y, row] of Object.entries(p1rows)) {
-    const text = row.map(i => i.text).join(' ');
-    if (text.includes('Foreign capital income')) {
-      const nums = row.filter(i => i.x > 600 && /^[\d,]+\.\d{2}$/.test(i.text));
-      if (nums.length) { result.line19 = pn(nums[0].text); break; }
-    }
-  }
-
-  result.line22 = findNum(p1rows, 'non-share capital', 600);
-  result.line23 = findNum(p1rows, 'sale of shares', 600);
-
-  // SEITE 2: Zinsen
-  const p2items = await getPageItems(2);
-  const p2rows  = groupByY(p2items);
-  for (const [y, row] of Object.entries(p2rows)) {
-    const text = row.map(i => i.text).join(' ');
-    if (text.includes('Total German')) {
-      const nums = row.filter(i => i.x > 400 && /^[\d,]+\.\d{2}$/.test(i.text));
-      if (nums.length) { result.zinsenEur = pn(nums[0].text); break; }
-    }
-  }
-
-  // SEITE 6: Dividenden Total + WHT + Creditable (Line 41)
-  const p6items = await getPageItems(6);
-  const p6rows  = groupByY(p6items);
-  for (const [y, row] of Object.entries(p6rows)) {
-    const text = row.map(i => i.text).join(' ');
-    if (text.includes('Total foreign')) {
-      const nums = row.filter(i => i.x > 350 && /^[\d,]+\.\d{2}$/.test(i.text));
-      if (nums.length >= 3) {
-        result.divBrutto    = pn(nums[0].text);
-        result.whtTotal     = pn(nums[1].text);
-        result.creditableWht= pn(nums[2].text);
-        break;
-      }
-    }
-  }
-
-  // SEITE 18: Optionen Totals (Seite kann variieren — suche in Seiten 15-25)
-  for (let pageNum = 15; pageNum <= Math.min(25, pdf.numPages); pageNum++) {
-    const items = await getPageItems(pageNum);
-    const rows  = groupByY(items);
-    let found = false;
-    for (const [y, row] of Object.entries(rows)) {
-      const text = row.map(i => i.text).join(' ');
-      if (text === 'Totals' || (text.startsWith('Totals') && !text.includes('distribution'))) {
-        const nums = row.filter(i => /^[\(]?[\d,]+\.\d{2}[\)]?$/.test(i.text));
-        if (nums.length >= 2) {
-          result.optGain = pn(nums[0].text);
-          result.optLoss = pn(nums[1].text);
-          found = true; break;
-        }
-      }
-    }
-    if (found) break;
-  }
-
-  return result;
+  return { ...defaults, ...result };
 }
+
 
 async function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -20994,9 +20947,7 @@ function recalculate() {
   const whtEur = (_pdfDiv>0) ? (pdfData.creditableWht||0)*share : divData ? divData.totalWhtEur*share : toEur(d.whtNAV,'USD',year)*share;
   const divSource = (_pdfDiv>0)?'(exakt PDF)':divData?'(exakt)':'~';
 
-  const zinsEur  = pdfData
-    ? pdfData.zinsenEur * share
-    : d.zinsenGesamt * share;
+  const zinsEur = (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
   const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)*share : toEur(d.optionen.gain,'USD',year)*share;
   const optLoss = pdfData?.optLoss ? -Math.abs(pdfData.optLoss)*share : toEur(d.optionen.loss,'USD',year)*share;  // negativ
   const optSaldo = optGain + optLoss;
