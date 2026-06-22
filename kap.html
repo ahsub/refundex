@@ -296,7 +296,8 @@
         <div style="display:flex;gap:8px">
           <span id="spouse-label" class="badge badge-joint"></span>
           <button class="btn" onclick="window.print()">🖨️ Drucken</button>
-          <button class="btn btn-primary" onclick="downloadDOCX()" id="docx-btn" style="display:none">📄 DOCX herunterladen</button>
+          <button class="btn btn-primary" onclick="printKAP()" id="docx-btn" style="display:none">🖨️ Drucken / PDF</button>
+          <button class="btn" onclick="downloadDOCX()" id="docx-dl-btn" style="display:none">📄 DOCX</button>
         </div>
       </div>
 
@@ -21007,6 +21008,7 @@ function recalculate() {
   document.getElementById('result-section').style.display = 'block';
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('docx-btn').style.display = 'inline-flex';
+  document.getElementById('docx-dl-btn').style.display = 'inline-flex';
 
   // Spouse Label
   const spouseLabels = { '1': d.kontoName.split(/ AND /i)[0] || 'Inhaber 1', '2': d.kontoName.split(/ AND /i)[1] || 'Inhaber 2', 'both': 'Beide Inhaber' };
@@ -21085,7 +21087,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
     { z:'13', text:`Verluste aus Termingeschäften §20 Abs.6${jointNote}`,                              val:-kap.z13_optLoss,  cls: kap.z13_optLoss > 0 ? 'neg' : 'neutral' },
     { z:'14', text:`Zinsen und sonstige Kapitalerträge${jointNote}`,                                   val:kap.z14_zinsen,    cls: kap.z14_zinsen > 0 ? 'pos' : 'neutral' },
     { type:'header', text:'B — Freistellungsauftrag' },
-    { z:'17', text:`Freistellungsauftrag (gesamt ${fmt(parseFloat(document.getElementById('fsa').value)||1000)})${jointNote}`, val:kap.z17_fsa, cls:'neutral' },
+    { z:'17', text:`Freistellungsauftrag CapTrader${isJoint?' ('+fmt(fsa)+' gesamt, '+fmt(fsa/2)+' je Ehegatte)':''}${jointNote}`, val:kap.z17_fsa, cls:'neutral' },
     { type:'header', text:'C — Anrechenbare Steuerabzugsbeträge' },
     { z:'41', text:`Anrechenbare Kapitalertragsteuer (Quellensteuer aus Ausland)${jointNote}`,  val:kap.z41_wht, cls: kap.z41_wht > 0 ? 'pos' : 'neutral', approx: divSrc==='~' },
   ];
@@ -21400,6 +21402,14 @@ function b64toBlob(b64, type) {
 
 // Init API-Key
 (function(){try{var k=sessionStorage.getItem('refundex_api_key');if(k){window._kapApiKey=k;var el=document.getElementById('kap-api-key');if(el)el.value=k;}}catch(e){}})();
+function printKAP() {
+  const s = document.createElement('style');
+  s.id = 'print-kap';
+  s.textContent = '@media print {header,.upload-grid,.execute-bar,.settings-bar,#empty-state{display:none!important;}.main{padding:0!important;max-width:100%!important;}body{background:white!important;color:black!important;}.kap-form-header{background:#f0f4ff!important;-webkit-print-color-adjust:exact;}.kap-zeile{background:#f0f4ff!important;color:#2563eb!important;-webkit-print-color-adjust:exact;}.kap-betrag.pos{color:#16a34a!important;-webkit-print-color-adjust:exact;}.kap-betrag.neg{color:#dc2626!important;-webkit-print-color-adjust:exact;}}';
+  document.head.appendChild(s);
+  window.print();
+  setTimeout(()=>{const el=document.getElementById('print-kap');if(el)el.remove();},2000);
+}
 </script>
 </body>
 </html>
