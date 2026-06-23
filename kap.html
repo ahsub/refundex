@@ -20512,11 +20512,17 @@ async function loadECBRates(dateCurrencyPairs) {
     const maxDate = sorted[sorted.length - 1];
 
     try {
+      // Frankfurter API via CORS-Proxy (GitHub Pages blockiert direkte API-Calls)
+      const FXAPI = 'https://my-cors-proxy.ahildebrand.workers.dev/https://api.frankfurter.app';
       const url = minDate === maxDate
-        ? 'https://api.frankfurter.app/' + minDate + '?from=' + currency + '&to=EUR'
-        : 'https://api.frankfurter.app/' + minDate + '..' + maxDate + '?from=' + currency + '&to=EUR';
+        ? FXAPI + '/' + minDate + '?from=' + currency + '&to=EUR'
+        : FXAPI + '/' + minDate + '..' + maxDate + '?from=' + currency + '&to=EUR';
 
-      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const resp = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        mode: 'cors',
+        cache: 'no-cache',
+      });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
 
@@ -20934,7 +20940,7 @@ function parseJahresCSV(text, fileName) {
   };
 
   // Steuerjahr aus Dateiname extrahieren
-  const yearMatch = fileName.match(/(\d{4})_\d{4}/);
+  const yearMatch = fileName.match(/(?:_|^)(20\d{2})(?:_|\d)/);
   if (yearMatch) d.year = yearMatch[1];
   if (d.year) document.getElementById('tax-year').value = d.year;
 
@@ -21073,13 +21079,6 @@ function recalculate() {
       }
     }
     _hasExactRates = Object.keys(fxRateMap).length > 0;
-    console.log('KAP Debug:', {
-      fxRateMapSize: Object.keys(fxRateMap).length,
-      hasExact: _hasExactRates,
-      exactDiv: _exactDivEur,
-      divSample: rawData?.dividenden?.slice(0,2),
-      fxSample: Object.entries(fxRateMap).slice(0,3)
-    });
   }
 
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
@@ -21098,7 +21097,6 @@ function recalculate() {
       : divData
         ? divData.totalWhtEur*share
         : toEur(d.whtNAV,'USD',year)*share;
-  console.log('divSource check:', {_pdfDiv, _hasExactRates, _exactDivEur, divDataExists: !!divData});
   const divSource = (_pdfDiv>0)
     ? '(exakt PDF)'
     : (_hasExactRates && _exactDivEur>0)
