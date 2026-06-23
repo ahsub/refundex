@@ -20514,16 +20514,17 @@ async function loadECBRates(dateCurrencyPairs) {
     try {
       // Frankfurter API via CORS-Proxy (GitHub Pages blockiert direkte API-Calls)
       const FXAPI = 'https://my-cors-proxy.ahildebrand.workers.dev/https://api.frankfurter.app';
-      const url = minDate === maxDate
-        ? FXAPI + '/' + minDate + '?from=' + currency + '&to=EUR'
-        : FXAPI + '/' + minDate + '..' + maxDate + '?from=' + currency + '&to=EUR';
+      const targetUrl = minDate === maxDate
+        ? 'https://api.frankfurter.app/' + minDate + '?from=' + currency + '&to=EUR'
+        : 'https://api.frankfurter.app/' + minDate + '..' + maxDate + '?from=' + currency + '&to=EUR';
 
-      const resp = await fetch(url, {
+      // Via CORS-Proxy (Cloudflare Worker) — Format: ?url=encodeURIComponent(targetUrl)
+      const proxyUrl = 'https://my-cors-proxy.ahildebrand.workers.dev/?url=' + encodeURIComponent(targetUrl);
+
+      const resp = await fetch(proxyUrl, {
         headers: { 'Accept': 'application/json' },
-        mode: 'cors',
-        cache: 'no-cache',
       });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status + ' (Proxy: ' + proxyUrl.slice(0,80) + ')');
       const data = await resp.json();
 
       if (typeof data.rates?.EUR === 'number') {
@@ -21079,10 +21080,13 @@ function recalculate() {
       }
     }
     _hasExactRates = Object.keys(fxRateMap).length > 0;
+    // Auch ohne EZB-Kurse: dividenden[] ist präziser als NAV-Summe
+    if (rawData?.dividenden?.length > 0 && _exactDivEur > 0) {
+      _hasExactRates = true;  // Werte kommen aus Einzel-Transaktionen, nicht NAV-Aggregat
+    }
   }
 
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
-  console.log('KAP Datenquellen:', {pdfData:!!pdfData, _pdfDiv, divData:!!divData, divTotal:divData?.totalDivEur, rawData:!!rawData});
   const divEur = (_pdfDiv>0)
     ? _pdfDiv*share
     : (_hasExactRates && _exactDivEur>0)
@@ -21097,12 +21101,13 @@ function recalculate() {
       : divData
         ? divData.totalWhtEur*share
         : toEur(d.whtNAV,'USD',year)*share;
+  const _fxExact = Object.keys(fxRateMap).length > 0;
   const divSource = (_pdfDiv>0)
     ? '(exakt PDF)'
-    : (_hasExactRates && _exactDivEur>0)
-      ? '(EZB-Tageskurs)'
-      : divData
-        ? '(exakt)'
+    : divData
+      ? '(exakt)'
+      : (_exactDivEur > 0)
+        ? (_fxExact ? '(EZB-Tageskurs)' : '(Jahresdurchschnitt)')
         : '~';
 
   const zinsEur = (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
@@ -21176,7 +21181,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
 // RENDER OVERVIEW
 // ============================================================
 function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo, divSrc, fxSrc) {
-  const ds = (divSrc && divSrc !== '~') ? '' : '~';
+  const ds = (!divSrc || divSrc === '~') ? '~' : '';
   const fs = (fxSrc  && fxSrc  !== '~') ? '' : '~';
   const os = pdfData?.optGain ? '' : '~';
   setText('ov-div',     fmt(div) + ds);
