@@ -21073,6 +21073,13 @@ function recalculate() {
       }
     }
     _hasExactRates = Object.keys(fxRateMap).length > 0;
+    console.log('KAP Debug:', {
+      fxRateMapSize: Object.keys(fxRateMap).length,
+      hasExact: _hasExactRates,
+      exactDiv: _exactDivEur,
+      divSample: rawData?.dividenden?.slice(0,2),
+      fxSample: Object.entries(fxRateMap).slice(0,3)
+    });
   }
 
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
@@ -21091,6 +21098,7 @@ function recalculate() {
       : divData
         ? divData.totalWhtEur*share
         : toEur(d.whtNAV,'USD',year)*share;
+  console.log('divSource check:', {_pdfDiv, _hasExactRates, _exactDivEur, divDataExists: !!divData});
   const divSource = (_pdfDiv>0)
     ? '(exakt PDF)'
     : (_hasExactRates && _exactDivEur>0)
