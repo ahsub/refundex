@@ -136,26 +136,26 @@
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
     <div class="upload-zone" onclick="document.getElementById('file-main').click()" title="Jahresauszug CSV">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">📊</div>
-      <div class="upload-title" style="font-size:13px">Jahresauszug</div>
-      <div class="upload-hint">U12074449_2024_2024.csv</div>
+      <div class="upload-title" style="font-size:13px">Jahresauszug <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.CSV</span></div>
+      <div class="upload-hint">Jahresauszug CSV · CapTrader</div>
       <div id="status-main" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Nicht geladen</div>
     </div>
     <div class="upload-zone" onclick="document.getElementById('file-div').click()" title="Dividendenbericht HTML">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">💰</div>
-      <div class="upload-title" style="font-size:13px">Dividendenbericht</div>
-      <div class="upload-hint">*_dividends.html · Exakte EUR-Beträge</div>
+      <div class="upload-title" style="font-size:13px">Dividendenbericht <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.HTML</span></div>
+      <div class="upload-hint">*_dividends.html · Format: HTML</div>
       <div id="status-div" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
     </div>
     <div class="upload-zone" onclick="document.getElementById('file-fx').click()" title="FX-Einkünfte CSV">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">💱</div>
-      <div class="upload-title" style="font-size:13px">FX-Einkünfte</div>
-      <div class="upload-hint">*_fx.csv · Anlage SO Devisengewinne</div>
+      <div class="upload-title" style="font-size:13px">FX-Einkünfte <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.CSV</span></div>
+      <div class="upload-hint">*_fx.csv · Format: CSV</div>
       <div id="status-fx" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
     </div>
     <div class="upload-zone" onclick="document.getElementById('file-pdf').click()" title="Informativer Steuerbericht PDF">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">📑</div>
-      <div class="upload-title" style="font-size:13px">Steuerbericht PDF</div>
-      <div class="upload-hint">*_PWC_DE.pdf · Alle Werte exakt</div>
+      <div class="upload-title" style="font-size:13px">Steuerbericht <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.PDF</span></div>
+      <div class="upload-hint">*_PWC_DE.pdf · Format: PDF</div>
       <div id="status-pdf" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt andere</div>
     </div>
   </div>
@@ -21187,7 +21187,7 @@ function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG,
   setText('ov-div',     fmt(div) + ds);
   setText('ov-div-sub', `WHT einbehalten: ${fmt(wht)}${ds}`);
   setText('ov-wht',     fmt(wht) + ds);
-  setText('ov-zins',    fmt(zins) + (pdfData?.zinsenEur>0 ? '' : '~'));
+  setText('ov-zins',    fmt(zins));  // EUR-Betrag, kein FX nötig
   setText('ov-opt',     fmt(optSaldo) + os);
   setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}${os} | Verluste: ${fmt(optL)}${os}`);
   setText('ov-aktien',  fmt(akSaldo) + '~');
@@ -21207,7 +21207,7 @@ function renderToepfe(kap, div, zins, optG, optL, verr, optSaldo, akG, akL, akSa
   const ds = (divSrc && divSrc!=='~') ? '' : '~';
   const os = pdfData?.optGain ? '' : '~';
   setText('t1-div',   fmt(div)  + ds); setColor('t1-div',   'pos');
-  setText('t1-zins',  fmt(zins) + (pdfData?.zinsenEur>0?'':'~')); setColor('t1-zins',  'pos');
+  setText('t1-zins',  fmt(zins)); setColor('t1-zins',  'pos');  // EUR direkt
   setText('t1-saldo', fmt(t1)   + ds); setColor('t1-saldo', t1>=0?'pos':'neg');
   setText('t2-gain',  fmt(akG)  + '~'); setColor('t2-gain',  'pos');
   setText('t2-loss',  fmt(-akL) + '~'); setColor('t2-loss',  'neg');
