@@ -203,6 +203,11 @@
     <span id="account-badge" class="badge badge-joint">Gemeinschaftskonto</span>
   </div>
 
+  <!-- FX STATUS -->
+  <div id="fx-status-bar" style="display:none;padding:0.5rem 1rem;background:var(--green-bg);border:1px solid #1a4a2a;border-radius:8px;margin-bottom:1rem;font-size:12px;color:var(--green)">
+    <span id="fx-status">EZB-Kurse werden geladen…</span>
+  </div>
+
   <!-- ERGEBNIS -->
   <div id="result-section" style="display:none">
 
@@ -20454,14 +20459,106 @@ if (typeof docx !== 'undefined') window.docx = docx;
 // ============================================================
 // FX-SCHÄTZWERTE (EZB-Jahresdurchschnitte)
 // ============================================================
+// FX-Jahresdurchschnitte als Fallback (EZB-Quelle)
 const FX_AVG = {
   USD: {"2022":0.9498,"2023":0.9247,"2024":0.9236,"2025":0.9200},
   GBP: {"2022":1.1703,"2023":1.1513,"2024":1.1826,"2025":1.1700},
+  CHF: {"2022":0.9950,"2023":1.0000,"2024":1.0520,"2025":1.0600},
+  DKK: {"2022":0.1343,"2023":0.1342,"2024":0.1340,"2025":0.1340},
+  SEK: {"2022":0.0943,"2023":0.0876,"2024":0.0882,"2025":0.0880},
+  NOK: {"2022":0.0987,"2023":0.0868,"2024":0.0862,"2025":0.0860},
+  CAD: {"2022":0.7342,"2023":0.6887,"2024":0.6812,"2025":0.6700},
 };
-function toEur(amount, currency, year) {
+
+// EZB-Tageskurs Cache (wird beim Datei-Upload befüllt)
+let fxRateMap = {};  // { "USD:2024-04-15": 0.9291, ... }
+let fxLoadStatus = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
+function toEur(amount, currency, year, date) {
   if (!amount || currency === 'EUR') return amount || 0;
+  // Tageskurs aus Cache (wenn vorhanden)
+  if (date && fxRateMap[currency + ':' + date]) {
+    return Math.round(amount * fxRateMap[currency + ':' + date] * 100) / 100;
+  }
+  // Fallback: Jahresdurchschnitt
   const rate = (FX_AVG[currency]?.[year]) || 0.92;
   return Math.round(amount * rate * 100) / 100;
+}
+
+function fxSource(currency, date) {
+  if (currency === 'EUR') return 'exact';
+  if (date && fxRateMap[currency + ':' + date]) return 'ecb_daily';
+  return 'avg';
+}
+
+// EZB-Tageskurse laden (Frankfurter API)
+async function loadECBRates(dateCurrencyPairs) {
+  if (!dateCurrencyPairs || dateCurrencyPairs.length === 0) return;
+  fxLoadStatus = 'loading';
+  updateFXStatus('⏳ EZB-Tageskurse werden geladen…');
+
+  const byCurrency = {};
+  for (const pair of dateCurrencyPairs) {
+    if (pair.currency === 'EUR') continue;
+    if (!byCurrency[pair.currency]) byCurrency[pair.currency] = [];
+    byCurrency[pair.currency].push(pair.date);
+  }
+
+  let loaded = 0;
+  const total = Object.keys(byCurrency).length;
+
+  for (const currency of Object.keys(byCurrency)) {
+    const sorted = [...new Set(byCurrency[currency])].sort();
+    const minDate = sorted[0];
+    const maxDate = sorted[sorted.length - 1];
+
+    try {
+      const url = minDate === maxDate
+        ? 'https://api.frankfurter.app/' + minDate + '?from=' + currency + '&to=EUR'
+        : 'https://api.frankfurter.app/' + minDate + '..' + maxDate + '?from=' + currency + '&to=EUR';
+
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+
+      if (typeof data.rates?.EUR === 'number') {
+        fxRateMap[currency + ':' + data.date] = data.rates.EUR;
+      } else if (data.rates) {
+        for (const date of Object.keys(data.rates)) {
+          if (data.rates[date].EUR) fxRateMap[currency + ':' + date] = data.rates[date].EUR;
+        }
+      }
+
+      // Wochenend-Mapping
+      for (const date of sorted) {
+        const key = currency + ':' + date;
+        if (!fxRateMap[key]) {
+          const prevKey = Object.keys(fxRateMap)
+            .filter(k => k.startsWith(currency + ':') && k <= key)
+            .sort().pop();
+          if (prevKey) fxRateMap[key] = fxRateMap[prevKey];
+        }
+      }
+
+      loaded++;
+      const n = Object.keys(fxRateMap).filter(k => k.startsWith(currency + ':')).length;
+      updateFXStatus('✅ ' + loaded + '/' + total + ' Währungen (' + currency + ': ' + n + ' Kurse)');
+
+    } catch(err) {
+      console.warn('EZB-API Fehler ' + currency + ':', err.message);
+      loaded++;
+      updateFXStatus('⚠️ ' + currency + ': Jahresdurchschnitt wird verwendet');
+    }
+  }
+
+  fxLoadStatus = 'loaded';
+  const count = Object.keys(fxRateMap).length;
+  updateFXStatus('✅ ' + count + ' EZB-Tageskurse geladen — alle ~ entfernt');
+  recalculate();
+}
+
+function updateFXStatus(text) {
+  const el = document.getElementById('fx-status');
+  if (el) el.textContent = text;
 }
 function fmt(n, decimals=2) {
   const abs = Math.abs(n);
@@ -20944,11 +21041,48 @@ function recalculate() {
   const d = rawData;
 
   // Priorität: pdfData > divData > Jahresauszug (Schätzung)
+  // Exakte EUR-Dividenden aus rawData.dividenden (mit EZB-Tageskursen)
+  let _exactDivEur = 0;
+  let _exactWhtEur = 0;
+  let _hasExactRates = false;
+  if (rawData?.dividenden?.length > 0) {
+    for (const div of rawData.dividenden) {
+      const eur = toEur(div.amt, div.cur, year, div.date);
+      _exactDivEur += eur;
+    }
+    // WHT ebenfalls exact
+    if (rawData.quellensteuer?.length > 0) {
+      for (const wht of rawData.quellensteuer) {
+        const eur = toEur(wht.amt, wht.cur || 'USD', year, wht.date);
+        _exactWhtEur += eur;
+      }
+    }
+    _hasExactRates = Object.keys(fxRateMap).length > 0;
+  }
+
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
   console.log('KAP Datenquellen:', {pdfData:!!pdfData, _pdfDiv, divData:!!divData, divTotal:divData?.totalDivEur, rawData:!!rawData});
-  const divEur = (_pdfDiv>0) ? _pdfDiv*share : divData ? divData.totalDivEur*share : toEur(d.divNAV,'USD',year)*share;
-  const whtEur = (_pdfDiv>0) ? (pdfData.creditableWht||0)*share : divData ? divData.totalWhtEur*share : toEur(d.whtNAV,'USD',year)*share;
-  const divSource = (_pdfDiv>0)?'(exakt PDF)':divData?'(exakt)':'~';
+  const divEur = (_pdfDiv>0)
+    ? _pdfDiv*share
+    : (_hasExactRates && _exactDivEur>0)
+      ? _exactDivEur*share
+      : divData
+        ? divData.totalDivEur*share
+        : toEur(d.divNAV,'USD',year)*share;
+  const whtEur = (_pdfDiv>0)
+    ? (pdfData.creditableWht||0)*share
+    : (_hasExactRates && _exactWhtEur>0)
+      ? _exactWhtEur*share
+      : divData
+        ? divData.totalWhtEur*share
+        : toEur(d.whtNAV,'USD',year)*share;
+  const divSource = (_pdfDiv>0)
+    ? '(exakt PDF)'
+    : (_hasExactRates && _exactDivEur>0)
+      ? '(EZB-Tageskurs)'
+      : divData
+        ? '(exakt)'
+        : '~';
 
   const zinsEur = (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
   const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)*share : toEur(d.optionen.gain,'USD',year)*share;
