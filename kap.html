@@ -20581,14 +20581,29 @@ let pdfData = null;   // Informativer Steuerbericht PDF (höchste Priorität)
 function loadCSV(event, src='main') {
   const file = event.target.files[0];
   if (!file) return;
-  document.getElementById('upload-status').textContent = `Lade ${file.name}…`;
+  document.getElementById('status-main').textContent = 'Lade ' + file.name + '…';
   const reader = new FileReader();
   reader.onload = e => {
     rawData = parseJahresCSV(e.target.result, file.name);
-    document.getElementById('status-main').textContent = `✅ ${file.name}`;
+    document.getElementById('status-main').textContent = '✅ ' + file.name;
     document.getElementById('status-main').style.color = 'var(--green)';
     document.getElementById('execute-bar').style.display = 'none';
-    recalculate();
+    // EZB-Tageskurse laden
+    const fxPairs = [];
+    if (rawData && rawData.dividenden) {
+      for (const d of rawData.dividenden) {
+        if (d.cur && d.cur !== 'EUR' && d.date) {
+          fxPairs.push({ currency: d.cur, date: d.date });
+        }
+      }
+    }
+    if (fxPairs.length > 0) {
+      const bar = document.getElementById('fx-status-bar');
+      if (bar) bar.style.display = 'block';
+      loadECBRates(fxPairs);
+    } else {
+      recalculate();
+    }
   };
   reader.readAsText(file, 'utf-8');
 }
