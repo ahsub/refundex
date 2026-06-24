@@ -20720,7 +20720,7 @@ const doc = new Document({
         \`Dieses Dokument erläutert die Kapitalerträge aus dem CapTrader/IBKR-Depot \${kontoNr} \` +
         \`für das Steuerjahr \${year} und dient als Begleitdokument zur Anlage KAP der Einkommensteuererklärung. \` +
         \`Alle aufgeführten Beträge basieren auf den offiziellen CapTrader-Jahresauszügen \` +
-        \`\${(divSource && divSource!=='~' && divSource!=='(Jahresdurchschnitt)') ? 'und dem Dividendenbericht mit tagesgenauen EUR-Kursen' : 'mit EZB-Jahresdurchschnittskursen (Näherungswerte)'}. \` +
+        \`\${(divSource && divSource!=='~' && divSource!=='(Jahresdurchschnitt)') ? 'und dem Dividendenbericht mit tagesgenauen EUR-Kursen' : 'mit EZB-Referenzkursen (Näherungswerte)'}. \` +
         \`Die maßgeblichen Beträge sind der offiziellen CapTrader-Jahressteuerbescheinigung zu entnehmen.\`
       ),
 
@@ -20744,27 +20744,27 @@ const doc = new Document({
         { section: 'A — Angaben zu Kapitalerträgen' },
         {
           z: '7', text: \`Kapitalerträge i.S.d. § 20 Abs. 1 Nr. 1–3 EStG (Dividenden)\${shareLabel}\`,
-          val: fmt(divEur) + ((!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''),
+          val: fmt(divEur) + ((!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? '' : ''),
           color: divEur > 0 ? '1a5e1a' : '000000',
         },
         {
           z: '8', text: \`Gewinne aus der Veräußerung von Aktien\${shareLabel}\`,
-          val: akGain > 0 ? fmt(akGain) + ' ~' : '0,00 €',
+          val: akGain > 0 ? fmt(akGain) + '' : '0,00 €',
           color: akGain > 0 ? '1a5e1a' : '7F7F7F',
         },
         {
           z: '9', text: \`Verluste aus der Veräußerung von Aktien (ohne Verrechnung)\${shareLabel}\`,
-          val: akLoss < 0 ? '– ' + fmt(Math.abs(akLoss)) + ' ~' : '0,00 €',
+          val: akLoss < 0 ? '– ' + fmt(Math.abs(akLoss)) + '' : '0,00 €',
           color: akLoss < 0 ? 'CC0000' : '7F7F7F',
         },
         {
           z: '12', text: \`Gewinne aus Termingeschäften i.S.d. § 20 Abs. 2 Nr. 3 EStG (Optionsprämien)\${shareLabel}\`,
-          val: optGain > 0 ? fmt(optGain) + ' ~' : '0,00 €',
+          val: optGain > 0 ? fmt(optGain) + '' : '0,00 €',
           color: optGain > 0 ? '1a5e1a' : '7F7F7F',
         },
         {
           z: '13', text: \`Verluste aus Termingeschäften § 20 Abs. 6 Satz 5 EStG\${shareLabel}\`,
-          val: optLoss < 0 ? '– ' + fmt(Math.abs(optLoss)) + ' ~' : '0,00 €',
+          val: optLoss < 0 ? '– ' + fmt(Math.abs(optLoss)) + '' : '0,00 €',
           color: optLoss < 0 ? 'CC0000' : '7F7F7F',
         },
         {
@@ -20780,13 +20780,13 @@ const doc = new Document({
         { section: 'C — Anrechenbare Steuerabzugsbeträge' },
         {
           z: '41', text: \`Anrechenbare Kapitalertragsteuer (ausländische Quellensteuer)\${shareLabel}\`,
-          val: fmt(whtEur) + ((!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''),
+          val: fmt(whtEur) + ((!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? '' : ''),
           color: whtEur > 0 ? '1a5e1a' : '7F7F7F', bold: true,
         },
       ]),
 
       para(''),
-      para('~ = Wert basiert auf EZB-Jahresdurchschnittskurs (Schätzung). Exakte EUR-Beträge aus der CapTrader-Jahressteuerbescheinigung verwenden.', { italic: true, color: '7F7F7F', size: 18 }),
+      para('~ = Wert basiert auf EZB-Jahresdurchschnittskurs (Näherungswert). Exakte EUR-Beträge aus der CapTrader-Jahressteuerbescheinigung verwenden.', { italic: true, color: '7F7F7F', size: 18 }),
 
       divider(),
 
@@ -20857,26 +20857,26 @@ const doc = new Document({
       heading1('4. Checkliste — Eingabe in WISO Steuer / ELSTER'),
 
       bullet(\`Anlage KAP aufrufen\${isJoint ? \` (für \${ehegatten[0]} und separat für \${ehegatten[1] || ehegatten[0]})\` : ''}\`),
-      bullet(\`Zeile 7: Dividenden \${fmt(divEur)}\${(!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''} eintragen\`),
+      bullet(\`Zeile 7: Dividenden \${fmt(divEur)}\${(!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? '' : ''} eintragen\`),
       ...(akGain > 0 || akLoss < 0 ? [
-        bullet(\`Zeile 8: Aktiengewinne \${fmt(akGain)} ~ eintragen\`),
-        bullet(\`Zeile 9: Aktienverluste \${fmt(Math.abs(akLoss))} ~ eintragen\`),
+        bullet(\`Zeile 8: Aktiengewinne \${fmt(akGain)} eintragen\`),
+        bullet(\`Zeile 9: Aktienverluste \${fmt(Math.abs(akLoss))} eintragen\`),
       ] : []),
       ...(optGain > 0 || optLoss < 0 ? [
-        bullet(\`Zeile 12: Optionsgewinne \${fmt(optGain)} ~ eintragen\`),
-        bullet(\`Zeile 13: Optionsverluste \${fmt(Math.abs(optLoss))} ~ eintragen (Termingeschäfte — separater Topf!)\`),
+        bullet(\`Zeile 12: Optionsgewinne \${fmt(optGain)} eintragen\`),
+        bullet(\`Zeile 13: Optionsverluste \${fmt(Math.abs(optLoss))} eintragen (Termingeschäfte — separater Topf!)\`),
       ] : []),
       bullet(\`Zeile 14: Zinsen \${fmt(zinsEur)} eintragen\`),
       bullet(\`Zeile 17: Freistellungsauftrag \${fmt(isJoint ? fsa/2 : fsa)} eintragen\`),
-      bullet(\`Zeile 41: Anrechenbare Quellensteuer \${fmt(whtEur)}\${(!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''} eintragen\`),
+      bullet(\`Zeile 41: Anrechenbare Quellensteuer \${fmt(whtEur)}\${(!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? '' : ''} eintragen\`),
       ...(Math.abs(fxSaldo) > 600 ? [
-        bullet(\`Anlage SO: Devisengewinne/-verluste \${fmtSigned(fxSaldo)} ~ eintragen (über Freigrenze!)\`),
+        bullet(\`Anlage SO: Devisengewinne/-verluste \${fmtSigned(fxSaldo)} eintragen (über Freigrenze!)\`),
       ] : [
-        bullet(\`Anlage SO: Devisensaldo \${fmtSigned(fxSaldo)} ~ unter Freigrenze (600 €) — keine Eintragung erforderlich\`),
+        bullet(\`Anlage SO: Devisensaldo \${fmtSigned(fxSaldo)} unter Freigrenze (600 €) — keine Eintragung erforderlich\`),
       ]),
       bullet(\`Alle Beträge gegen offizielle CapTrader-Jahressteuerbescheinigung abgleichen\`),
       ...(optVortrag > 0 ? [
-        bullet(\`Verlustfeststellungserklärung: Termingeschäfte-Verlustvortrag \${fmt(optVortrag)} ~ für \${parseInt(year)+1} beantragen\`),
+        bullet(\`Verlustfeststellungserklärung: Termingeschäfte-Verlustvortrag \${fmt(optVortrag)} für \${parseInt(year)+1} beantragen\`),
       ] : []),
 
       divider(),
@@ -21827,7 +21827,7 @@ function downloadDOCX() {
   const divSrc  = (_pdfDiv>0)?'(EZB-Tageskurs PDF)':divData?'(exakt)':Object.keys(fxRateMap).length>0?'(EZB-Tageskurs)':'(Jahresdurchschnitt)';
 
   const payload = {
-    kontoName: pdfData?.kontoName || d.kontoName || '',
+    kontoName: (d.kontoName && d.kontoName.includes(' AND ')) ? d.kontoName : (pdfData?.kontoName || d.kontoName || ''),
     kontoNr:   pdfData?.kontoNr   || d.kontoNr   || '',
     year, isJoint, fsa,
     divEur:round2(divEur), whtEur:round2(whtEur), zinsEur:round2(zinsEur),
