@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v103</title>
+<title>Refundex — KAP-Assistent v104</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -304,8 +304,8 @@
         <div style="display:flex;gap:8px">
           <span id="spouse-label" class="badge badge-joint"></span>
           <button class="btn" onclick="window.print()">🖨️ Drucken</button>
-          <button class="btn btn-primary" onclick="printKAP()" id="docx-btn" style="display:none">🖨️ Drucken / PDF</button>
-          <button class="btn" onclick="downloadDOCX()" id="docx-dl-btn" style="display:none">📄 DOCX</button>
+          
+          <button class="btn btn-primary" onclick="downloadDOCX()" id="docx-dl-btn" style="display:none">📄 DOCX herunterladen</button>
         </div>
       </div>
 
@@ -21619,10 +21619,11 @@ function recalculate() {
   // UI rendern
   renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo, divSource, fxSource);
   renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo, divSource, fxSource);
-  // Kontoname: CSV hat beide Inhaber ("AXEL ... AND CHRISTA ...") → bevorzugen
-  const kontoName = (d.kontoName?.includes(' AND '))
-    ? d.kontoName
-    : (pdfData?.kontoName || d.kontoName || '');
+  // Kontoname: CSV-Version hat beide Inhaber → immer bevorzugen
+  const kontoName = window._csvKontoName
+    || (d.kontoName?.includes(' AND ') ? d.kontoName : null)
+    || pdfData?.kontoName
+    || d.kontoName || '';
   const kontoNr = pdfData?.kontoNr || d.kontoNr || '';
   renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~', fsa);
   renderChecklist(kapWerte, isJoint, d.kontoName);
@@ -21798,15 +21799,14 @@ function setColor(id, cls) {
 
 
 function downloadDOCX() {
-  const btn = document.getElementById('docx-btn');
+  const btn = document.getElementById('docx-dl-btn') || document.getElementById('docx-btn');
   btn.textContent = '⏳ DOCX wird erstellt…';
   btn.disabled = true;
 
-  // Daten sammeln
   const year    = document.getElementById('tax-year').value || rawData?.year || '2025';
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
-  const fsa = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
+  const fsa     = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
   const d       = rawData || {};
 
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
@@ -21822,10 +21822,13 @@ function downloadDOCX() {
   const optVortrag = Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain+20000));
   const divSrc  = (_pdfDiv>0)?'(EZB-Tageskurs PDF)':divData?'(exakt)':Object.keys(fxRateMap).length>0?'(EZB-Tageskurs)':'(Jahresdurchschnitt)';
 
-  const payload = {
-    kontoName: (d.kontoName && d.kontoName.includes(' AND ')) ? d.kontoName : (pdfData?.kontoName || d.kontoName || ''),
-    kontoNr:   pdfData?.kontoNr   || d.kontoNr   || '',
-    year, isJoint, fsa,
+  const kontoName = window._csvKontoName || d.kontoName || '';
+  const kontoNr   = pdfData?.kontoNr || d.kontoNr || '';
+  const ehegatten = kontoName.split(/ AND /i).map(n => n.trim());
+
+  // Basis-Payload (Werte sind bereits 50%-Anteile)
+  const basePayload = {
+    kontoNr, year, isJoint, fsa,
     divEur:round2(divEur), whtEur:round2(whtEur), zinsEur:round2(zinsEur),
     optGain:round2(Math.max(0,optGain)), optLoss:round2(Math.min(0,optLoss)),
     optSaldo, optVortrag:round2(optVortrag),
@@ -21834,25 +21837,49 @@ function downloadDOCX() {
     divSource: divSrc, fxSource: fxData?'(exakt)':'~',
   };
 
-  // DOCX direkt als XML-ZIP im Browser erstellen
-  buildDOCXinBrowser(payload)
-    .then(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'KAP_' + year + '_' + (payload.kontoNr||'Refundex') + '.docx';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      btn.textContent = '📄 DOCX';
+  // Bei Gemeinschaftskonto: 2 Dokumente (eines pro Ehegatte)
+  // Bei Einzelkonto: 1 Dokument
+  const tasks = isJoint && ehegatten.length >= 2
+    ? [
+        { ...basePayload, kontoName: kontoName, inhaberName: ehegatten[0], inhaberNr: 1 },
+        { ...basePayload, kontoName: kontoName, inhaberName: ehegatten[1], inhaberNr: 2 },
+      ]
+    : [{ ...basePayload, kontoName, inhaberName: ehegatten[0] || kontoName, inhaberNr: 0 }];
+
+  // Dokumente sequenziell erstellen und downloaden
+  const downloadNext = (index) => {
+    if (index >= tasks.length) {
+      btn.textContent = '📄 DOCX herunterladen';
       btn.disabled = false;
-    })
-    .catch(err => {
-      alert('DOCX Fehler: ' + err.message);
-      btn.textContent = '📄 DOCX';
-      btn.disabled = false;
-    });
+      return;
+    }
+    const payload = tasks[index];
+    btn.textContent = tasks.length > 1
+      ? '⏳ ' + (index+1) + '/' + tasks.length + ': ' + payload.inhaberName + '…'
+      : '⏳ DOCX wird erstellt…';
+
+    buildDOCXinBrowser(payload)
+      .then(blob => {
+        const suffix = tasks.length > 1 ? '_Inhaber' + payload.inhaberNr : '';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'KAP_' + year + '_' + kontoNr + suffix + '.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        // Kurze Pause zwischen Downloads
+        setTimeout(() => downloadNext(index + 1), 800);
+      })
+      .catch(err => {
+        alert('DOCX Fehler (' + payload.inhaberName + '): ' + err.message);
+        btn.textContent = '📄 DOCX herunterladen';
+        btn.disabled = false;
+      });
+  };
+
+  downloadNext(0);
 }
 
 
@@ -22022,7 +22049,7 @@ async function buildDOCXinBrowser(data) {
 
         h('4. Checkliste WISO Steuer / ELSTER', HeadingLevel.HEADING_1),
         ...[
-          'Anlage KAP öffnen' + (isJoint?' (je einmal für '+ehegatten.join(' und ')+')':''),
+          'Anlage KAP öffnen für: ' + (data.inhaberName || ehegatten[0] || kontoName),
           'Z. 7: ' + fmtD(divEur) + ' ' + divSource + ' eintragen',
           'Z. 12: ' + fmtD(optGain) + ' / Z. 13: ' + fmtD(Math.abs(optLoss||0)) + ' eintragen (Termingeschäfte!)',
           'Z. 14: ' + fmtD(zinsEur) + ' Zinsen eintragen',
