@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v102</title>
+<title>Refundex — KAP-Assistent v103</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21619,8 +21619,11 @@ function recalculate() {
   // UI rendern
   renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo, divSource, fxSource);
   renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo, divSource, fxSource);
-  const kontoName = pdfData?.kontoName || d.kontoName || '';
-  const kontoNr   = pdfData?.kontoNr   || d.kontoNr   || '';
+  // Kontoname: CSV hat beide Inhaber ("AXEL ... AND CHRISTA ...") → bevorzugen
+  const kontoName = (d.kontoName?.includes(' AND '))
+    ? d.kontoName
+    : (pdfData?.kontoName || d.kontoName || '');
+  const kontoNr = pdfData?.kontoNr || d.kontoNr || '';
   renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~', fsa);
   renderChecklist(kapWerte, isJoint, d.kontoName);
 
@@ -21728,7 +21731,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
     <div class="kap-form-header">
       <div>
         <div class="kap-form-title">Anlage KAP — Steuerjahr ${year}</div>
-        <div class="kap-form-sub">${kontoName} · Depot ${kontoNr} · ${isJoint?'Gemeinschaftskonto — je 50% pro Ehegatte':' Einzelkonto'}</div>
+        <div class="kap-form-sub">${kontoName} · Depot ${kontoNr} · ${isJoint?'Gemeinschaftskonto ('+kontoName+') — je 50% pro Ehegatte':' Einzelkonto'}</div>
       </div>
       <div style="font-size:11px;color:var(--muted);text-align:right" id="data-source-note">
         Datenquellen: EZB-Tageskurse · Vor Eintrag Steuerbescheinigung prüfen
@@ -22010,7 +22013,7 @@ async function buildDOCXinBrowser(data) {
         p(''),
 
         h('3. Devisengewinne (Anlage SO)', HeadingLevel.HEADING_1),
-        p('FX-Saldo ' + year + shareLabel + ': ' + fmtS(fxSaldo||0) + ' (' + fxSource + ')',
+        p('FX-Saldo ' + year + shareLabel + ': ' + fmtS(fxSaldo||0) + ' ' + fxSource,
           { bold:true, color: Math.abs(fxSaldo||0)>600 ? 'CC0000' : '1a5e1a' }),
         p(Math.abs(fxSaldo||0)>600
           ? '→ Steuerpflichtig (über Freigrenze €600) — in Anlage SO Zeile 43 eintragen'
@@ -22024,7 +22027,7 @@ async function buildDOCXinBrowser(data) {
           'Z. 12: ' + fmtD(optGain) + ' / Z. 13: ' + fmtD(Math.abs(optLoss||0)) + ' eintragen (Termingeschäfte!)',
           'Z. 14: ' + fmtD(zinsEur) + ' Zinsen eintragen',
           'Z. 17: ' + fmtD(isJoint?fsa/2:fsa) + ' Freistellungsauftrag CapTrader',
-          'Z. 41: ' + fmtD(whtEur) + ' anrechenbare Quellensteuer (' + divSource + ')',
+          'Z. 41: ' + fmtD(whtEur) + ' anrechenbare Quellensteuer ' + divSource,
           Math.abs(fxSaldo||0)>600 ? 'Anlage SO: ' + fmtS(fxSaldo||0) + ' Devisensaldo eintragen' : 'Anlage SO: Devisensaldo unter Freigrenze — keine Eintragung',
           'Alle Werte gegen CapTrader-Jahressteuerbescheinigung abgleichen',
         ].map(t => new Paragraph({ spacing:{before:40,after:40},
