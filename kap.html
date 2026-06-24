@@ -20720,7 +20720,7 @@ const doc = new Document({
         \`Dieses Dokument erläutert die Kapitalerträge aus dem CapTrader/IBKR-Depot \${kontoNr} \` +
         \`für das Steuerjahr \${year} und dient als Begleitdokument zur Anlage KAP der Einkommensteuererklärung. \` +
         \`Alle aufgeführten Beträge basieren auf den offiziellen CapTrader-Jahresauszügen \` +
-        \`\${divSource === '(exakt)' ? 'und dem Dividendenbericht mit tagesgenauen EUR-Kursen' : 'mit EZB-Jahresdurchschnittskursen (Näherungswerte)'}. \` +
+        \`\${(divSource && divSource!=='~' && divSource!=='(Jahresdurchschnitt)') ? 'und dem Dividendenbericht mit tagesgenauen EUR-Kursen' : 'mit EZB-Jahresdurchschnittskursen (Näherungswerte)'}. \` +
         \`Die maßgeblichen Beträge sind der offiziellen CapTrader-Jahressteuerbescheinigung zu entnehmen.\`
       ),
 
@@ -20744,7 +20744,7 @@ const doc = new Document({
         { section: 'A — Angaben zu Kapitalerträgen' },
         {
           z: '7', text: \`Kapitalerträge i.S.d. § 20 Abs. 1 Nr. 1–3 EStG (Dividenden)\${shareLabel}\`,
-          val: fmt(divEur) + (divSource !== '(exakt)' ? ' ~' : ''),
+          val: fmt(divEur) + ((!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''),
           color: divEur > 0 ? '1a5e1a' : '000000',
         },
         {
@@ -20780,7 +20780,7 @@ const doc = new Document({
         { section: 'C — Anrechenbare Steuerabzugsbeträge' },
         {
           z: '41', text: \`Anrechenbare Kapitalertragsteuer (ausländische Quellensteuer)\${shareLabel}\`,
-          val: fmt(whtEur) + (divSource !== '(exakt)' ? ' ~' : ''),
+          val: fmt(whtEur) + ((!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''),
           color: whtEur > 0 ? '1a5e1a' : '7F7F7F', bold: true,
         },
       ]),
@@ -20856,8 +20856,8 @@ const doc = new Document({
       // ── ABSCHNITT 4: CHECKLISTE ───────────────────────────
       heading1('4. Checkliste — Eingabe in WISO Steuer / ELSTER'),
 
-      bullet(\`Anlage KAP aufrufen\${isJoint ? \` (für \${ehegatten[0]} und separat für \${ehegatten[1] || 'Ehegatte 2'})\` : ''}\`),
-      bullet(\`Zeile 7: Dividenden \${fmt(divEur)}\${divSource !== '(exakt)' ? ' ~' : ''} eintragen\`),
+      bullet(\`Anlage KAP aufrufen\${isJoint ? \` (für \${ehegatten[0]} und separat für \${ehegatten[1] || ehegatten[0]})\` : ''}\`),
+      bullet(\`Zeile 7: Dividenden \${fmt(divEur)}\${(!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''} eintragen\`),
       ...(akGain > 0 || akLoss < 0 ? [
         bullet(\`Zeile 8: Aktiengewinne \${fmt(akGain)} ~ eintragen\`),
         bullet(\`Zeile 9: Aktienverluste \${fmt(Math.abs(akLoss))} ~ eintragen\`),
@@ -20868,7 +20868,7 @@ const doc = new Document({
       ] : []),
       bullet(\`Zeile 14: Zinsen \${fmt(zinsEur)} eintragen\`),
       bullet(\`Zeile 17: Freistellungsauftrag \${fmt(isJoint ? fsa/2 : fsa)} eintragen\`),
-      bullet(\`Zeile 41: Anrechenbare Quellensteuer \${fmt(whtEur)}\${divSource !== '(exakt)' ? ' ~' : ''} eintragen\`),
+      bullet(\`Zeile 41: Anrechenbare Quellensteuer \${fmt(whtEur)}\${(!divSource || divSource==='~'||divSource==='(Jahresdurchschnitt)') ? ' ~' : ''} eintragen\`),
       ...(Math.abs(fxSaldo) > 600 ? [
         bullet(\`Anlage SO: Devisengewinne/-verluste \${fmtSigned(fxSaldo)} ~ eintragen (über Freigrenze!)\`),
       ] : [
@@ -22053,7 +22053,7 @@ async function buildDOCXinBrowser(data) {
         h('4. Checkliste WISO Steuer / ELSTER', HeadingLevel.HEADING_1),
         ...[
           'Anlage KAP öffnen' + (isJoint?' (je einmal für '+ehegatten.join(' und ')+')':''),
-          'Z. 7: ' + fmtD(divEur) + ' (' + divSource + ') eintragen',
+          'Z. 7: ' + fmtD(divEur) + ' ' + divSource + ' eintragen',
           'Z. 12: ' + fmtD(optGain) + ' / Z. 13: ' + fmtD(Math.abs(optLoss||0)) + ' eintragen (Termingeschäfte!)',
           'Z. 14: ' + fmtD(zinsEur) + ' Zinsen eintragen',
           'Z. 17: ' + fmtD(isJoint?fsa/2:fsa) + ' Freistellungsauftrag CapTrader',
