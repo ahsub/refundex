@@ -20452,7 +20452,14 @@ var __async = (__this, __arguments, generator) => {
   Object.defineProperty(exports2, Symbol.toStringTag, { value: "Module" });
 });
 // UMD global verfügbar machen
-if (typeof docx !== 'undefined') window.docx = docx;
+// UMD setzt window.docx automatisch — explizit sicherstellen
+window.docx = window.docx || {};
+// Fallback: docx-Klassen direkt aus globalem Scope holen
+if (!window.docx.Packer && typeof Packer !== 'undefined') {
+  window.docx = { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+    AlignmentType, HeadingLevel, BorderStyle, WidthType, ShadingType, LevelFormat, Header, Footer };
+}
+console.log('docx.Packer verfügbar:', typeof window.docx?.Packer);
 </script>
 <script>
 
@@ -20568,6 +20575,7 @@ function updateFXStatus(text) {
   if (el) el.textContent = text;
 }
 function fmt(n, decimals=2) {
+  if (n == null || isNaN(n)) return '€0,00';
   const abs = Math.abs(n);
   const str = abs.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return (n < 0 ? '-' : '') + '€' + str;
@@ -21247,7 +21255,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
     { z:'13', text:`Verluste aus Termingeschäften §20 Abs.6${jointNote}`,                              val:-kap.z13_optLoss,  cls: kap.z13_optLoss > 0 ? 'neg' : 'neutral' },
     { z:'14', text:`Zinsen und sonstige Kapitalerträge${jointNote}`,                                   val:kap.z14_zinsen,    cls: kap.z14_zinsen > 0 ? 'pos' : 'neutral' },
     { type:'header', text:'B — Freistellungsauftrag' },
-    { z:'17', text:`Freistellungsauftrag CapTrader${isJoint?' ('+fmt(fsa)+' gesamt, '+fmt(fsa/2)+' je Ehegatte)':''}${jointNote}`, val:kap.z17_fsa, cls:'neutral' },
+    { z:'17', text:'Freistellungsauftrag CapTrader' + (isJoint ? ' ('+fmt(fsa)+' gesamt, '+fmt(fsa/2)+' je Ehegatte)' : '') + jointNote, val:kap.z17_fsa, cls:'neutral' },
     { type:'header', text:'C — Anrechenbare Steuerabzugsbeträge' },
     { z:'41', text:`Anrechenbare Kapitalertragsteuer (Quellensteuer aus Ausland)${jointNote}`,  val:kap.z41_wht, cls: kap.z41_wht > 0 ? 'pos' : 'neutral', approx: divSrc==='~' },
   ];
@@ -21288,8 +21296,8 @@ function renderChecklist(kap, isJoint, kontoName) {
     { ok: false, text: 'Offizielle CapTrader-Steuerbescheinigung herunterladen (Performance & Berichte → Steuerbescheinigung)' },
     { ok: false, text: 'USD-Beträge (~) gegen Steuerbescheinigung abgleichen — dort stehen die offiziellen EUR-Beträge' },
     { ok: false, text: 'Freistellungsauftrag prüfen: Wie viel bei CapTrader, wie viel bei anderen Banken?' },
-    { ok: kap.z41_wht > 0, text: `Anlage KAP: Quellensteuer-Anrechnung ${fmt(kap.z41_wht)}~ in Zeile 41 eintragen` },
-    { ok: kap.z13_optLoss > 0, text: `§20 Abs.6: Optionsverluste ${fmt(kap.z13_optLoss)}~ separat in Zeile 13 — nicht mit Aktienverlusten vermischen`, warn: kap.z13_optLoss > 0 },
+    { ok: kap.z41_wht > 0, text: 'Anlage KAP: Quellensteuer-Anrechnung ' + fmt(kap.z41_wht) + ' in Zeile 41 eintragen' },
+    { ok: kap.z13_optLoss > 0, text: '§20 Abs.6: Optionsverluste ' + fmt(kap.z13_optLoss) + ' separat in Zeile 13 — nicht mit Aktienverlusten vermischen', warn: kap.z13_optLoss > 0 },
     { ok: false, text: isJoint ? `Gemeinschaftskonto: Anlage KAP für jeden Ehegatten separat ausfüllen (je 50%): ${kontoName.split(/ AND /i).join(' + ')}` : '' },
     { ok: false, text: 'WISO Steuer / ELSTER: Werte manuell in die entsprechenden Zeilen übertragen' },
   ].filter(i => i.text);
