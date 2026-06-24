@@ -21618,7 +21618,7 @@ function recalculate() {
   renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo, divSource, fxSource);
   const kontoName = pdfData?.kontoName || d.kontoName || '';
   const kontoNr   = pdfData?.kontoNr   || d.kontoNr   || '';
-  renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~');
+  renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~', fsa);
   renderChecklist(kapWerte, isJoint, d.kontoName);
 
   // §20 Hinweis
@@ -21689,7 +21689,7 @@ function renderToepfe(kap, div, zins, optG, optL, verr, optSaldo, akG, akL, akSa
 // ============================================================
 // RENDER KAP FORMULAR
 // ============================================================
-function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, fxSrc) {
+function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, fxSrc, fsa) {
   const jointNote = isJoint ? ' (50%-Anteil)' : '';
 
   // Datenquellen-Badge aktualisieren
@@ -21838,58 +21838,25 @@ function downloadDOCX() {
     divSource: divSrc, fxSource: fxData?'(exakt)':'~',
   };
 
-  // Claude API: DOCX via Node.js Generator erzeugen
-  const prompt = 'Führe folgenden Node.js Code aus und gib NUR den base64-codierten DOCX-Inhalt zurück, kein anderer Text:\n\n```javascript\n' +
-    window._docxGeneratorCode + '\n```\n\nDaten: ' + JSON.stringify(payload);
-
-  // Timeout nach 60 Sekunden
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
-
-  fetch('https://api.anthropic.com/v1/messages', {
-    signal: controller.signal,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': window._kapApiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      system: 'Du bist ein DOCX-Generator. Führe Node.js Code aus und gib NUR den base64-String zurück. Absolut kein anderer Text.',
-      messages: [{ role: 'user', content: prompt }]
+  // DOCX direkt als XML-ZIP im Browser erstellen
+  buildDOCXxml(payload)
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'KAP_' + year + '_' + (payload.kontoNr||'Refundex') + '.docx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      btn.textContent = '📄 DOCX';
+      btn.disabled = false;
     })
-  })
-  .then(r => { clearTimeout(timeout); return r.json(); })
-  .then(data => {
-    const b64 = (data.content?.find(c => c.type==='text')?.text || '').trim()
-      .replace(/```[^`]*```/g,'').trim();
-    if (!b64 || b64.length < 100) throw new Error('Ungültige API-Antwort: ' + b64.slice(0,100));
-    // base64 → Blob
-    const bin = atob(b64);
-    const arr = new Uint8Array(bin.length);
-    for (let i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
-    const blob = new Blob([arr], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'KAP_' + year + '_' + (payload.kontoNr||'Refundex') + '.docx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    btn.textContent = '📄 DOCX';
-    btn.disabled = false;
-  })
-  .catch(err => {
-    clearTimeout(timeout);
-    const msg = err.name === 'AbortError' ? 'Timeout — API antwortet nicht (>60s). Bitte erneut versuchen.' : err.message;
-    alert('DOCX Fehler: ' + msg);
-    btn.textContent = '📄 DOCX';
-    btn.disabled = false;
-  });
+    .catch(err => {
+      alert('DOCX Fehler: ' + err.message);
+      btn.textContent = '📄 DOCX';
+      btn.disabled = false;
+    });
 }
 
 
