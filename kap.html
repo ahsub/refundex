@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent</title>
+<title>Refundex — KAP-Assistent v101</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21519,7 +21519,7 @@ function recalculate() {
   const year    = document.getElementById('tax-year').value || rawData.year;
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
-  const fsa     = parseFloat(document.getElementById('fsa').value) || 1000;
+  const fsa = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
   const spouse  = document.getElementById('spouse-select').value;
 
   // Badge aktualisieren
@@ -21728,7 +21728,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
         <div class="kap-form-sub">${kontoName} · Depot ${kontoNr} · ${isJoint?'Gemeinschaftskonto — je 50% pro Ehegatte':' Einzelkonto'}</div>
       </div>
       <div style="font-size:11px;color:var(--muted);text-align:right" id="data-source-note">
-        ~ = FX-Schätzung (EZB-Jahresdurchschnitt)<br>Vor Eintrag gegen Steuerbescheinigung prüfen
+        Datenquellen: EZB-Tageskurse · Vor Eintrag Steuerbescheinigung prüfen
       </div>
     </div>
     <div class="kap-form-body">
@@ -21789,28 +21789,18 @@ function setColor(id, cls) {
 // ============================================================
 // DOCX DOWNLOAD — Begleitdokument für Finanzamt
 // ============================================================
+
+
 function downloadDOCX() {
   const btn = document.getElementById('docx-btn');
   btn.textContent = '⏳ DOCX wird erstellt…';
   btn.disabled = true;
 
-  // API-Key holen
-  const apiKey = window._kapApiKey
-    || sessionStorage.getItem('refundex_api_key')
-    || document.getElementById('kap-api-key')?.value;
-
-  if (!apiKey || !apiKey.startsWith('sk-ant-')) {
-    const key = prompt('Anthropic API-Key für DOCX-Generierung (sk-ant-...):', '');
-    if (!key) { btn.textContent = '📄 DOCX'; btn.disabled = false; return; }
-    window._kapApiKey = key;
-    try { sessionStorage.setItem('refundex_api_key', key); } catch(e) {}
-  }
-
   // Daten sammeln
   const year    = document.getElementById('tax-year').value || rawData?.year || '2025';
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
-  const fsa     = parseFloat(document.getElementById('fsa').value) || 0;
+  const fsa = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
   const d       = rawData || {};
 
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
@@ -21839,7 +21829,7 @@ function downloadDOCX() {
   };
 
   // DOCX direkt als XML-ZIP im Browser erstellen
-  buildDOCXxml(payload)
+  buildDOCXinBrowser(payload)
     .then(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
