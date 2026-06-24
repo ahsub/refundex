@@ -21395,163 +21395,190 @@ async function generateDOCXviaClaude(data) {
 }
 
 async function buildDOCXinBrowser(data) {
-  // docx.js ist inline eingebettet — kein CDN nötig
+  const docxLib = window.docx;
+  if (!docxLib || !docxLib.Document) throw new Error('docx-Bibliothek nicht geladen. Bitte Seite neu laden.');
 
-  const {
-    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-    AlignmentType, HeadingLevel, BorderStyle, WidthType, ShadingType,
-    LevelFormat, Header, Footer,
-  } = window.docx;
+  const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+    AlignmentType, HeadingLevel, BorderStyle, WidthType, ShadingType } = docxLib;
 
-  const { kontoName, kontoNr, year, isJoint, fsa,
-    divEur, whtEur, zinsEur, optGain, optLoss, optVortrag,
+  const { kontoName, kontoNr, year, isJoint, fsa, spouse,
+    divEur, whtEur, zinsEur, optGain, optLoss, optSaldo, optVortrag,
     akGain, akLoss, fxSaldo, divSource, fxSource } = data;
 
   const today = new Date().toLocaleDateString('de-DE');
   const shareLabel = isJoint ? ' (50%-Anteil je Ehegatte)' : '';
-  const ehegatten  = kontoName.split(/ AND /i).map(n => n.trim());
+  const ehegatten = kontoName.split(/ AND /i).map(n => n.trim());
 
-  function fmt(n) {
-    return Math.abs(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
+  function fmtD(n) {
+    if (!n && n !== 0) return '0,00 EUR';
+    return Math.abs(n).toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' EUR';
   }
-  function fmtS(n) { return (n<0?'– ':'+') + fmt(n); }
+  function fmtS(n) { return (n < 0 ? '– ' : '') + fmtD(n); }
 
-  const border   = {style:BorderStyle.SINGLE,size:1,color:'CCCCCC'};
-  const borders  = {top:border,bottom:border,left:border,right:border};
-  const bNone    = {style:BorderStyle.NONE,size:0,color:'FFFFFF'};
-  const bNoneAll = {top:bNone,bottom:bNone,left:bNone,right:bNone};
+  const b = BorderStyle.SINGLE;
+  const borders = { top:{style:b,size:1,color:'CCCCCC'}, bottom:{style:b,size:1,color:'CCCCCC'},
+    left:{style:b,size:1,color:'CCCCCC'}, right:{style:b,size:1,color:'CCCCCC'} };
 
-  function tc(text, opts={}) {
+  function cell(text, opts={}) {
     return new TableCell({
-      borders: opts.nb ? bNoneAll : borders,
-      width:{size:opts.w||4500,type:WidthType.DXA},
-      shading: opts.fill ? {fill:opts.fill,type:ShadingType.CLEAR} : undefined,
-      margins:{top:80,bottom:80,left:120,right:120},
-      children:[new Paragraph({
-        alignment:opts.al||AlignmentType.LEFT,
-        children:[new TextRun({text:String(text||''),bold:opts.bold||false,size:opts.sz||20,color:opts.col||'000000',font:'Arial',italics:opts.it||false})]
+      borders,
+      width: { size: opts.w||4500, type: WidthType.DXA },
+      shading: opts.fill ? { fill: opts.fill, type: ShadingType.CLEAR, color: opts.fill } : undefined,
+      margins: { top:80, bottom:80, left:120, right:120 },
+      children: [new Paragraph({
+        alignment: opts.right ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        children: [new TextRun({ text: String(text||''), bold: opts.bold||false,
+          size: opts.size||20, color: opts.color||'000000', font: 'Arial' })]
       })]
     });
   }
 
-  function h1(text) { return new Paragraph({heading:HeadingLevel.HEADING_1,spacing:{before:280,after:140},children:[new TextRun({text,font:'Arial',size:28,bold:true,color:'1F3864'})]}); }
-  function h2(text) { return new Paragraph({heading:HeadingLevel.HEADING_2,spacing:{before:200,after:100},children:[new TextRun({text,font:'Arial',size:24,bold:true,color:'2E75B6'})]}); }
-  function p(text,opts={}) { return new Paragraph({spacing:{before:opts.b||80,after:opts.a||80},alignment:opts.al||AlignmentType.LEFT,children:[new TextRun({text:String(text||''),font:'Arial',size:opts.sz||20,bold:opts.bold||false,color:opts.col||'000000',italics:opts.it||false})]}); }
-  function dividerP() { return new Paragraph({spacing:{before:120,after:120},border:{bottom:{style:BorderStyle.SINGLE,size:6,color:'2E75B6',space:1}},children:[]}); }
-  function blt(text) { return new Paragraph({numbering:{reference:'bullets',level:0},spacing:{before:40,after:40},children:[new TextRun({text,font:'Arial',size:20})]}); }
+  function p(text, opts={}) {
+    return new Paragraph({
+      spacing: { before: opts.before||80, after: opts.after||80 },
+      children: [new TextRun({ text: String(text||''), font:'Arial',
+        size: opts.size||20, bold: opts.bold||false,
+        color: opts.color||'000000', italics: opts.italic||false })]
+    });
+  }
 
-  function kapRow(z, text, val, col) {
-    return new TableRow({children:[
-      tc(`Z. ${z}`,{w:1200,al:AlignmentType.CENTER,col:'2E75B6',bold:true}),
-      tc(text,{w:5160}),
-      tc(val,{w:3000,al:AlignmentType.RIGHT,col:col||'000000',bold:true}),
+  function h(text, level) {
+    return new Paragraph({
+      heading: level || HeadingLevel.HEADING_2,
+      spacing: { before:200, after:100 },
+      children: [new TextRun({ text, font:'Arial', bold:true,
+        size: level===HeadingLevel.HEADING_1 ? 28 : 24,
+        color: level===HeadingLevel.HEADING_1 ? '1F3864' : '2E75B6' })]
+    });
+  }
+
+  function kapRow(zeile, text, betrag, color) {
+    return new TableRow({ children: [
+      cell('Z. '+zeile, { w:1200, bold:true, color:'2E75B6' }),
+      cell(text, { w:5760 }),
+      cell(betrag, { w:2400, right:true, bold:true, color:color||'000000' }),
     ]});
   }
+
   function secRow(text) {
-    return new TableRow({children:[new TableCell({
-      borders,columnSpan:3,width:{size:9360,type:WidthType.DXA},
-      shading:{fill:'EBF3FB',type:ShadingType.CLEAR},
-      margins:{top:60,bottom:60,left:120,right:120},
-      children:[new Paragraph({children:[new TextRun({text,bold:true,font:'Arial',size:18,color:'1F3864'})]})]
-    })]});
+    return new TableRow({ children: [
+      new TableCell({ columnSpan:3, borders,
+        shading:{ fill:'EBF3FB', type:ShadingType.CLEAR, color:'EBF3FB' },
+        margins:{ top:60, bottom:60, left:120, right:120 },
+        width:{ size:9360, type:WidthType.DXA },
+        children:[new Paragraph({ children:[new TextRun({ text, bold:true, font:'Arial', size:18, color:'1F3864' })] })]
+      })
+    ]});
   }
 
   const doc = new Document({
-    numbering:{config:[{reference:'bullets',levels:[{level:0,format:LevelFormat.BULLET,text:'•',alignment:AlignmentType.LEFT,style:{paragraph:{indent:{left:720,hanging:360}}}}]}]},
-    styles:{
-      default:{document:{run:{font:'Arial',size:20}}},
-      paragraphStyles:[
-        {id:'Heading1',name:'Heading 1',basedOn:'Normal',next:'Normal',quickFormat:true,run:{size:28,bold:true,font:'Arial',color:'1F3864'},paragraph:{spacing:{before:280,after:140},outlineLevel:0}},
-        {id:'Heading2',name:'Heading 2',basedOn:'Normal',next:'Normal',quickFormat:true,run:{size:24,bold:true,font:'Arial',color:'2E75B6'},paragraph:{spacing:{before:200,after:100},outlineLevel:1}},
+    styles: {
+      default: { document: { run: { font:'Arial', size:20 } } },
+      paragraphStyles: [
+        { id:'Heading1', name:'Heading 1', basedOn:'Normal', next:'Normal', quickFormat:true,
+          run:{ size:28, bold:true, font:'Arial', color:'1F3864' },
+          paragraph:{ spacing:{ before:280, after:140 }, outlineLevel:0 } },
+        { id:'Heading2', name:'Heading 2', basedOn:'Normal', next:'Normal', quickFormat:true,
+          run:{ size:24, bold:true, font:'Arial', color:'2E75B6' },
+          paragraph:{ spacing:{ before:200, after:100 }, outlineLevel:1 } },
       ]
     },
-    sections:[{
-      properties:{page:{size:{width:11906,height:16838},margin:{top:1440,right:1134,bottom:1134,left:1701}}},
-      headers:{default:new Header({children:[new Paragraph({alignment:AlignmentType.RIGHT,border:{bottom:{style:BorderStyle.SINGLE,size:4,color:'2E75B6',space:1}},children:[new TextRun({text:`Refundex KAP-Assistent · ${kontoNr} · ${year}`,font:'Arial',size:16,color:'7F7F7F'})]})]})}  ,
-      footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,border:{top:{style:BorderStyle.SINGLE,size:4,color:'CCCCCC',space:1}},spacing:{before:80},children:[new TextRun({text:`Erstellt mit Refundex · ahsub.github.io/refundex · ${today} · Kein Steuerrat`,font:'Arial',size:16,color:'7F7F7F'})]})]})}  ,
-      children:[
-        p(`Begleitdokument zur Steuererklärung`,{sz:36,bold:true,col:'1F3864',b:0,a:80}),
-        p(`Kapitalerträge aus Depot ${kontoNr} · Steuerjahr ${year}`,{sz:24,col:'2E75B6',b:0,a:40}),
-        p(`Kontoinhaber: ${kontoName} · Erstellt: ${today}`,{sz:20,col:'7F7F7F',b:0,a:200}),
-        dividerP(),
-
-        h1('1. Zweck dieses Dokuments'),
-        p(`Dieses Dokument erläutert die Kapitalerträge aus dem CapTrader/IBKR-Depot ${kontoNr} für das Steuerjahr ${year} und dient als Begleitdokument zur Anlage KAP. Alle Beträge basieren auf den offiziellen CapTrader-Jahresauszügen${divSource==='(exakt)'?' und dem Dividendenbericht mit tagesgenauen EUR-Kursen':' (EZB-Jahresdurchschnittskurse — Näherungswerte)'}.`),
-        ...(isJoint ? [
-          p(''),
-          p(`Gemeinschaftskonto: Kapitalerträge werden je zur Hälfte (50%) jedem Ehegatten zugerechnet. Jeder Ehegatte reicht eine separate Anlage KAP ein.`,{bold:true,col:'1F3864'}),
-          p(`Ehegatte 1: ${ehegatten[0]||'–'}`,{bold:true}),
-          p(`Ehegatte 2: ${ehegatten[1]||'–'}`,{bold:true}),
-        ]:[]),
-        dividerP(),
-
-        h1('2. Anlage KAP — Vorausgefüllte Werte'),
-        p(`Folgende Werte sind in die Anlage KAP${isJoint?' (je Ehegatte separat)':''} einzutragen:`),
+    sections: [{
+      properties: { page: {
+        size:{ width:11906, height:16838 },
+        margin:{ top:1440, right:1134, bottom:1134, left:1701 }
+      }},
+      children: [
+        p('Begleitdokument zur Steuererklärung', {size:32, bold:true, color:'1F3864', before:0, after:80}),
+        p('Kapitalerträge Depot ' + kontoNr + ' · Steuerjahr ' + year, {size:22, color:'2E75B6', before:0, after:40}),
+        p('Kontoinhaber: ' + kontoName + ' · Erstellt: ' + today, {size:18, color:'7F7F7F', before:0, after:200}),
         p(''),
+
+        h('1. Anlage KAP — Vorausgefüllte Werte', HeadingLevel.HEADING_1),
+        p(isJoint ? 'Gemeinschaftskonto: je 50% für ' + ehegatten.join(' und ') : '', {color:'CC6600'}),
+        p(''),
+
         new Table({
-          width:{size:9360,type:WidthType.DXA},
-          columnWidths:[1200,5160,3000],
+          width:{ size:9360, type:WidthType.DXA },
+          columnWidths:[1200, 5760, 2400],
           rows:[
-            new TableRow({tableHeader:true,children:[
-              tc('Zeile',{bold:true,fill:'D6E4F0',w:1200,al:AlignmentType.CENTER}),
-              tc('Bezeichnung',{bold:true,fill:'D6E4F0',w:5160}),
-              tc('Betrag',{bold:true,fill:'D6E4F0',w:3000,al:AlignmentType.RIGHT}),
+            new TableRow({ tableHeader:true, children:[
+              cell('Zeile', { w:1200, bold:true, fill:'D6E4F0' }),
+              cell('Bezeichnung', { w:5760, bold:true, fill:'D6E4F0' }),
+              cell('Betrag', { w:2400, bold:true, fill:'D6E4F0', right:true }),
             ]}),
             secRow('A — Angaben zu Kapitalerträgen'),
-            kapRow('7',`Dividenden (§ 20 Abs. 1 Nr. 1–3 EStG)${shareLabel}`, fmt(divEur)+(divSource!=='(exakt)'?' ~':''), divEur>0?'1a5e1a':'7F7F7F'),
-            kapRow('8',`Aktienveräußerungsgewinne${shareLabel}`, akGain>0?fmt(akGain)+' ~':'0,00 €', akGain>0?'1a5e1a':'7F7F7F'),
-            kapRow('9',`Aktienveräußerungsverluste${shareLabel}`, akLoss<0?'– '+fmt(Math.abs(akLoss))+' ~':'0,00 €', akLoss<0?'CC0000':'7F7F7F'),
-            kapRow('12',`Termingeschäftsgewinne (Optionsprämien)${shareLabel}`, optGain>0?fmt(optGain)+' ~':'0,00 €', optGain>0?'1a5e1a':'7F7F7F'),
-            kapRow('13',`Termingeschäftsverluste § 20 Abs. 6 EStG${shareLabel}`, optLoss<0?'– '+fmt(Math.abs(optLoss))+' ~':'0,00 €', optLoss<0?'CC0000':'7F7F7F'),
-            kapRow('14',`Zinserträge${shareLabel}`, fmt(zinsEur), zinsEur>0?'1a5e1a':'7F7F7F'),
+            kapRow('7',  'Dividenden (§20 Abs.1 Nr.1-3 EStG)' + shareLabel,
+              fmtD(divEur), divEur>0?'1a5e1a':'7F7F7F'),
+            kapRow('8',  'Aktienveräußerungsgewinne' + shareLabel,
+              fmtD(akGain), akGain>0?'1a5e1a':'7F7F7F'),
+            kapRow('9',  'Aktienveräußerungsverluste' + shareLabel,
+              akLoss<0?'– '+fmtD(Math.abs(akLoss)):fmtD(0), akLoss<0?'CC0000':'7F7F7F'),
+            kapRow('12', 'Termingeschäftsgewinne (Optionsprämien)' + shareLabel,
+              fmtD(optGain), optGain>0?'1a5e1a':'7F7F7F'),
+            kapRow('13', 'Termingeschäftsverluste §20 Abs.6' + shareLabel,
+              optLoss<0?'– '+fmtD(Math.abs(optLoss)):fmtD(0), optLoss<0?'CC0000':'7F7F7F'),
+            kapRow('14', 'Zinserträge' + shareLabel,
+              fmtD(zinsEur), zinsEur>0?'1a5e1a':'7F7F7F'),
             secRow('B — Freistellungsauftrag'),
-            kapRow('17',`Freistellungsauftrag${isJoint?` (${fmt(fsa)} gesamt, je 50%)`:''} `, fmt(isJoint?fsa/2:fsa),'000000'),
+            kapRow('17', 'Freistellungsauftrag CapTrader' + shareLabel,
+              fmtD(isJoint ? fsa/2 : fsa), '000000'),
             secRow('C — Anrechenbare Steuerabzugsbeträge'),
-            kapRow('41',`Anrechenbare ausländische Quellensteuer${shareLabel}`, fmt(whtEur)+(divSource!=='(exakt)'?' ~':''), whtEur>0?'1a5e1a':'7F7F7F'),
+            kapRow('41', 'Anrechenbare Quellensteuer (Ausland)' + shareLabel,
+              fmtD(whtEur), whtEur>0?'1a5e1a':'7F7F7F'),
           ]
         }),
         p(''),
-        p('~ = EZB-Jahresdurchschnittskurs (Schätzung). Exakte Werte aus CapTrader-Jahressteuerbescheinigung verwenden.',{it:true,col:'7F7F7F',sz:18}),
-        dividerP(),
+        p('Datenquellen: Dividenden ' + divSource + ' · FX ' + fxSource,
+          {size:16, italic:true, color:'7F7F7F'}),
+        p(''),
 
-        h1('3. Erläuterungen'),
-        h2('Z. 7 — Dividenden'),
-        p(`Dividenden aus in- und ausländischen Aktien, die im Steuerjahr ${year} gutgeschrieben wurden.`),
-        h2('Z. 12/13 — Termingeschäfte (Optionen)'),
-        p(`Gewinne/Verluste aus Optionsgeschäften (CSP, CC). Verluste gemäß § 20 Abs. 6 Satz 5 EStG max. ${fmt(20000)}/Jahr mit anderen Kapitalerträgen verrechenbar.`),
-        ...(optVortrag>0?[p(`Verlustvortrag in ${parseInt(year)+1}: ${fmt(optVortrag)} ~`,{bold:true,col:'CC6600'})]:[]),
-        h2('Z. 14 — Zinsen'),
-        p('Guthabenzinsen auf EUR- und USD-Guthaben bei CapTrader/IBKR.'),
-        h2('Z. 41 — Anrechenbare Quellensteuer'),
-        p('Auf ausländische Dividenden einbehaltene Quellensteuer (max. DBA-Satz 15%). Überschuss ggf. im Ausland rückforderbar (Refundex-Dashboard).'),
-        ...(fxSaldo!==0?[
-          h2('Anlage SO — Devisengewinne/-verluste'),
-          p(`FX-Saldo ${year}${shareLabel}: ${fmtS(fxSaldo)} ~ ${Math.abs(fxSaldo)>600?'→ steuerpflichtig (über Freigrenze 600 €)':'→ steuerfrei (unter Freigrenze 600 €)'}`,{bold:true,col:Math.abs(fxSaldo)>600?'CC0000':'1a5e1a'}),
-        ]:[]),
-        dividerP(),
+        h('2. Verlustverrechnungstöpfe §20 EStG', HeadingLevel.HEADING_1),
+        p('Topf 1 — Allgemein (Dividenden + Zinsen): ' + fmtD((divEur||0)+(zinsEur||0)), {bold:true, color:'1a5e1a'}),
+        p('Topf 2 — Aktien: ' + fmtS((akGain||0)+(akLoss||0))),
+        p('Topf 3 — Termingeschäfte §20 Abs.6:', {bold:true}),
+        p('  Gewinne: ' + fmtD(optGain) + '  |  Verluste: ' + fmtD(Math.abs(optLoss||0)) +
+          '  |  Saldo: ' + fmtS(optSaldo||0), {color: (optSaldo||0)>=0?'1a5e1a':'CC0000'}),
+        ...(optVortrag>0 ? [
+          p('⚠ Verlustvortrag ins Folgejahr: ' + fmtD(optVortrag), {bold:true, color:'CC6600'})
+        ] : []),
+        p(''),
 
-        h1('4. Checkliste WISO Steuer / ELSTER'),
-        blt(`Anlage KAP öffnen${isJoint?` (je einmal für ${ehegatten[0]||'Inhaber 1'} und ${ehegatten[1]||'Inhaber 2'})`:''}`) ,
-        blt(`Z. 7: ${fmt(divEur)}${divSource!=='(exakt)'?' ~':''} eintragen`),
-        ...(akGain>0||akLoss<0?[blt(`Z. 8: ${fmt(akGain)} ~ / Z. 9: ${fmt(Math.abs(akLoss))} ~ eintragen`)]:[]),
-        ...(optGain>0||optLoss<0?[blt(`Z. 12: ${fmt(optGain)} ~ / Z. 13: ${fmt(Math.abs(optLoss))} ~ eintragen (Termingeschäfte!)`)]:[]),
-        blt(`Z. 14: ${fmt(zinsEur)} eintragen`),
-        blt(`Z. 17: ${fmt(isJoint?fsa/2:fsa)} Freistellungsauftrag eintragen`),
-        blt(`Z. 41: ${fmt(whtEur)}${divSource!=='(exakt)'?' ~':''} anrechenbare Quellensteuer eintragen`),
-        ...(Math.abs(fxSaldo)>600?[blt(`Anlage SO: FX-Saldo ${fmtS(fxSaldo)} ~ eintragen (über Freigrenze!)`)]:[blt(`Anlage SO: FX-Saldo ${fmtS(fxSaldo)} ~ unter Freigrenze — keine Eintragung`)]),
-        blt('Alle Werte gegen CapTrader-Jahressteuerbescheinigung abgleichen'),
-        ...(optVortrag>0?[blt(`Verlustfeststellungserklärung: Termingeschäfte-Vortrag ${fmt(optVortrag)} ~ für ${parseInt(year)+1}`)]:[]),
-        dividerP(),
+        h('3. Devisengewinne (Anlage SO)', HeadingLevel.HEADING_1),
+        p('FX-Saldo ' + year + shareLabel + ': ' + fmtS(fxSaldo||0) + ' (' + fxSource + ')',
+          { bold:true, color: Math.abs(fxSaldo||0)>600 ? 'CC0000' : '1a5e1a' }),
+        p(Math.abs(fxSaldo||0)>600
+          ? '→ Steuerpflichtig (über Freigrenze €600) — in Anlage SO Zeile 43 eintragen'
+          : '→ Unter Freigrenze €600 — keine Eintragung erforderlich'),
+        p(''),
 
-        h1('5. Rechtliche Hinweise'),
-        p('Dieses Dokument wurde automatisiert erstellt und ersetzt keine professionelle Steuerberatung. Alle Angaben sind ohne Gewähr. Maßgeblich sind die offiziellen CapTrader-Belege sowie das geltende EStG.',{it:true,col:'7F7F7F'}),
-        p(`Erstellt mit Refundex KAP-Assistent · ahsub.github.io/refundex/kap.html · ${today}`,{it:true,col:'7F7F7F'}),
+        h('4. Checkliste WISO Steuer / ELSTER', HeadingLevel.HEADING_1),
+        ...[
+          'Anlage KAP öffnen' + (isJoint?' (je einmal für '+ehegatten.join(' und ')+')':''),
+          'Z. 7: ' + fmtD(divEur) + ' (' + divSource + ') eintragen',
+          'Z. 12: ' + fmtD(optGain) + ' / Z. 13: ' + fmtD(Math.abs(optLoss||0)) + ' eintragen (Termingeschäfte!)',
+          'Z. 14: ' + fmtD(zinsEur) + ' Zinsen eintragen',
+          'Z. 17: ' + fmtD(isJoint?fsa/2:fsa) + ' Freistellungsauftrag CapTrader',
+          'Z. 41: ' + fmtD(whtEur) + ' anrechenbare Quellensteuer (' + divSource + ')',
+          Math.abs(fxSaldo||0)>600 ? 'Anlage SO: ' + fmtS(fxSaldo||0) + ' Devisensaldo eintragen' : 'Anlage SO: Devisensaldo unter Freigrenze — keine Eintragung',
+          'Alle Werte gegen CapTrader-Jahressteuerbescheinigung abgleichen',
+        ].map(t => new Paragraph({ spacing:{before:40,after:40},
+          children:[new TextRun({ text: '☐  ' + t, font:'Arial', size:20 })] })),
+        p(''),
+
+        h('5. Rechtliche Hinweise', HeadingLevel.HEADING_1),
+        p('Dieses Dokument wurde automatisiert erstellt und ersetzt keine professionelle Steuerberatung. ' +
+          'Alle Angaben ohne Gewähr. Maßgeblich sind die offiziellen CapTrader-Belege.',
+          {italic:true, color:'7F7F7F'}),
+        p('Erstellt mit Refundex · ahsub.github.io/refundex/kap.html · ' + today,
+          {italic:true, color:'7F7F7F', size:16}),
       ]
     }]
   });
 
   return await Packer.toBlob(doc);
 }
+
 
 function b64toBlob(b64, type) {
   const bin = atob(b64);
