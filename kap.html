@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v117</title>
+<title>Refundex — KAP-Assistent v118</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21865,15 +21865,15 @@ function round2(n) { return Math.round(n * 100) / 100; }
 function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo, divSrc, fxSrc) {
   const ds = (!divSrc || divSrc === '~') ? '~' : '';
   const fs = (fxSrc  && fxSrc  !== '~') ? '' : '~';
-  const os = pdfData?.optGain ? '' : '~';
+  const os = (pdfData?.optGain || d.flexDataEUR) ? '' : '~';
   setText('ov-div',     fmt(div) + ds);
   setText('ov-div-sub', `WHT einbehalten: ${fmt(wht)}${ds}`);
   setText('ov-wht',     fmt(wht) + ds);
   setText('ov-zins',    fmt(zins));  // EUR-Betrag, kein FX nötig
   setText('ov-opt',     fmt(optSaldo) + os);
   setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}${os} | Verluste: ${fmt(optL)}${os}`);
-  setText('ov-aktien',  fmt(akSaldo) + '~');
-  setText('ov-aktien-sub', `Gewinne: ${fmt(akG)}~ | Verluste: ${fmt(akL)}~`);
+  setText('ov-aktien',  fmt(akSaldo) + (d.flexDataEUR ? '' : '~'));
+  setText('ov-aktien-sub', `Gewinne: ${fmt(akG)}${d.flexDataEUR?'':'~'} | Verluste: ${fmt(Math.abs(akL))}${d.flexDataEUR?'':'~'}`);
   setText('ov-fx',      fmt(fxSaldo) + fs);
   setText('ov-fx-sub',  fxSaldo > 0 ? 'Anlage SO — steuerpflichtig wenn >600€' : 'Kein Gewinn');
   setColor('ov-opt',    optSaldo >= 0 ? 'green' : 'red');
@@ -21887,13 +21887,13 @@ function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG,
 function renderToepfe(kap, div, zins, optG, optL, verr, optSaldo, akG, akL, akSaldo, divSrc, fxSrc) {
   const t1 = div + zins;
   const ds = (divSrc && divSrc!=='~') ? '' : '~';
-  const os = pdfData?.optGain ? '' : '~';
+  const os = (pdfData?.optGain || d.flexDataEUR) ? '' : '~';
   setText('t1-div',   fmt(div)  + ds); setColor('t1-div',   'pos');
   setText('t1-zins',  fmt(zins)); setColor('t1-zins',  'pos');  // EUR direkt
   setText('t1-saldo', fmt(t1)   + ds); setColor('t1-saldo', t1>=0?'pos':'neg');
-  setText('t2-gain',  fmt(akG)  + '~'); setColor('t2-gain',  'pos');
-  setText('t2-loss',  fmt(-akL) + '~'); setColor('t2-loss',  'neg');
-  setText('t2-saldo', fmt(akSaldo)+'~'); setColor('t2-saldo', akSaldo>=0?'pos':'neg');
+  setText('t2-gain',  fmt(akG)  + (d.flexDataEUR?'':'~')); setColor('t2-gain',  'pos');
+  setText('t2-loss',  fmt(Math.abs(akL)) + (d.flexDataEUR?'':'~')); setColor('t2-loss',  'neg');
+  setText('t2-saldo', fmt(akSaldo)+(d.flexDataEUR?'':'~')); setColor('t2-saldo', akSaldo>=0?'pos':'neg');
   setText('t3-gain',  fmt(optG) + os); setColor('t3-gain',  'pos');
   setText('t3-loss',  fmt(optL) + os); setColor('t3-loss',  'neg');
   setText('t3-verr',  fmt(verr) + os); setColor('t3-verr',  'warn');
