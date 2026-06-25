@@ -20952,7 +20952,12 @@ const FX_AVG = {
 };
 
 // EZB-Tageskurs Cache (wird beim Datei-Upload befüllt)
-let fxRateMap = {};  // { "USD:2024-04-15": 0.9291, ... }
+// Globale Zustands-Variablen
+let rawData   = null;  // Jahresauszug CSV Daten
+let pdfData   = null;  // PWC/CapTrader PDF Daten
+let divData   = null;  // Dividenden HTML Daten
+let fxData    = null;  // FX-Einkünfte CSV Daten
+let fxRateMap = {};    // { "USD:2024-04-15": 0.9291, ... }
 let fxLoadStatus = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
 function toEur(amount, currency, year, date) {
   if (!amount || currency === 'EUR') return amount || 0;
