@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v104</title>
+<title>Refundex — KAP-Assistent v105</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21984,9 +21984,11 @@ async function buildDOCXinBrowser(data) {
         margin:{ top:1440, right:1134, bottom:1134, left:1701 }
       }},
       children: [
-        p('Begleitdokument zur Steuererklärung', {size:32, bold:true, color:'1F3864', before:0, after:80}),
-        p('Kapitalerträge Depot ' + kontoNr + ' · Steuerjahr ' + year, {size:22, color:'2E75B6', before:0, after:40}),
-        p('Kontoinhaber: ' + kontoName + ' · Erstellt: ' + today, {size:18, color:'7F7F7F', before:0, after:200}),
+        p('Anlage KAP ' + year + ' — Begleitdokument', {size:32, bold:true, color:'1F3864', before:0, after:40}),
+        p((data.inhaberNr === 1 ? '1. Steuerpflichtige/r: ' : data.inhaberNr === 2 ? '2. Steuerpflichtige/r: ' : '') + (data.inhaberName || kontoName), {size:26, bold:true, color:'2E75B6', before:0, after:20}),
+        p(isJoint ? 'Gemeinschaftskonto · Depot ' + kontoNr + ' · je 50%-Anteil' : 'Depot ' + kontoNr, {size:20, color:'7F7F7F', before:0, after:10}),
+        p(isJoint ? 'Mitinhaber: ' + kontoName : '', {size:18, color:'7F7F7F', before:0, after:10}),
+        p('Erstellt: ' + today, {size:18, color:'7F7F7F', before:0, after:160}),
         p(''),
 
         h('1. Anlage KAP — Vorausgefüllte Werte', HeadingLevel.HEADING_1),
