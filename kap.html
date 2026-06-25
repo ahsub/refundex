@@ -21065,7 +21065,7 @@ function loadCSV(event, src='main') {
     rawData = parseJahresCSV(e.target.result, file.name);
     document.getElementById('status-main').textContent = '✅ ' + file.name;
     document.getElementById('status-main').style.color = 'var(--green)';
-    document.getElementById('execute-bar').style.display = 'none';
+    { const _eb=document.getElementById('execute-bar'); if(_eb) _eb.style.display='none'; }
     // EZB-Tageskurse laden
     const fxPairs = [];
     if (rawData && rawData.dividenden) {
@@ -21277,7 +21277,7 @@ function loadPWCpdf(event) {
       statusEl.style.color = 'var(--green)';
       // Execute-Bar nur anzeigen wenn noch kein rawData vorhanden
       if (!rawData) {
-        const eb = document.getElementById('execute-bar'); eb.style.display = 'flex'; eb.style.alignItems = 'center'; eb.style.gap = '12px';
+        const eb = document.getElementById('execute-bar'); if(eb) { eb.style.display='flex'; eb.style.alignItems='center'; eb.style.gap='12px'; }
       }
       recalculate();
     } catch(err) {
@@ -21640,10 +21640,10 @@ function recalculate() {
     hinweis.style.display = 'none';
   }
 
-  document.getElementById('result-section').style.display = 'block';
-  document.getElementById('empty-state').style.display = 'none';
-  document.getElementById('docx-btn').style.display = 'inline-flex';
-  document.getElementById('docx-dl-btn').style.display = 'inline-flex';
+  { const _rs=document.getElementById('result-section'); if(_rs) _rs.style.display='block'; }
+  { const _es=document.getElementById('empty-state'); if(_es) _es.style.display='none'; }
+  { const _x=document.getElementById('docx-btn'); if(_x) _x.style.display='inline-flex'; }
+  { const _y=document.getElementById('docx-dl-btn'); if(_y) _y.style.display='inline-flex'; }
 
   // Spouse Label
   const spouseLabels = { '1': d.kontoName.split(/ AND /i)[0] || 'Inhaber 1', '2': d.kontoName.split(/ AND /i)[1] || 'Inhaber 2', 'both': 'Beide Inhaber' };
