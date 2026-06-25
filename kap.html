@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v119</title>
+<title>Refundex — KAP-Assistent v120</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21567,14 +21567,21 @@ async function onFileFlex(event) {
     if (kontoName) { flexKontoName = kontoName; flexIsJoint = isJoint; flexInhaber = inhaber; }
 
     // Steuerjahr aus UI
-    const year = document.getElementById('tax-year')?.value || String(new Date().getFullYear() - 1);
+    const uiYear = document.getElementById('tax-year')?.value || String(new Date().getFullYear() - 1);
+    const availYearsArr = Object.keys(allYearlyResults).sort();
+    // Wenn UI-Jahr nicht verfügbar → automatisch auf neuestes Jahr wechseln
+    const year = allYearlyResults[uiYear] ? uiYear : availYearsArr[availYearsArr.length - 1];
     const yr   = allYearlyResults[year];
 
     if (!yr) {
-      const years = Object.keys(allYearlyResults).sort();
-      el.textContent = `⚠️ Kein ${year} — verfügbar: ${years.join(', ')}`;
+      el.textContent = `⚠️ Keine gültigen Jahres-Daten in der Datei`;
       el.style.color = 'var(--amber)';
       return;
+    }
+    // Steuerjahr-Feld synchronisieren wenn automatisch gewechselt
+    if (year !== uiYear) {
+      const tyEl = document.getElementById('tax-year');
+      if (tyEl) tyEl.value = year;
     }
 
     // rawData initialisieren
@@ -21644,9 +21651,13 @@ async function onFileFlex(event) {
     // Status
     const years = Object.keys(allYearlyResults).sort();
     const validFiles = files.length;
+    // Zähle Trades/Divs nur für das aktive Jahr
+    const yrTrades = yr.trades?.length || totalTrades;
+    const yrDivs   = yr.cashTransactions?.dividenden?.length || totalDivs;
+    const otherYrs = years.filter(y => y !== String(year));
     el.textContent = isCash
-      ? `✅ ${validFiles} Datei(en) · ${totalTrades} Trades · ${totalDivs} Div · ${years.join(', ')}`
-      : `✅ ${validFiles} Datei(en) · ${totalTrades} Trades · ${years.join(', ')}`;
+      ? `✅ ${validFiles} Datei(en) · ${totalTrades} Trades · ${totalDivs} Div · ${year}${otherYrs.length ? ' (auch: ' + otherYrs.join(', ') + ')' : ''}`
+      : `✅ ${validFiles} Datei(en) · ${totalTrades} Trades · ${year}${otherYrs.length ? ' (auch: ' + otherYrs.join(', ') + ')' : ''}`;
     el.style.color = 'var(--green)';
 
     // Info-Banner
@@ -21654,13 +21665,17 @@ async function onFileFlex(event) {
     if (banner) {
       const optSaldo = (yr.optGainEur||0) - Math.abs(yr.optLossEur||0);
       banner.style.display = 'block';
+      banner.style.background = '';
+      banner.style.borderColor = '';
+      const otherYrsBanner = years.filter(y => y !== String(year));
       banner.innerHTML = `
         <strong>📈 Flex Query ${year}</strong>
         ${isCash?`<span style="margin-left:0.8rem">Div: <strong style="color:var(--green)">€${(yr.z7_dividenden||0).toFixed(2)}</strong></span>`:''}
         <span style="margin-left:0.8rem">Aktien: <strong style="color:var(--green)">€${(yr.stkGainEur||0).toFixed(2)}</strong></span>
         <span style="margin-left:0.8rem">Optionen: <strong style="color:${optSaldo>=0?'var(--green)':'var(--red)'}">€${optSaldo.toFixed(2)}</strong></span>
         ${isCash?`<span style="margin-left:0.8rem">Zinsen: <strong>€${(yr.z14_zinsen||0).toFixed(2)}</strong></span>`:''}
-        <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">${years.length} Jahr(e) · IBKR FifoPnL×FX</span>
+        <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">IBKR FifoPnL×FX</span>
+        ${otherYrsBanner.length > 0 ? `<span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">· auch geladen: ${otherYrsBanner.join(', ')}</span>` : ''}
       `;
     }
 
@@ -21676,7 +21691,22 @@ function onTaxYearRefresh() {
   const year = document.getElementById('tax-year').value.trim();
   if (!year || year.length < 4) return;
   if (rawData) rawData.year = year;
-  if (Object.keys(flexYearlyResults).length > 0) {
+  const availYears = Object.keys(flexYearlyResults);
+  if (availYears.length > 0) {
+    if (!flexYearlyResults[year]) {
+      // Jahr nicht geladen — Benutzer informieren
+      const banner = document.getElementById('flex-info');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.style.background = 'rgba(204,102,0,0.15)';
+        banner.style.borderColor = '#CC6600';
+        banner.innerHTML = `<strong>⚠ Steuerjahr ${year} nicht geladen</strong>
+          <span style="margin-left:0.8rem;color:var(--muted)">
+            Verfügbar: ${availYears.sort().join(', ')} — bitte passende Flex-Query hochladen
+          </span>`;
+      }
+      return;
+    }
     applyFlexYear(year);
   } else {
     recalculate();
@@ -21710,19 +21740,24 @@ function applyFlexYear(year) {
     rawData.flexCash   = true;
   }
 
-  // Banner aktualisieren
+  // Banner aktualisieren — zeigt aktives Jahr, verfügbare Jahre als Kontext
   const banner = document.getElementById('flex-info');
-  if (banner && banner.style.display !== 'none') {
+  if (banner) {
+    banner.style.display = 'block';
+    banner.style.background = '';  // Reset zu default (grün)
+    banner.style.borderColor = '';
     const optSaldo = (yr.optGainEur||0) - Math.abs(yr.optLossEur||0);
     const isCash = yr.z7_dividenden !== undefined;
-    const yrs = Object.keys(flexYearlyResults).sort();
+    const allYrs = Object.keys(flexYearlyResults).sort();
+    const otherYrs = allYrs.filter(y => y !== String(year));
     banner.innerHTML = `
       <strong>📈 Flex Query ${year}</strong>
       ${isCash?`<span style="margin-left:0.8rem">Div: <strong style="color:var(--green)">€${(yr.z7_dividenden||0).toFixed(2)}</strong></span>`:''}
       <span style="margin-left:0.8rem">Aktien: <strong style="color:var(--green)">€${(yr.stkGainEur||0).toFixed(2)}</strong></span>
       <span style="margin-left:0.8rem">Optionen: <strong style="color:${optSaldo>=0?'var(--green)':'var(--red)'}">€${optSaldo.toFixed(2)}</strong></span>
       ${isCash?`<span style="margin-left:0.8rem">Zinsen: <strong>€${(yr.z14_zinsen||0).toFixed(2)}</strong></span>`:''}
-      <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">${yrs.length} Jahr(e): ${yrs.join(', ')} · IBKR FifoPnL×FX</span>
+      <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">IBKR FifoPnL×FX</span>
+      ${otherYrs.length > 0 ? `<span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">· auch geladen: ${otherYrs.join(', ')}</span>` : ''}
     `;
   }
   recalculate();
@@ -22284,7 +22319,21 @@ async function buildDOCXinBrowser(data) {
   document.getElementById('tax-year').addEventListener(evt, function() {
     const yr = this.value.trim();
     if (!yr || yr.length < 4) return;
-    if (Object.keys(flexYearlyResults).length > 0) {
+    const availYears = Object.keys(flexYearlyResults);
+    if (availYears.length > 0) {
+      if (!flexYearlyResults[yr]) {
+        const banner = document.getElementById('flex-info');
+        if (banner) {
+          banner.style.display = 'block';
+          banner.style.background = 'rgba(204,102,0,0.15)';
+          banner.style.borderColor = '#CC6600';
+          banner.innerHTML = `<strong>⚠ Steuerjahr ${yr} nicht geladen</strong>
+            <span style="margin-left:0.8rem;color:var(--muted)">
+              Verfügbar: ${availYears.sort().join(', ')} — bitte passende Flex-Query hochladen
+            </span>`;
+        }
+        return;
+      }
       applyFlexYear(yr);
     } else {
       recalculate();
