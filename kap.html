@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v114</title>
+<title>Refundex — KAP-Assistent v115</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -193,6 +193,7 @@
     <div class="setting-group">
       <span class="setting-label">Steuerjahr:</span>
       <input type="text" class="setting-input" id="tax-year" value="2024" maxlength="4">
+      <button onclick="onTaxYearRefresh()" title="Neu berechnen" style="margin-left:0.4rem;padding:0.3rem 0.7rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px">↺</button>
     </div>
     <div class="setting-group">
       <span class="setting-label">Freistellungsauftrag:</span>
@@ -21666,6 +21667,16 @@ async function onFileFlex(event) {
     console.error('Flex Query Fehler:', err);
   }
 }
+function onTaxYearRefresh() {
+  const year = document.getElementById('tax-year').value.trim();
+  if (!year) return;
+  if (Object.keys(flexYearlyResults).length > 0) {
+    applyFlexYear(year);
+  } else {
+    recalculate();
+  }
+}
+
 // ── STEUERJAHR WECHSEL ────────────────────────────────────────
 function applyFlexYear(year) {
   if (!flexYearlyResults || !Object.keys(flexYearlyResults).length) return;
@@ -22260,13 +22271,16 @@ async function buildDOCXinBrowser(data) {
 ['fsa'].forEach(id => {
   document.getElementById(id).addEventListener('change', recalculate);
 });
-document.getElementById('tax-year').addEventListener('change', function() {
-  const yr = this.value;
-  if (Object.keys(flexYearlyResults).length > 0) {
-    applyFlexYear(yr);
-  } else {
-    recalculate();
-  }
+['change','blur'].forEach(evt => {
+  document.getElementById('tax-year').addEventListener(evt, function() {
+    const yr = this.value.trim();
+    if (!yr || yr.length < 4) return;
+    if (Object.keys(flexYearlyResults).length > 0) {
+      applyFlexYear(yr);
+    } else {
+      recalculate();
+    }
+  });
 });
 
 // Init: API-Key aus sessionStorage
