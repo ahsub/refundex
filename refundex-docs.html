@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refundex — Dokumentation</title>
+<style>
+  :root {
+    --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
+    --text:#e8eaf0; --muted:#7a85a0; --accent:#4f8ef7;
+    --green:#22c55e; --green-bg:#0d2a1a;
+    --amber:#f59e0b; --amber-bg:#2a1f08;
+    --red:#ef4444;
+    --radius:10px; --mono:'JetBrains Mono','Fira Mono',monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter','Segoe UI',sans-serif;
+         font-size:15px; line-height:1.7; }
+
+  /* NAV */
+  .nav { background:var(--bg2); border-bottom:1px solid var(--border);
+         padding:0.75rem 2rem; display:flex; align-items:center; gap:2rem;
+         position:sticky; top:0; z-index:100; }
+  .logo { font-size:1.2rem; font-weight:700; color:var(--accent); }
+  .logo span { color:var(--muted); font-weight:400; font-size:0.85rem; }
+  .nav-links { display:flex; gap:1.5rem; }
+  .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; }
+  .nav-links a:hover { color:var(--text); }
+
+  /* LAYOUT */
+  .layout { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+
+  /* SIDEBAR */
+  .sidebar { background:var(--bg2); border-right:1px solid var(--border);
+             padding:2rem 1rem; position:sticky; top:57px; height:calc(100vh - 57px);
+             overflow-y:auto; }
+  .sidebar-section { margin-bottom:1.5rem; }
+  .sidebar-title { font-size:11px; font-weight:700; color:var(--muted);
+                   text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem; }
+  .sidebar-link { display:block; padding:0.35rem 0.75rem; color:var(--muted);
+                  text-decoration:none; border-radius:6px; font-size:13px;
+                  transition:all 0.15s; }
+  .sidebar-link:hover, .sidebar-link.active { background:var(--bg3); color:var(--text); }
+
+  /* CONTENT */
+  .content { padding:3rem 4rem; max-width:900px; }
+
+  /* SECTIONS */
+  .doc-section { margin-bottom:4rem; scroll-margin-top:80px; }
+  h1 { font-size:2rem; margin-bottom:0.5rem; }
+  h2 { font-size:1.4rem; margin-bottom:1rem; margin-top:2.5rem;
+       padding-bottom:0.5rem; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1rem; margin-bottom:0.75rem; margin-top:1.5rem; color:var(--accent); }
+  p  { margin-bottom:1rem; color:#c5c9d8; }
+
+  /* BADGE */
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px;
+           font-size:11px; font-weight:700; margin-left:0.5rem; }
+  .badge-green  { background:var(--green-bg); color:var(--green); border:1px solid var(--green); }
+  .badge-amber  { background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber); }
+  .badge-blue   { background:#0d1a3a; color:var(--accent); border:1px solid var(--accent); }
+
+  /* CODE */
+  pre { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);
+        padding:1rem 1.25rem; overflow-x:auto; margin-bottom:1rem; }
+  code { font-family:var(--mono); font-size:13px; color:#a8d8a8; }
+  p code, li code { background:var(--bg3); padding:1px 5px; border-radius:3px;
+                    color:var(--accent); font-family:var(--mono); font-size:13px; }
+
+  /* PROMPT BOX */
+  .prompt-box { background:var(--green-bg); border:1px solid var(--green);
+                border-radius:var(--radius); padding:1.25rem 1.5rem; margin:1rem 0; }
+  .prompt-box .prompt-label { font-size:11px; color:var(--green); font-weight:700;
+                               text-transform:uppercase; margin-bottom:0.5rem; }
+  .prompt-box .prompt-text { font-family:var(--mono); font-size:13px; color:var(--text);
+                              line-height:1.6; }
+  .prompt-chars { font-size:11px; color:var(--muted); margin-top:0.5rem; }
+
+  /* STEPS */
+  .steps { counter-reset:step; }
+  .step { display:flex; gap:1rem; margin-bottom:1.25rem; align-items:flex-start; }
+  .step-num { background:var(--accent); color:#fff; width:26px; height:26px;
+              border-radius:50%; display:flex; align-items:center; justify-content:center;
+              font-size:13px; font-weight:700; flex-shrink:0; margin-top:2px; }
+  .step-content { flex:1; }
+  .step-content strong { color:var(--text); }
+
+  /* TABLE */
+  table { width:100%; border-collapse:collapse; margin-bottom:1.5rem; font-size:14px; }
+  th { background:var(--bg3); color:var(--muted); padding:0.5rem 0.75rem;
+       text-align:left; border-bottom:1px solid var(--border); font-weight:600; }
+  td { padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); color:#c5c9d8; }
+  tr:hover td { background:var(--bg3); }
+
+  /* INFO BOX */
+  .info  { background:#0d1a3a; border-left:3px solid var(--accent);
+           padding:0.75rem 1rem; border-radius:0 6px 6px 0; margin:1rem 0; color:#c5c9d8; }
+  .warn  { background:var(--amber-bg); border-left:3px solid var(--amber);
+           padding:0.75rem 1rem; border-radius:0 6px 6px 0; margin:1rem 0; color:#c5c9d8; }
+  .tip   { background:var(--green-bg); border-left:3px solid var(--green);
+           padding:0.75rem 1rem; border-radius:0 6px 6px 0; margin:1rem 0; color:#c5c9d8; }
+
+  /* FIELD LIST */
+  .field-list { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin:0.75rem 0; }
+  .field-item { background:var(--bg3); padding:0.3rem 0.6rem; border-radius:4px;
+                font-family:var(--mono); font-size:12px; color:var(--accent); }
+  .field-item.required { border-left:2px solid var(--green); }
+  .field-item.optional { border-left:2px solid var(--amber); opacity:0.7; }
+
+  ul, ol { padding-left:1.5rem; margin-bottom:1rem; color:#c5c9d8; }
+  li { margin-bottom:0.4rem; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">Refundex <span>Dokumentation</span></div>
+  <div class="nav-links">
+    <a href="kap.html">← KAP-Assistent</a>
+    <a href="index.html">Dashboard</a>
+    <a href="https://github.com/ahsub/refundex" target="_blank">GitHub ↗</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Einstieg</div>
+      <a href="#uebersicht" class="sidebar-link active">Übersicht</a>
+      <a href="#voraussetzungen" class="sidebar-link">Voraussetzungen</a>
+      <a href="#schnellstart" class="sidebar-link">Schnellstart</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Flex Query</div>
+      <a href="#flex-intro" class="sidebar-link">Was ist eine Flex Query?</a>
+      <a href="#flex-einrichten" class="sidebar-link">Flex Query einrichten</a>
+      <a href="#flex-prompt" class="sidebar-link">KI-Prompt</a>
+      <a href="#flex-felder" class="sidebar-link">Felder-Referenz</a>
+      <a href="#flex-export" class="sidebar-link">Export & Upload</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">KAP-Assistent</div>
+      <a href="#kap-uebersicht" class="sidebar-link">Übersicht</a>
+      <a href="#kap-steuerjahr" class="sidebar-link">Steuerjahr wählen</a>
+      <a href="#kap-ergebnisse" class="sidebar-link">Ergebnisse lesen</a>
+      <a href="#kap-docx" class="sidebar-link">DOCX herunterladen</a>
+      <a href="#kap-gemeinschaft" class="sidebar-link">Gemeinschaftskonto</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Module</div>
+      <a href="#module-flex" class="sidebar-link">ko-flex.js</a>
+      <a href="#module-fifo" class="sidebar-link">ko-fifo.js</a>
+      <a href="#module-fx" class="sidebar-link">ko-fx.js</a>
+      <a href="#module-dba" class="sidebar-link">ko-dba.js</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Rechtliches</div>
+      <a href="#steuerrecht" class="sidebar-link">§20 EStG Grundlagen</a>
+      <a href="#haftung" class="sidebar-link">Haftungsausschluss</a>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="content">
+
+    <!-- ÜBERSICHT -->
+    <section class="doc-section" id="uebersicht">
+      <h1>Refundex <span class="badge badge-green">v111</span></h1>
+      <p>Refundex ist ein browserbasiertes Steuerhilfe-Tool für IBKR/CapTrader-Kunden. Alle Berechnungen laufen <strong>lokal auf Ihrem Gerät</strong> — keine Daten verlassen Ihren Browser.</p>
+
+      <table>
+        <tr><th>Modul</th><th>Funktion</th><th>Status</th></tr>
+        <tr><td>KAP-Assistent</td><td>Anlage KAP Vorberechnung aus Flex Query</td><td><span class="badge badge-green">Stabil</span></td></tr>
+        <tr><td>Quellensteuer-Dashboard</td><td>DBA-Analyse, Rückforderungsformulare</td><td><span class="badge badge-green">Stabil</span></td></tr>
+        <tr><td>ko-flex.js</td><td>Flex Query CSV Parser</td><td><span class="badge badge-green">v1.2</span></td></tr>
+        <tr><td>ko-fifo.js</td><td>FIFO-Engine §20 EStG</td><td><span class="badge badge-amber">Beta</span></td></tr>
+        <tr><td>ko-fx.js</td><td>EZB-Tageskurse</td><td><span class="badge badge-green">Stabil</span></td></tr>
+        <tr><td>ko-dba.js</td><td>DBA-Datenbank 18 Länder</td><td><span class="badge badge-green">Stabil</span></td></tr>
+      </table>
+
+      <div class="info">
+        <strong>Datenschutz:</strong> Refundex verarbeitet alle Steuerdaten lokal im Browser. Es werden keine Finanzdaten an externe Server übertragen.
+      </div>
+    </section>
+
+    <!-- VORAUSSETZUNGEN -->
+    <section class="doc-section" id="voraussetzungen">
+      <h2>Voraussetzungen</h2>
+      <ul>
+        <li>CapTrader oder IBKR Konto (Kontoumsatz-Flex-Query Berechtigung)</li>
+        <li>Moderner Browser (Chrome, Firefox, Safari, Edge)</li>
+        <li>Keine Installation erforderlich</li>
+      </ul>
+    </section>
+
+    <!-- SCHNELLSTART -->
+    <section class="doc-section" id="schnellstart">
+      <h2>Schnellstart</h2>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-content">
+          <strong>Flex Query in CapTrader erstellen</strong> — einmalige Einrichtung, danach wiederverwendbar. <a href="#flex-einrichten" style="color:var(--accent)">Anleitung →</a>
+        </div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-content">
+          <strong>CSV exportieren</strong> — für jedes Steuerjahr eine Datei. Alle Jahre können gleichzeitig hochgeladen werden.
+        </div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-content">
+          <strong>KAP-Assistent öffnen</strong> und CSV(s) in die Upload-Zone ziehen.
+        </div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-content">
+          <strong>Steuerjahr wählen</strong> und Ergebnisse prüfen. Bei Gemeinschaftskonto: Kontoart auf "50/50" stellen.
+        </div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-content">
+          <strong>DOCX herunterladen</strong> — fertige Begleitdokumentation für das Finanzamt.
+        </div></div>
+      </div>
+    </section>
+
+    <!-- FLEX INTRO -->
+    <section class="doc-section" id="flex-intro">
+      <h2>Was ist eine Flex Query?</h2>
+      <p>Eine Flex Query ist ein konfigurierbarer Datenexport von IBKR/CapTrader. Im Gegensatz zum Standard-Jahresauszug enthält sie <strong>exakte IBKR-Tageskurse</strong> und den bereits berechneten <strong>FIFO-Gewinn/Verlust</strong> je Trade.</p>
+
+      <table>
+        <tr><th>Datenquelle</th><th>Kursgenauigkeit</th><th>FIFO</th><th>Empfehlung</th></tr>
+        <tr><td>Jahresauszug CSV</td><td>Jahresdurchschnitt ~</td><td>❌ Nein</td><td>Legacy</td></tr>
+        <tr><td>Dividenden HTML</td><td>EZB-Tageskurs</td><td>—</td><td>Legacy</td></tr>
+        <tr><td><strong>Flex Query CSV</strong></td><td><strong>IBKR-Tageskurs ✅</strong></td><td><strong>✅ Ja</strong></td><td><strong>Empfohlen</strong></td></tr>
+      </table>
+    </section>
+
+    <!-- FLEX EINRICHTEN -->
+    <section class="doc-section" id="flex-einrichten">
+      <h2>Flex Query einrichten</h2>
+      <div class="tip">Einmalige Einrichtung — danach können Sie die Query für jedes Steuerjahr neu ausführen.</div>
+
+      <h3>Schritt-für-Schritt (CapTrader Web)</h3>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-content">
+          <strong>Login</strong> auf <code>clientam.com</code> → <strong>Performance &amp; Berichte</strong> → <strong>Flex Queries</strong>
+        </div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-content">
+          <strong>Kontoumsatz-Flex-Query</strong> → <strong>+</strong> (Neu erstellen) oder bestehende Query bearbeiten
+        </div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-content">
+          <strong>KI-Assistent verwenden</strong> — Prompt eingeben (siehe unten) oder Felder manuell konfigurieren
+        </div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-content">
+          <strong>Format: CSV</strong> · Spaltenüberschriften: Ja · Abschnittscodes: Nein
+        </div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-content">
+          <strong>Zeitraum: Benutzerdefiniert</strong> — z.B. 01.01.2024 bis 31.12.2024
+        </div></div>
+        <div class="step"><div class="step-num">6</div><div class="step-content">
+          <strong>Speichern &amp; Ausführen</strong> — CSV herunterladen
+        </div></div>
+      </div>
+    </section>
+
+    <!-- FLEX PROMPT -->
+    <section class="doc-section" id="flex-prompt">
+      <h2>KI-Prompt für Flex Query</h2>
+      <p>Kopieren Sie diesen Prompt in den KI-Assistenten von CapTrader:</p>
+
+      <div class="prompt-box">
+        <div class="prompt-label">✦ Empfohlener Prompt</div>
+        <div class="prompt-text">Flex Query: Account Information (Name, AccountType) + Trades (FifoPnlRealized, FXRateToBase, CostBasis, OpenCloseIndicator, AssetClass, ISIN, Multiplier, Put/Call, Strike, Expiry) + Cash Transactions (Dividenden, WHT, Zinsen). CSV.</div>
+        <div class="prompt-chars">197 Zeichen</div>
+      </div>
+
+      <div class="info">
+        <strong>Account Information</strong> ermöglicht die automatische Erkennung von Einzel- vs. Gemeinschaftskonten und der Kontoinhaber-Namen direkt aus der CSV.
+      </div>
+
+      <h3>Was der Prompt liefert</h3>
+      <table>
+        <tr><th>Section</th><th>Inhalt</th><th>Verwendet für</th></tr>
+        <tr><td>Account Information</td><td>Name, Kontotyp</td><td>Konto-Erkennung, DOCX-Header</td></tr>
+        <tr><td>Trades</td><td>Alle Käufe/Verkäufe mit FIFO-G/V</td><td>Z.8/9/12/13 Anlage KAP</td></tr>
+        <tr><td>Cash Transactions</td><td>Dividenden, WHT, Zinsen</td><td>Z.7/14/41 Anlage KAP</td></tr>
+      </table>
+    </section>
+
+    <!-- FLEX FELDER -->
+    <section class="doc-section" id="flex-felder">
+      <h2>Felder-Referenz</h2>
+      <h3>Pflichtfelder <span class="badge badge-green">Trades</span></h3>
+      <div class="field-list">
+        <div class="field-item required">TradeDate</div>
+        <div class="field-item required">Buy/Sell</div>
+        <div class="field-item required">Open/CloseIndicator</div>
+        <div class="field-item required">Symbol</div>
+        <div class="field-item required">AssetClass</div>
+        <div class="field-item required">CurrencyPrimary</div>
+        <div class="field-item required">Quantity</div>
+        <div class="field-item required">Proceeds</div>
+        <div class="field-item required">FXRateToBase</div>
+        <div class="field-item required">FifoPnlRealized</div>
+        <div class="field-item required">CostBasis</div>
+        <div class="field-item required">IBCommission</div>
+      </div>
+
+      <h3>Optionsfelder <span class="badge badge-amber">Trades</span></h3>
+      <div class="field-list">
+        <div class="field-item optional">Multiplier</div>
+        <div class="field-item optional">Put/Call</div>
+        <div class="field-item optional">Strike</div>
+        <div class="field-item optional">Expiry</div>
+        <div class="field-item optional">UnderlyingSymbol</div>
+        <div class="field-item optional">ISIN</div>
+        <div class="field-item optional">Notes/Codes</div>
+      </div>
+
+      <h3>Cash Transactions</h3>
+      <table>
+        <tr><th>Type</th><th>Bedeutung</th><th>KAP-Zeile</th></tr>
+        <tr><td><code>Dividends</code></td><td>Bardividenden</td><td>Z.7</td></tr>
+        <tr><td><code>Payment In Lieu Of Dividends</code></td><td>Ersatzdividenden (Leerverkauf)</td><td>Z.7</td></tr>
+        <tr><td><code>Withholding Tax</code></td><td>Ausländische Quellensteuer</td><td>Z.41</td></tr>
+        <tr><td><code>Broker Interest Received</code></td><td>Guthabenzinsen</td><td>Z.14</td></tr>
+        <tr><td><code>Broker Interest Paid</code></td><td>Sollzinsen (Margin)</td><td>—</td></tr>
+      </table>
+    </section>
+
+    <!-- FLEX EXPORT -->
+    <section class="doc-section" id="flex-export">
+      <h2>Export &amp; Upload</h2>
+      <p>Exportieren Sie für jedes Steuerjahr eine separate CSV-Datei. Der KAP-Assistent erkennt das Jahr automatisch.</p>
+
+      <div class="tip">
+        <strong>Tipp:</strong> Alle Jahres-CSVs können gleichzeitig in die Upload-Zone gezogen werden. Refundex kombiniert die Daten automatisch.
+      </div>
+
+      <h3>Dateinamen-Konvention</h3>
+      <pre><code>Trades_Cash_Transactions_2023.csv
+Trades_Cash_Transactions_2024.csv
+Trades_Cash_Transactions_2025.csv</code></pre>
+    </section>
+
+    <!-- KAP ÜBERSICHT -->
+    <section class="doc-section" id="kap-uebersicht">
+      <h2>KAP-Assistent — Übersicht</h2>
+      <p>Der KAP-Assistent berechnet alle relevanten Zeilen der <strong>Anlage KAP</strong> aus Ihren Flex Query Daten.</p>
+
+      <table>
+        <tr><th>KAP-Zeile</th><th>Bezeichnung</th><th>Quelle</th></tr>
+        <tr><td>Z.7</td><td>Kapitalerträge (Dividenden)</td><td>Cash Transactions</td></tr>
+        <tr><td>Z.8</td><td>Gewinne aus Aktienveräußerung</td><td>Trades FifoPnL</td></tr>
+        <tr><td>Z.9</td><td>Verluste aus Aktienveräußerung</td><td>Trades FifoPnL</td></tr>
+        <tr><td>Z.12</td><td>Termingeschäftsgewinne</td><td>Trades FifoPnL</td></tr>
+        <tr><td>Z.13</td><td>Termingeschäftsverluste §20 Abs.6</td><td>Trades FifoPnL</td></tr>
+        <tr><td>Z.14</td><td>Zinserträge</td><td>Cash Transactions</td></tr>
+        <tr><td>Z.17</td><td>Freistellungsauftrag</td><td>Manuell</td></tr>
+        <tr><td>Z.41</td><td>Anrechenbare Quellensteuer</td><td>Cash Transactions</td></tr>
+      </table>
+    </section>
+
+    <!-- KAP GEMEINSCHAFT -->
+    <section class="doc-section" id="kap-gemeinschaft">
+      <h2>Gemeinschaftskonto</h2>
+      <p>Bei gemeinsamen Depots (Ehegatten, GbR) teilt Refundex alle Beträge automatisch hälftig auf.</p>
+
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-content">
+          <strong>Kontoart</strong> auf "Gemeinschaftskonto 50/50" stellen
+        </div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-content">
+          <strong>Ehegatte</strong> auswählen (Inhaber 1 oder Inhaber 2)
+        </div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-content">
+          Refundex erstellt beim Download <strong>zwei separate DOCX-Dokumente</strong> — eines pro Steuerpflichtigen
+        </div></div>
+      </div>
+
+      <div class="info">
+        Nach dem Update des Flex Query Prompts um "Account Information" erkennt Refundex Gemeinschaftskonten automatisch am Schlüsselwort <code>AND</code> im Kontonamen (z.B. "AXEL HILDEBRAND AND CHRISTA F HILDEBRAND").
+      </div>
+    </section>
+
+    <!-- MODULE -->
+    <section class="doc-section" id="module-flex">
+      <h2>ko-flex.js <span class="badge badge-green">v1.2</span></h2>
+      <p>Parser für alle CapTrader/IBKR Flex Query Formate.</p>
+      <pre><code>// Verwendung
+import { parseFlexFile } from './modules/ko-flex.js';
+
+const result = parseFlexFile(csvText);
+// result.format: 'ki_flex_cash_csv' | 'ki_flex_csv' | 'lots_csv' | ...
+// result.yearlyResults['2024'].z7_dividenden → €
+// result.yearlyResults['2024'].stkGainEur    → €</code></pre>
+
+      <h3>Unterstützte Formate</h3>
+      <table>
+        <tr><th>Format</th><th>Erkennung</th><th>Inhalt</th></tr>
+        <tr><td><code>ki_flex_cash_csv</code></td><td>Dividends/WHT vorhanden</td><td>Trades + Cash ✅</td></tr>
+        <tr><td><code>ki_flex_csv</code></td><td>ClientAccountID + FXRateToBase</td><td>Nur Trades</td></tr>
+        <tr><td><code>lots_csv</code></td><td>"Symbol","Description","Quantity"</td><td>Offene Positionen</td></tr>
+        <tr><td><code>kontoauszug</code></td><td>Wechselkurs der Basiswährung</td><td>Tageskurse</td></tr>
+      </table>
+    </section>
+
+    <section class="doc-section" id="module-fifo">
+      <h2>ko-fifo.js <span class="badge badge-amber">Beta</span></h2>
+      <p>FIFO-Engine nach §20 Abs.4 Satz 7 EStG. Berechnet Verlustverrechnungstöpfe aus Trade-Historien.</p>
+      <div class="warn">
+        <strong>Hinweis:</strong> Bei Verwendung der Flex Query mit <code>FifoPnlRealized</code> wird ko-fifo.js nicht mehr benötigt — IBKR liefert den FIFO-G/V direkt.
+      </div>
+    </section>
+
+    <section class="doc-section" id="module-fx">
+      <h2>ko-fx.js</h2>
+      <p>Lädt EZB-Tageskurse via Frankfurter.app API (CORS-Proxy). Wird als Fallback verwendet wenn kein <code>FXRateToBase</code> in der Flex Query vorhanden ist.</p>
+    </section>
+
+    <section class="doc-section" id="module-dba">
+      <h2>ko-dba.js</h2>
+      <p>Datenbank der Doppelbesteuerungsabkommen für 18 Länder. Berechnet den maximal anrechenbaren Quellensteuersatz je Land für die Anlage KAP Z.41.</p>
+    </section>
+
+    <!-- STEUERRECHT -->
+    <section class="doc-section" id="steuerrecht">
+      <h2>§20 EStG Grundlagen</h2>
+      <table>
+        <tr><th>Topf</th><th>Einkunftsart</th><th>Gesetz</th><th>Verlustausgleich</th></tr>
+        <tr><td>Topf 1</td><td>Dividenden, Zinsen, Stillhalterprämien</td><td>§20 Abs.1</td><td>Intern unbeschränkt</td></tr>
+        <tr><td>Topf 2</td><td>Aktienveräußerungsgewinne/-verluste</td><td>§20 Abs.2 Nr.1</td><td>Nur mit Topf 2</td></tr>
+        <tr><td>Topf 3</td><td>Termingeschäfte (Optionen Long, Futures)</td><td>§20 Abs.6 Satz 5</td><td>Max. €20.000/Jahr</td></tr>
+      </table>
+    </section>
+
+    <!-- HAFTUNG -->
+    <section class="doc-section" id="haftung">
+      <h2>Haftungsausschluss</h2>
+      <div class="warn">
+        Refundex ist ein <strong>Hilfsmittel zur Vorbereitung</strong> der Steuererklärung, kein steuerrechtliches Beratungsinstrument. Die berechneten Werte sind eine Vorabschätzung auf Basis der IBKR-Daten. Für die korrekte steuerliche Behandlung ist ein Steuerberater hinzuzuziehen, insbesondere bei:
+        <ul style="margin-top:0.5rem">
+          <li>Call/Put Assignments und deren Behandlung als Z.8 oder Z.12</li>
+          <li>Vorabpauschale auf ETFs (§18 InvStG)</li>
+          <li>Gold-ETCs (§23 EStG)</li>
+          <li>Verlustvorträgen aus Vorjahren</li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+// Aktiven Sidebar-Link beim Scrollen hervorheben
+const sections = document.querySelectorAll('.doc-section');
+const links    = document.querySelectorAll('.sidebar-link');
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.sidebar-link[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
