@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v120</title>
+<title>Refundex — KAP-Assistent v121</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -20967,6 +20967,7 @@ let flexYearlyResults = {};
 let flexKontoName     = '';
 let flexIsJoint       = false;
 let flexInhaber       = [];
+let flexUploadedFiles = [];  // File-Referenzen für Reload bei Steuerjahr-Wechsel
 let fxLoadStatus = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
 function toEur(amount, currency, year, date) {
   if (!amount || currency === 'EUR') return amount || 0;
@@ -21518,6 +21519,8 @@ function splitLine(line) {
 async function onFileFlex(event) {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
+  // File-Referenzen für späteren Reload merken (akkumulieren nach Jahr)
+  flexUploadedFiles = files;
   const el = document.getElementById('status-flex');
   el.textContent = `⏳ ${files.length} Datei(en) werden geparst…`;
   el.style.color = 'var(--amber)';
@@ -21694,16 +21697,22 @@ function onTaxYearRefresh() {
   const availYears = Object.keys(flexYearlyResults);
   if (availYears.length > 0) {
     if (!flexYearlyResults[year]) {
-      // Jahr nicht geladen — Benutzer informieren
+      // Jahr nicht geladen → Banner mit Upload-Button anzeigen
       const banner = document.getElementById('flex-info');
       if (banner) {
         banner.style.display = 'block';
         banner.style.background = 'rgba(204,102,0,0.15)';
         banner.style.borderColor = '#CC6600';
-        banner.innerHTML = `<strong>⚠ Steuerjahr ${year} nicht geladen</strong>
+        banner.innerHTML = `
+          <strong>⚠ Flex Query ${year} nicht geladen</strong>
           <span style="margin-left:0.8rem;color:var(--muted)">
-            Verfügbar: ${availYears.sort().join(', ')} — bitte passende Flex-Query hochladen
-          </span>`;
+            Geladen: ${availYears.sort().join(', ')}
+          </span>
+          <button onclick="loadFlexYearFile('${year}')"
+            style="margin-left:1rem;padding:0.25rem 0.8rem;background:#CC6600;color:#fff;
+                   border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">
+            📂 Flex Query ${year} laden
+          </button>`;
       }
       return;
     }
@@ -21711,6 +21720,70 @@ function onTaxYearRefresh() {
   } else {
     recalculate();
   }
+}
+
+// Öffnet Datei-Dialog und lädt neue Flex-Query ZUSÄTZLICH zu bestehenden Jahren
+function loadFlexYearFile(targetYear) {
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.accept = '.csv';
+  picker.multiple = true;
+  picker.onchange = async function() {
+    const newFiles = Array.from(this.files || []);
+    if (!newFiles.length) return;
+
+    const banner = document.getElementById('flex-info');
+    if (banner) banner.innerHTML = `<strong>⏳ Flex Query wird geparst…</strong>`;
+
+    try {
+      if (!window.koFlex) {
+        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1296b1e/modules/ko-flex.js');
+        window.koFlex = mod;
+      }
+
+      for (const file of newFiles) {
+        const text   = await file.text();
+        const result = window.koFlex.parseFlexFile(text);
+        if (!result || result.format === 'unknown') continue;
+
+        // Konto-Info übernehmen falls noch nicht gesetzt
+        if (!flexKontoName && result.kontoName) {
+          flexKontoName = result.kontoName;
+          flexIsJoint   = result.isJoint || false;
+          flexInhaber   = result.inhaber || [result.kontoName];
+        }
+
+        // Jahre zu flexYearlyResults hinzufügen (bestehende nicht überschreiben)
+        for (const [yr, data] of Object.entries(result.yearlyResults || {})) {
+          flexYearlyResults[yr] = { ...data };
+        }
+      }
+
+      // Gewünschtes Jahr jetzt verfügbar?
+      if (flexYearlyResults[targetYear]) {
+        // Steuerjahr-Feld sicherstellen
+        const tyEl = document.getElementById('tax-year');
+        if (tyEl) tyEl.value = targetYear;
+        // Banner zurücksetzen
+        if (banner) {
+          banner.style.background = '';
+          banner.style.borderColor = '';
+        }
+        applyFlexYear(targetYear);
+      } else {
+        const available = Object.keys(flexYearlyResults).sort();
+        if (banner) {
+          banner.innerHTML = `<strong>⚠ Jahr ${targetYear} nicht in Datei gefunden</strong>
+            <span style="margin-left:0.8rem;color:var(--muted)">
+              Verfügbar: ${available.join(', ')}
+            </span>`;
+        }
+      }
+    } catch(err) {
+      if (banner) banner.innerHTML = `<strong>❌ Fehler: ${err.message}</strong>`;
+    }
+  };
+  picker.click();
 }
 
 // ── STEUERJAHR WECHSEL ────────────────────────────────────────
@@ -22327,10 +22400,16 @@ async function buildDOCXinBrowser(data) {
           banner.style.display = 'block';
           banner.style.background = 'rgba(204,102,0,0.15)';
           banner.style.borderColor = '#CC6600';
-          banner.innerHTML = `<strong>⚠ Steuerjahr ${yr} nicht geladen</strong>
+          banner.innerHTML = `
+            <strong>⚠ Flex Query ${yr} nicht geladen</strong>
             <span style="margin-left:0.8rem;color:var(--muted)">
-              Verfügbar: ${availYears.sort().join(', ')} — bitte passende Flex-Query hochladen
-            </span>`;
+              Geladen: ${availYears.sort().join(', ')}
+            </span>
+            <button onclick="loadFlexYearFile('${yr}')"
+              style="margin-left:1rem;padding:0.25rem 0.8rem;background:#CC6600;color:#fff;
+                     border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">
+              📂 Flex Query ${yr} laden
+            </button>`;
         }
         return;
       }
