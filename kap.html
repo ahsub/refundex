@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v108</title>
+<title>Refundex — KAP-Assistent v111</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -172,7 +172,7 @@
   <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)">
   <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)">
   <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)">
-  <input type="file" id="file-flex" accept=".csv" onchange="onFileFlex(event)">
+  <input type="file" id="file-flex" accept=".csv" multiple onchange="onFileFlex(event)">
 
   <!-- FLEX INFO BANNER -->
   <div id="flex-info" style="display:none;margin-bottom:1rem;padding:0.75rem 1rem;background:var(--green-bg);border:1px solid #1a6040;border-radius:8px;font-size:13px;color:var(--text)">
@@ -21507,69 +21507,144 @@ function splitLine(line) {
 // ============================================================
 // ── FLEX QUERY CSV UPLOAD ─────────────────────────────────────
 async function onFileFlex(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
   const el = document.getElementById('status-flex');
-  el.textContent = '⏳ Wird geparst…';
+  el.textContent = `⏳ ${files.length} Datei(en) werden geparst…`;
   el.style.color = 'var(--amber)';
 
   try {
-    const text = await file.text();
-
-    // Ko-flex.js Modul laden (falls noch nicht geladen)
+    // ko-flex.js laden
     if (!window.koFlex) {
       const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@main/modules/ko-flex.js');
       window.koFlex = mod;
     }
 
-    const result = window.koFlex.parseFlexFile(text);
-    if (!result || result.format === 'unknown') throw new Error('Unbekanntes Format');
+    // Alle Dateien parsen und nach Jahr zusammenführen
+    const allYearlyResults = {};
+    let accountId   = '';
+    let kontoName   = '';
+    let totalTrades = 0;
+    let totalDivs   = 0;
+    let allCash     = { dividenden:[], quellensteuer:[], zinsen:[] };
+    let format      = '';
+
+    for (const file of files) {
+      const text = await file.text();
+      const result = window.koFlex.parseFlexFile(text);
+      if (!result || result.format === 'unknown') continue;
+
+      format = result.format;
+      if (result.accountId) accountId = result.accountId;
+
+      // Konto-Info extrahieren (falls vorhanden)
+      if (result.kontoName) kontoName = result.kontoName;
+      if (result.isJoint !== undefined && !kontoName) {
+        kontoName = result.kontoName || '';
+      }
+
+      // Jahres-Ergebnisse zusammenführen
+      for (const [year, yr] of Object.entries(result.yearlyResults || {})) {
+        if (!allYearlyResults[year]) {
+          allYearlyResults[year] = yr;
+        } else {
+          // Gleiche Jahre aus mehreren Dateien: addieren
+          const e = allYearlyResults[year];
+          e.stkGainEur  = (e.stkGainEur||0)  + (yr.stkGainEur||0);
+          e.stkLossEur  = (e.stkLossEur||0)  + (yr.stkLossEur||0);
+          e.optGainEur  = (e.optGainEur||0)  + (yr.optGainEur||0);
+          e.optLossEur  = (e.optLossEur||0)  + (yr.optLossEur||0);
+          if (yr.divEur !== undefined) {
+            e.divEur  = (e.divEur||0)  + (yr.divEur||0);
+            e.whtEur  = (e.whtEur||0)  + (yr.whtEur||0);
+            e.intEur  = (e.intEur||0)  + (yr.intEur||0);
+            e.z7_dividenden     = (e.z7_dividenden||0)     + (yr.z7_dividenden||0);
+            e.z41_quellensteuer = (e.z41_quellensteuer||0) + (yr.z41_quellensteuer||0);
+            e.z14_zinsen        = (e.z14_zinsen||0)        + (yr.z14_zinsen||0);
+          }
+        }
+      }
+
+      totalTrades += result.trades?.length || 0;
+      totalDivs   += result.cashTransactions?.dividenden?.length || 0;
+      if (result.cashTransactions) {
+        allCash.dividenden    = allCash.dividenden.concat(result.cashTransactions.dividenden || []);
+        allCash.quellensteuer = allCash.quellensteuer.concat(result.cashTransactions.quellensteuer || []);
+        allCash.zinsen        = allCash.zinsen.concat(result.cashTransactions.zinsen || []);
+      }
+    }
 
     // Steuerjahr aus UI
-    const year = document.getElementById('tax-year')?.value || new Date().getFullYear() - 1;
-    const yr   = result.yearlyResults?.[year];
+    const year = document.getElementById('tax-year')?.value || String(new Date().getFullYear() - 1);
+    const yr   = allYearlyResults[year];
 
     if (!yr) {
-      // Zeige verfügbare Jahre
-      const years = Object.keys(result.yearlyResults || {}).sort();
+      const years = Object.keys(allYearlyResults).sort();
       el.textContent = `⚠️ Kein ${year} — verfügbar: ${years.join(', ')}`;
       el.style.color = 'var(--amber)';
       return;
     }
 
-    // rawData mit Flex-Daten ergänzen
-    if (!rawData) rawData = { kontoName:'', kontoNr:'', year: String(year),
-      divEur:0, whtEur:0, zinsenGesamt:0,
+    // rawData initialisieren
+    if (!rawData) rawData = { kontoName:'', kontoNr:'', year:String(year),
+      divNAV:0, whtNAV:0, zinsenGesamt:0,
       optionen:{gain:0,loss:0}, aktien:{gain:0,loss:0}, fx:{gain:0,loss:0} };
 
-    // IBKR FifoPnlRealized × FXRateToBase direkt übernehmen
-    rawData.aktien.gain  = yr.stkGainEur;
-    rawData.aktien.loss  = Math.abs(yr.stkLossEur);
-    rawData.optionen.gain = yr.optGainEur;
-    rawData.optionen.loss = Math.abs(yr.optLossEur);
+    // G/V aus Trades
+    rawData.aktien.gain   = yr.stkGainEur  || 0;
+    rawData.aktien.loss   = yr.stkLossEur  ? Math.abs(yr.stkLossEur)  : 0;
+    rawData.optionen.gain = yr.optGainEur  || 0;
+    rawData.optionen.loss = yr.optLossEur  ? Math.abs(yr.optLossEur)  : 0;
+    rawData.flexDataEUR   = true;
 
-    // Konto-Info falls vorhanden
-    if (result.accountId) rawData.kontoNr = rawData.kontoNr || result.accountId;
+    // Cash Transactions
+    const isCash = yr.z7_dividenden !== undefined;
+    if (isCash) {
+      rawData.divEurFlex  = yr.z7_dividenden    || 0;
+      rawData.whtEurFlex  = yr.z41_quellensteuer || 0;
+      rawData.zinsenFlex  = yr.z14_zinsen        || 0;
+      rawData.flexCash    = true;
+    }
+
+    // Konto-Info
+    if (accountId) rawData.kontoNr = rawData.kontoNr || accountId;
+    rawData.year = String(year);
+
+    // Konto-Typ auto-erkennen aus Kontonamen (wenn verfügbar)
+    if (kontoName && kontoName.toUpperCase().includes(' AND ')) {
+      const acctEl = document.getElementById('account-type');
+      if (acctEl) acctEl.value = 'joint';
+      // Inhaber-Namen setzen
+      window._csvKontoName = kontoName;
+      rawData.kontoName = kontoName;
+      const parts = kontoName.split(/ AND /i).map(n => n.trim());
+      const spEl = document.getElementById('spouse-select');
+      // Spouse-Namen für DOCX
+    }
 
     // Status
-    const nTrades = result.trades?.length || 0;
-    el.textContent = `✅ ${nTrades} Trades · ${year} geladen`;
+    const years = Object.keys(allYearlyResults).sort();
+    el.textContent = isCash
+      ? `✅ ${files.length} Datei(en) · ${totalTrades} Trades · ${totalDivs} Div · Jahre: ${years.join(', ')}`
+      : `✅ ${files.length} Datei(en) · ${totalTrades} Trades · Jahre: ${years.join(', ')}`;
     el.style.color = 'var(--green)';
-
-    // Neuberechnung anstoßen
-    recalculate();
 
     // Info-Banner
     const banner = document.getElementById('flex-info');
     if (banner) {
+      const optSaldo = (yr.optGainEur||0) - Math.abs(yr.optLossEur||0);
       banner.style.display = 'block';
       banner.innerHTML = `
-        <strong>📈 Flex Query ${year}</strong> — IBKR FifoPnlRealized × FXRateToBase
-        <span style="margin-left:1rem">Aktien G/V: <strong style="color:var(--green)">€${yr.stkGainEur.toFixed(2)}</strong></span>
-        <span style="margin-left:1rem">Optionen G/V: <strong style="color:${yr.z20_saldo>=0?'var(--green)':'var(--red)'}">€${yr.z20_saldo.toFixed(2)}</strong></span>
-        <span style="margin-left:1rem">Trades: <strong>${nTrades}</strong></span>
+        <strong>📈 Flex Query ${year}</strong>
+        ${isCash ? `<span style="margin-left:0.8rem">Div: <strong style="color:var(--green)">€${(yr.z7_dividenden||0).toFixed(2)}</strong></span>` : ''}
+        <span style="margin-left:0.8rem">Aktien: <strong style="color:var(--green)">€${(yr.stkGainEur||0).toFixed(2)}</strong></span>
+        <span style="margin-left:0.8rem">Optionen: <strong style="color:${optSaldo>=0?'var(--green)':'var(--red)'}">€${optSaldo.toFixed(2)}</strong></span>
+        ${isCash ? `<span style="margin-left:0.8rem">Zinsen: <strong>€${(yr.z14_zinsen||0).toFixed(2)}</strong></span>` : ''}
+        <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">IBKR FifoPnL × FXRate · ${years.length} Jahr(e) geladen</span>
       `;
     }
+
+    recalculate();
 
   } catch (err) {
     el.textContent = '❌ ' + err.message;
@@ -21577,7 +21652,6 @@ async function onFileFlex(event) {
     console.error('Flex Query Fehler:', err);
   }
 }
-
 function recalculate() {
   if (!rawData && !pdfData) return;
   if (!rawData) { rawData = { kontoName:pdfData.kontoName||'',kontoNr:pdfData.kontoNr||'',year:pdfData.year||'',divNAV:0,whtNAV:0,zinsenGesamt:0,optionen:{gain:0,loss:0},aktien:{gain:0,loss:0},fx:{gain:0,loss:0} }; }
@@ -21621,35 +21695,29 @@ function recalculate() {
   }
 
   const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
-  const divEur = (_pdfDiv>0)
-    ? _pdfDiv*share
-    : (_hasExactRates && _exactDivEur>0)
-      ? _exactDivEur*share
-      : divData
-        ? divData.totalDivEur*share
-        : toEur(d.divNAV,'USD',year)*share;
-  const whtEur = (_pdfDiv>0)
-    ? (pdfData.creditableWht||0)*share
-    : (_hasExactRates && _exactWhtEur>0)
-      ? _exactWhtEur*share
-      : divData
-        ? divData.totalWhtEur*share
-        : toEur(d.whtNAV,'USD',year)*share;
+  const divEur = d.flexCash ? (d.divEurFlex||0)*share
+    : (_pdfDiv>0) ? _pdfDiv*share
+    : (_hasExactRates && _exactDivEur>0) ? _exactDivEur*share
+    : divData ? divData.totalDivEur*share
+    : toEur(d.divNAV,'USD',year)*share;
+  const whtEur = d.flexCash ? (d.whtEurFlex||0)*share
+    : (_pdfDiv>0) ? (pdfData.creditableWht||0)*share
+    : (_hasExactRates && _exactWhtEur>0) ? _exactWhtEur*share
+    : divData ? divData.totalWhtEur*share
+    : toEur(d.whtNAV,'USD',year)*share;
   const _fxExact = Object.keys(fxRateMap).length > 0;
-  const divSource = (_pdfDiv>0)
-    ? '(exakt PDF)'
-    : divData
-      ? '(exakt)'
-      : (_exactDivEur > 0)
-        ? (_fxExact ? '(EZB-Tageskurs)' : '(Jahresdurchschnitt)')
-        : '~';
+  const divSource = d.flexCash ? '(IBKR exakt)'
+    : (_pdfDiv>0) ? '(exakt PDF)'
+    : divData ? '(exakt)'
+    : (_exactDivEur > 0) ? (_fxExact ? '(EZB-Tageskurs)' : '(Jahresdurchschnitt)')
+    : '~';
 
-  const zinsEur = (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
+  const zinsEur = d.flexCash ? (d.zinsenFlex||0)*share : (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
   const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)*share : d.flexDataEUR ? (d.optionen.gain||0)*share : toEur(d.optionen.gain,'USD',year)*share;
   const optLoss = pdfData?.optLoss ? -Math.abs(pdfData.optLoss)*share : d.flexDataEUR ? -(d.optionen.loss||0)*share : toEur(d.optionen.loss,'USD',year)*share;  // negativ
   const optSaldo = optGain + optLoss;
-  const akGain   = toEur(d.aktien.gain, 'USD', year) * share;
-  const akLoss   = toEur(d.aktien.loss, 'USD', year) * share;
+  const akGain   = d.flexDataEUR ? (d.aktien?.gain||0)*share : toEur(d.aktien.gain,'USD',year)*share;
+  const akLoss   = d.flexDataEUR ? -(d.aktien?.loss||0)*share : toEur(d.aktien.loss,'USD',year)*share;
   const akSaldo  = akGain + akLoss;
   const fxGain   = fxData ? Math.max(0, fxData.total) * share : toEur(d.fx.gain, 'USD', year) * share;
   const fxLoss   = fxData ? Math.min(0, fxData.total) * share : toEur(d.fx.loss, 'USD', year) * share;
