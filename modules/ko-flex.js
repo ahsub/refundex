@@ -23,8 +23,16 @@
 export function detectFormat(text) {
   if (text.trim().startsWith('<?xml') || text.includes('<FlexQueryResponse'))
     return 'activity_xml';
+  // ki_flex_csv: CSV ohne BOF/BOS, mit ClientAccountID Header
+  if (text.includes('ClientAccountID') && text.includes('FXRateToBase') && text.includes('TradeDate'))
+    return 'ki_flex_csv';
+  // activity_flex_csv zuerst: enthält auch "Symbol" Sektion
+  if (text.includes('"BOF"') && text.includes('"BOS"') && text.includes('"TRNT"'))
+    return 'activity_flex_csv';
   if (text.includes('"Symbol","Description","Quantity","Multiplier"'))
     return 'lots_csv';
+  if (text.includes('Transaction History,Header') || text.includes('Transaction Type'))
+    return 'transaction_history';
   if (text.startsWith('Statement,Header') || text.includes('Wechselkurs der Basiswährung'))
     return 'kontoauszug';
   if (text.includes('TradeDate') && text.includes('BuySell'))
@@ -371,15 +379,642 @@ export function parseFlexFile(text) {
   switch (format) {
     case 'lots_csv':     return parseLotsCSV(text);
     case 'kontoauszug':  return parseKontoauszug(text);
-    case 'activity_xml': return { format, error: 'Activity XML Parser — coming soon' };
-    case 'activity_csv': return { format, error: 'Activity CSV Parser — coming soon' };
+    case 'ki_flex_csv':         return parseKiFlexCSV(text);
+    case 'activity_flex_csv':   return parseActivityFlexCSV(text);
+    case 'activity_xml':        return { format, error: 'Activity XML Parser — coming soon' };
+    case 'activity_csv':        return { format, error: 'Activity CSV Parser — coming soon' };
+    case 'transaction_history': return parseTransactionHistory(text);
     default: throw new Error('Unbekanntes Dateiformat. Bitte Flex Query CSV oder XML hochladen.');
   }
+}
+
+
+// ── TRANSACTION HISTORY CSV PARSER ───────────────────────────
+
+/**
+ * Parst den CapTrader "Transaction History" CSV Export.
+ * (Umsatzübersicht → Export als CSV)
+ *
+ * Vorteile gegenüber Jahresauszug CSV:
+ * - Transaction Type ist eindeutig (Buy/Sell/Assignment)
+ * - Kein Code-Rätselraten (O/C/A/Ep)
+ * - Leerverkäufe klar erkennbar
+ * - Assignment eindeutig (Put vs Call)
+ *
+ * @param {string} csvText
+ * @returns {TransactionResult}
+ */
+export function parseTransactionHistory(csvText) {
+  const lines = csvText.split(/\r?\n/);
+
+  // Header finden
+  const thIdx = lines.findIndex(l => l.startsWith('Transaction History,Header'));
+  if (thIdx < 0) throw new Error('Kein Transaction History Format erkannt');
+
+  // CSV parsen
+  const rows = [];
+  for (let i = thIdx; i < lines.length; i++) {
+    const row = splitCSVLine(lines[i]);
+    if (row[0] === 'Transaction History') rows.push(row);
+  }
+
+  const header = rows[0].slice(2).map(h => h.trim());
+  const rawData = rows.slice(1)
+    .filter(r => r[1] === 'Data')
+    .map(r => {
+      const obj = {};
+      header.forEach((h, i) => obj[h] = (r[i+2] || '').trim());
+      return obj;
+    });
+
+  // Trades klassifizieren
+  const trades = [];
+  const dividends = [];
+  const interest = [];
+
+  for (const d of rawData) {
+    const type = d['Transaction Type'] || '';
+    const sym  = d['Symbol'] || '';
+    const qty  = parseFloat(d['Quantity'] || '0') || 0;
+    const price = parseFloat(d['Price'] || '0') || 0;
+    const gross = parseFloat(d['Gross Amount'] || '0') || 0;
+    const comm  = parseFloat(d['Commission'] || '0') || 0;
+    const date  = d['Date'] || '';
+    const cur   = d['Price Currency'] || 'USD';
+    const desc  = d['Description'] || '';
+
+    // Option erkennen: Symbol länger als 6 Zeichen mit Ziffern
+    const isOption = sym.length > 8 && /\d/.test(sym);
+    const underlying = isOption ? sym.split(/\s+/)[0] : sym;
+
+    // Klassifizierung
+    let classification = '';
+    let assetClass = '';
+    let topf = '';
+
+    if (type === 'Buy' && !isOption) {
+      classification = qty > 0 ? 'stock_buy' : 'short_sell_cover';
+      assetClass = 'Aktien';
+      topf = '2_aktien';
+    } else if (type === 'Sell' && !isOption) {
+      classification = qty < 0 ? 'stock_sell' : 'short_sell_open';
+      assetClass = 'Aktien';
+      topf = '2_aktien';
+    } else if (type === 'Sell' && isOption && qty < 0) {
+      classification = 'short_option_open';  // Stillhalter
+      assetClass = 'Aktien- und Indexoptionen';
+      topf = '1_allgemein';
+    } else if (type === 'Buy' && isOption && qty > 0) {
+      classification = 'long_option_open';   // Termingeschäft
+      assetClass = 'Aktien- und Indexoptionen';
+      topf = '3_termin';
+    } else if (type === 'Buy' && isOption && qty < 0) {
+      classification = 'short_option_close'; // Glattstellung Short
+      assetClass = 'Aktien- und Indexoptionen';
+      topf = '1_allgemein';
+    } else if (type === 'Sell' && isOption && qty > 0) {
+      classification = 'long_option_close';  // Glattstellung Long
+      assetClass = 'Aktien- und Indexoptionen';
+      topf = '3_termin';
+    } else if (type === 'Assignment' && qty > 0) {
+      classification = 'put_assignment';     // Short Put ausgeübt → Aktien kaufen
+      assetClass = 'Aktien';
+      topf = '2_aktien';
+    } else if (type === 'Assignment' && qty < 0) {
+      classification = 'call_assignment';    // Short Call ausgeübt → Aktien liefern
+      assetClass = 'Aktien';
+      topf = '2_aktien';
+    } else if (type === 'Dividend' || type === 'Payment in Lieu') {
+      dividends.push({ date, symbol: sym, amount: gross, currency: cur, type, description: desc });
+      continue;
+    } else if (type === 'Foreign Tax Withholding') {
+      dividends.push({ date, symbol: sym, amount: gross, currency: cur, type: 'wht', description: desc });
+      continue;
+    } else if (type === 'Credit Interest' || type === 'Debit Interest') {
+      interest.push({ date, amount: gross, currency: cur, type });
+      continue;
+    } else {
+      continue; // Deposit, Adjustment, etc. ignorieren
+    }
+
+    trades.push({
+      date,
+      dateTime: date + ' 00:00:00',
+      assetClass,
+      currency: cur,
+      symbol: sym,
+      underlying,
+      description: desc,
+      qty,
+      price,
+      proceeds: gross,
+      commFee: comm,
+      netAmount: parseFloat(d['Net Amount'] || '0') || 0,
+      classification,
+      topf,
+      isOption,
+      // Codes für ko-fifo.js Kompatibilität
+      codes: buildCodes(classification),
+      // Aus Transaction Type ableitbar
+      buySell: type === 'Buy' ? 'BUY' : 'SELL',
+      openCloseIndicator: (classification === 'short_option_open' || classification === 'long_option_open' || classification === 'stock_buy') ? 'O' : 'C',
+    });
+  }
+
+  // Dividenden zusammenfassen
+  const divTotal = dividends
+    .filter(d => d.type === 'Dividend' || d.type === 'Payment in Lieu')
+    .reduce((s, d) => s + d.amount, 0);
+  const whtTotal = dividends
+    .filter(d => d.type === 'wht')
+    .reduce((s, d) => s + Math.abs(d.amount), 0);
+  const interestTotal = interest.reduce((s, i) => s + i.amount, 0);
+
+  return {
+    format: 'transaction_history',
+    period: extractPeriod(lines),
+    accountId: extractAccountId(lines),
+    trades: trades.sort((a, b) => a.dateTime.localeCompare(b.dateTime)),
+    dividends,
+    interest,
+    summary: {
+      totalTrades:      trades.length,
+      stockBuys:        trades.filter(t => t.classification === 'stock_buy').length,
+      stockSells:       trades.filter(t => t.classification === 'stock_sell').length,
+      shortOptions:     trades.filter(t => t.classification === 'short_option_open').length,
+      longOptions:      trades.filter(t => t.classification === 'long_option_open').length,
+      assignments:      trades.filter(t => t.classification.includes('assignment')).length,
+      dividendsUSD:     Math.round(divTotal * 100) / 100,
+      whtUSD:           Math.round(whtTotal * 100) / 100,
+      interestUSD:      Math.round(interestTotal * 100) / 100,
+    },
+  };
+}
+
+function buildCodes(classification) {
+  switch(classification) {
+    case 'short_option_open':  return ['O'];          // Stillhalter eröffnen
+    case 'long_option_open':   return ['O'];           // Long Option kaufen
+    case 'short_option_close': return ['C'];           // Short glattstellen
+    case 'long_option_close':  return ['C'];           // Long verkaufen
+    case 'put_assignment':     return ['A', 'O'];      // Put ausgeübt → Aktien kaufen
+    case 'call_assignment':    return ['A', 'C'];      // Call ausgeübt → Aktien liefern
+    case 'stock_buy':          return ['O'];
+    case 'stock_sell':         return ['C'];
+    default: return ['O'];
+  }
+}
+
+function extractPeriod(lines) {
+  const l = lines.find(l => l.includes('Period'));
+  return l ? l.split(',').slice(-1)[0].replace(/"/g,'').trim() : '';
+}
+
+function extractAccountId(lines) {
+  const l = lines.find(l => l.includes('Account,U'));
+  return l ? l.split(',').find(p => p.startsWith('U')) || '' : '';
+}
+
+// ── ACTIVITY FLEX QUERY CSV PARSER ───────────────────────────
+
+/**
+ * Parst den CapTrader "Kontoumsatz-Flex-Query" CSV Export.
+ * 
+ * Struktur:
+ *   BOF  → Datei-Header
+ *   BOS POST → Open Positions (13 Spalten)
+ *   BOS TRNT → Trades (31 Spalten inkl. FXRateToBase, CostBasis)
+ *   BOS RATE → Wechselkurse je Tag (5850+ Zeilen)
+ *
+ * Vorteile:
+ *   ✅ FXRateToBase direkt je Trade → kein EZB-API-Call nötig
+ *   ✅ CostBasis = IBKR FIFO-Einstand → kein eigenes FIFO nötig
+ *   ✅ FifoPnlRealized = bereits berechneter G/V
+ *   ✅ Buy/Sell + OpenCloseIndicator eindeutig
+ *   ✅ ISIN für ETF-Erkennung
+ *
+ * @param {string} csvText
+ * @returns {ActivityFlexResult}
+ */
+export function parseActivityFlexCSV(csvText) {
+  const lines = csvText.split(/\r?\n/);
+
+  // Sektionen lokalisieren
+  const bosIdxs = {};
+  lines.forEach((l, i) => {
+    const p = splitCSVLine(l);
+    if (p[0] === 'BOS') bosIdxs[p[1]] = i;
+  });
+
+  // Meta-Daten aus BOF
+  const bofLine = lines.find(l => l.startsWith('"BOF"'));
+  const bofParts = bofLine ? splitCSVLine(bofLine) : [];
+  const accountId = bofParts[1] || '';
+  const queryName  = bofParts[2] || '';
+  const fromDate   = bofParts[4] || '';
+  const toDate     = bofParts[5] || '';
+
+  // Open Positions (BOS POST)
+  const postStart = (bosIdxs['POST'] || 0) + 1;
+  const postEnd   = bosIdxs['TRNT'] || postStart;
+  const positions = parseSection(lines, postStart, postEnd)
+    .filter(r => r.Symbol && r.Quantity);
+
+  // Trades (BOS TRNT)
+  const trntStart = (bosIdxs['TRNT'] || 0) + 1;
+  const trntEnd   = bosIdxs['RATE'] || lines.length;
+  const allTrades = parseSection(lines, trntStart, trntEnd);
+  const trades = allTrades.filter(r =>
+    r['AssetClass'] === 'STK' || r['AssetClass'] === 'OPT'
+  );
+
+  // Wechselkurse (BOS RATE)
+  const rateStart = (bosIdxs['RATE'] || 0) + 1;
+  const rateLines = lines.slice(rateStart);
+  const fxRateMap = parseRates(rateLines);
+
+  // Trades klassifizieren und in ko-fifo.js Format konvertieren
+  const fifoTrades = trades.map(t => convertToFifoTrade(t));
+
+  // Positionen für FIFO-Lots aufbereiten
+  const fifoLots = buildActivityFifoLots(positions, fxRateMap, toDate);
+
+  return {
+    format:      'activity_flex_csv',
+    accountId,
+    queryName,
+    fromDate,
+    toDate,
+    trades:      fifoTrades,
+    positions,
+    fxRateMap,
+    fifoLots,
+    summary:     buildActivitySummary(fifoTrades, positions, fxRateMap),
+  };
+}
+
+function parseRates(lines) {
+  const map = {};
+  // Header: "Date/Time","FromCurrency","ToCurrency","Rate"
+  const reader = lines.slice(1); // Header überspringen
+  for (const line of reader) {
+    if (!line.trim()) continue;
+    const p = splitCSVLine(line);
+    if (!p[0] || !p[0].match(/^\d{4}/)) continue;
+    const date = p[0].slice(0, 10); // "2026-01-01"
+    const from = p[1];
+    const rate = parseFloat(p[3]) || 0;
+    if (from && rate) map[`${from}:${date}`] = rate;
+  }
+  return map;
+}
+
+function convertToFifoTrade(t) {
+  const assetClass = t['AssetClass'] === 'STK'
+    ? 'Aktien'
+    : 'Aktien- und Indexoptionen';
+
+  const buySell = t['Buy/Sell'] || '';
+  const oci     = t['Open/CloseIndicator'] || '';
+  const qty     = parseFloat(t['Quantity'] || '0');
+  const putCall = t['Put/Call'] || '';
+  const notes   = (t['Notes/Codes'] || '').split(/[;,]/).map(c => c.trim()).filter(Boolean);
+
+  // Klassifizierung
+  let classification = '';
+  if (t['AssetClass'] === 'STK') {
+    if (buySell === 'BUY'  && oci === 'O') classification = 'stock_buy';
+    else if (buySell === 'SELL' && oci === 'C') classification = 'stock_sell';
+    else if (buySell === 'SELL' && oci === 'O') classification = 'short_sell_open';
+    else if (buySell === 'BUY'  && oci === 'C') classification = 'short_sell_cover';
+    else if (notes.includes('A') && buySell === 'BUY')  classification = 'put_assignment';
+    else if (notes.includes('A') && buySell === 'SELL') classification = 'call_assignment';
+  } else {
+    if (buySell === 'SELL' && oci === 'O') classification = putCall === 'P' ? 'short_put' : 'short_call';
+    else if (buySell === 'BUY' && oci === 'O') classification = putCall === 'P' ? 'long_put' : 'long_call';
+    else if (oci === 'C' && notes.includes('Ep')) classification = 'option_expired';
+    else if (oci === 'C' && notes.includes('A'))  classification = 'option_assigned';
+    else if (oci === 'C') classification = buySell === 'BUY' ? 'short_option_close' : 'long_option_close';
+  }
+
+  const fxRate   = parseFloat(t['FXRateToBase'] || '1') || 1;
+  const proceeds = parseFloat(t['Proceeds'] || '0');
+  const costBasis = parseFloat(t['CostBasis'] || '0');
+  const fifoPnl  = parseFloat(t['FifoPnlRealized'] || '0');
+
+  return {
+    // Standard-Felder (ko-fifo.js kompatibel)
+    assetClass,
+    currency:    t['CurrencyPrimary'] || 'USD',
+    symbol:      t['Symbol'] || '',
+    underlying:  t['UnderlyingSymbol'] || t['Symbol'] || '',
+    description: t['Description'] || '',
+    dateTime:    (t['DateTime'] || '').replace(';', ' '),
+    date:        (t['TradeDate'] || '').slice(0, 10),
+    qty:         buySell === 'BUY' ? Math.abs(qty) : -Math.abs(qty),
+    price:       parseFloat(t['TradePrice'] || '0'),
+    proceeds,
+    commFee:     parseFloat(t['IBCommission'] || '0'),
+    codes:       notes,
+
+    // Flex-spezifisch
+    buySell,
+    openCloseIndicator: oci,
+    classification,
+    putCall,
+    strike:      parseFloat(t['Strike'] || '0') || null,
+    expiry:      t['Expiry'] || '',
+    multiplier:  parseFloat(t['Multiplier'] || '1'),
+    isin:        t['ISIN'] || '',
+    settleDate:  t['SettleDateTarget'] || '',
+
+    // IBKR FIFO-Daten (direkt verwendbar!)
+    fxRateToBase:   fxRate,
+    costBasisUsd:   costBasis,
+    costBasisEur:   round2(Math.abs(costBasis) * fxRate),
+    proceedsEur:    round2(proceeds * fxRate),
+    fifoPnlUsd:     fifoPnl,
+    fifoPnlEur:     round2(fifoPnl * fxRate),
+  };
+}
+
+function buildActivityFifoLots(positions, fxRateMap, toDate) {
+  const lots = {};
+  for (const pos of positions) {
+    const sym = pos.Symbol;
+    const qty = parseFloat(pos.Quantity || '0');
+    if (!sym || qty === 0) continue;
+
+    const currency = pos.CurrencyPrimary || 'USD';
+    // Open Positions haben CostBasisPrice (pro Aktie) nicht CostBasis
+    const costBasisPrice = parseFloat(pos.CostBasisPrice || '0');
+    const costBasis = costBasisPrice * Math.abs(qty);  // Gesamt-Einstand
+    const fxKey = `${currency}:${toDate}`;
+    const fxRate = fxRateMap[fxKey] || 1;
+
+    if (!lots[sym]) lots[sym] = [];
+    lots[sym].push({
+      symbol:       sym,
+      date:         toDate,
+      qty:          Math.abs(qty),
+      costPerUnit:  qty !== 0 ? Math.abs(costBasis / qty) : 0,
+      totalCostUsd: Math.abs(costBasis),
+      totalCostEur: round2(Math.abs(costBasis) * fxRate),
+      currency,
+      fxRate,
+      isShort:      qty < 0,
+      source:       'activity_flex',
+    });
+  }
+  return lots;
+}
+
+function buildActivitySummary(trades, positions, fxRateMap) {
+  const stk = trades.filter(t => t.assetClass === 'Aktien');
+  const opt = trades.filter(t => t.assetClass !== 'Aktien');
+  const shortOpts = opt.filter(t => t.classification?.includes('short'));
+  const longOpts  = opt.filter(t => t.classification?.includes('long'));
+
+  // Netto-Prämien
+  const premBrutto = shortOpts.reduce((s,t) => s + Math.abs(t.proceedsEur), 0);
+  // Rückkäufe = Short-Option Close (BUY mit positivem CostBasis)
+  const closes = opt.filter(t => t.classification === 'short_option_close');
+  const rueckkauf = closes.reduce((s,t) => s + t.costBasisEur, 0);
+
+  return {
+    fromDate:             trades[0]?.date || '',
+    toDate:               trades[trades.length-1]?.date || '',
+    totalTrades:          trades.length,
+    stockBuys:            stk.filter(t => t.classification === 'stock_buy').length,
+    stockSells:           stk.filter(t => t.classification === 'stock_sell').length,
+    shortOptions:         shortOpts.length,
+    longOptions:          longOpts.length,
+    fxCurrencies:         Object.keys(fxRateMap).map(k => k.split(':')[0])
+                           .filter((v,i,a) => a.indexOf(v)===i).length,
+    premiumBruttoEur:     round2(premBrutto),
+    rueckkaufEur:         round2(rueckkauf),
+    premiumNettoEur:      round2(premBrutto - rueckkauf),
+  };
+}
+
+function round2(n) { return Math.round((n||0)*100)/100; }
+
+// ── KI-FLEX QUERY CSV PARSER ─────────────────────────────────
+
+/**
+ * Parst das KI-generierte CapTrader Flex Query CSV Format.
+ * (Kontoumsatz-Flex-Query, KI-assistiert)
+ *
+ * Unterschiede zum Activity Flex CSV:
+ * - Kein BOF/BOS Header — direkte CSV-Zeilen
+ * - Datum: yyyyMMdd (z.B. "20240122")
+ * - DateTime: "yyyyMMdd;HHmmss" (z.B. "20240122;135347")
+ * - Kein separater Wechselkurs-Abschnitt
+ * - FXRateToBase direkt je Trade-Zeile
+ *
+ * Vorteile:
+ *   ✅ FifoPnlRealized × FXRateToBase = exakter EUR-Betrag
+ *   ✅ CostBasis = IBKR FIFO-Einstand
+ *   ✅ Buy/Sell + Open/CloseIndicator eindeutig
+ *   ✅ UnderlyingSymbol, Multiplier, Strike, Expiry, Put/Call
+ *   ✅ Notes/Codes für Expired, Assignment
+ *   ✅ Mehriahres-Export möglich
+ *
+ * @param {string} csvText
+ * @returns {KiFlexResult}
+ */
+export function parseKiFlexCSV(csvText) {
+  const lines = csvText.split(/\r?\n/);
+  const header = lines[0];
+  if (!header || !header.includes('TradeDate') || !header.includes('FXRateToBase')) {
+    throw new Error('Kein KI-Flex CSV Format erkannt');
+  }
+
+  // CSV parsen
+  const allRows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = splitCSVLine(lines[i]);
+    const cols  = splitCSVLine(header);
+    const row   = {};
+    cols.forEach((c, idx) => row[c.trim()] = (vals[idx] || '').trim());
+    if (row['TradeDate']) allRows.push(row);
+  }
+
+  // Nach Jahren gruppieren
+  const byYear = {};
+  for (const row of allRows) {
+    const year = row['TradeDate'].slice(0, 4);
+    if (!byYear[year]) byYear[year] = [];
+    byYear[year].push(row);
+  }
+
+  // Trades konvertieren
+  const trades = allRows
+    .filter(r => ['STK','OPT'].includes(r['AssetClass']))
+    .map(r => convertKiFlexTrade(r));
+
+  // FX-Map aus Trade-Daten aufbauen
+  const fxRateMap = {};
+  for (const r of allRows) {
+    const fx = parseFloat(r['FXRateToBase'] || '0');
+    const cur = r['CurrencyPrimary'] || '';
+    const date = formatDate(r['TradeDate']);
+    if (fx > 0 && cur && date) fxRateMap[`${cur}:${date}`] = fx;
+  }
+
+  // Jahresweise Auswertung
+  const years = Object.keys(byYear).sort();
+  const yearlyResults = {};
+  for (const year of years) {
+    const ytrades = byYear[year].filter(r => ['STK','OPT'].includes(r['AssetClass']));
+    yearlyResults[year] = calcYearlyTax(ytrades, year);
+  }
+
+  return {
+    format:         'ki_flex_csv',
+    accountId:      allRows[0]?.['ClientAccountID'] || '',
+    dateRange:      { from: formatDate(allRows[0]?.['TradeDate'] || ''),
+                      to:   formatDate(allRows[allRows.length-1]?.['TradeDate'] || '') },
+    trades,
+    fxRateMap,
+    yearlyResults,
+    summary:        buildKiFlexSummary(trades, yearlyResults),
+  };
+}
+
+function convertKiFlexTrade(r) {
+  const buySell = r['Buy/Sell'] || '';
+  const oci     = r['Open/CloseIndicator'] || '';
+  const ac      = r['AssetClass'] || '';
+  const notes   = (r['Notes/Codes'] || '').split(/[;,]/).map(c => c.trim()).filter(Boolean);
+  const qty     = parseFloat(r['Quantity'] || '0');
+  const putCall = r['Put/Call'] || '';
+  const fx      = parseFloat(r['FXRateToBase'] || '1') || 1;
+  const proceeds = parseFloat(r['Proceeds'] || '0');
+  const costBasis = parseFloat(r['CostBasis'] || '0');
+  const fifoPnl  = parseFloat(r['FifoPnlRealized'] || '0');
+  const date     = formatDate(r['TradeDate']);
+  const dateTime = formatDateTime(r['DateTime']);
+
+  // Klassifizierung
+  let classification = '';
+  let topf = '';
+  if (ac === 'STK') {
+    if      (buySell==='BUY'  && oci==='O' && !notes.includes('A')) { classification='stock_buy';         topf='2_aktien'; }
+    else if (buySell==='SELL' && oci==='C' && !notes.includes('A')) { classification='stock_sell';        topf='2_aktien'; }
+    else if (buySell==='SELL' && oci==='O')                          { classification='short_sell_open';   topf='2_aktien'; }
+    else if (buySell==='BUY'  && oci==='C' && !notes.includes('A')) { classification='short_sell_cover';  topf='2_aktien'; }
+    else if (notes.includes('A') && buySell==='BUY')                 { classification='put_assignment';    topf='2_aktien'; }
+    else if (notes.includes('A') && buySell==='SELL')                { classification='call_assignment';   topf='2_aktien'; }
+  } else if (ac === 'OPT') {
+    if      (buySell==='SELL' && oci==='O')        { classification='short_option_open';  topf='1_allgemein'; }
+    else if (buySell==='BUY'  && oci==='C' && !notes.includes('Ep') && !notes.includes('A'))
+                                                    { classification='short_option_close'; topf='1_allgemein'; }
+    else if (buySell==='BUY'  && oci==='O')        { classification='long_option_open';   topf='3_termin'; }
+    else if (buySell==='SELL' && oci==='C')        { classification='long_option_close';  topf='3_termin'; }
+    else if (notes.includes('Ep'))                  { classification='option_expired';     topf=putCall==='P'?'1_allgemein':'3_termin'; }
+    else if (notes.includes('A'))                   { classification='option_assigned';    topf='1_allgemein'; }
+  }
+
+  return {
+    // Standard
+    assetClass:   ac === 'STK' ? 'Aktien' : 'Aktien- und Indexoptionen',
+    assetCategory: ac,
+    currency:     r['CurrencyPrimary'] || 'USD',
+    symbol:       r['Symbol'] || '',
+    underlying:   r['UnderlyingSymbol'] || r['Symbol'] || '',
+    description:  r['Description'] || '',
+    date,
+    dateTime,
+    qty:          buySell === 'BUY' ? Math.abs(qty) : -Math.abs(qty),
+    price:        parseFloat(r['TradePrice'] || '0'),
+    proceeds,
+    commFee:      parseFloat(r['IBCommission'] || '0'),
+    codes:        notes,
+    // Flex-spezifisch
+    buySell,
+    openCloseIndicator: oci,
+    classification,
+    topf,
+    putCall,
+    strike:       parseFloat(r['Strike'] || '0') || null,
+    expiry:       r['Expiry'] || '',
+    multiplier:   parseFloat(r['Multiplier'] || '1'),
+    // IBKR FIFO-Daten (direkt verwenden!)
+    fxRateToBase:  fx,
+    costBasisUsd:  costBasis,
+    costBasisEur:  round2(Math.abs(costBasis) * fx),
+    proceedsEur:   round2(proceeds * fx),
+    fifoPnlUsd:    fifoPnl,
+    fifoPnlEur:    round2(fifoPnl * fx),
+  };
+}
+
+function calcYearlyTax(trades, year) {
+  const stk = trades.filter(t => t['AssetClass']==='STK');
+  const opt  = trades.filter(t => t['AssetClass']==='OPT');
+
+  // Aktien: FifoPnlRealized × FXRateToBase
+  const stkGainEur = stk
+    .filter(r => parseFloat(r['FifoPnlRealized']||0) > 0)
+    .reduce((s,r) => s + parseFloat(r['FifoPnlRealized']||0) * parseFloat(r['FXRateToBase']||1), 0);
+  const stkLossEur = stk
+    .filter(r => parseFloat(r['FifoPnlRealized']||0) < 0)
+    .reduce((s,r) => s + parseFloat(r['FifoPnlRealized']||0) * parseFloat(r['FXRateToBase']||1), 0);
+
+  // Optionen: Gewinne und Verluste getrennt
+  const optGainEur = opt
+    .filter(r => parseFloat(r['FifoPnlRealized']||0) > 0)
+    .reduce((s,r) => s + parseFloat(r['FifoPnlRealized']||0) * parseFloat(r['FXRateToBase']||1), 0);
+  const optLossEur = opt
+    .filter(r => parseFloat(r['FifoPnlRealized']||0) < 0)
+    .reduce((s,r) => s + parseFloat(r['FifoPnlRealized']||0) * parseFloat(r['FXRateToBase']||1), 0);
+
+  return {
+    year,
+    // Anlage KAP Zeilen (direkt von IBKR)
+    z8_aktienGewinn:   round2(stkGainEur),
+    z9_aktienVerlust:  round2(Math.abs(stkLossEur)),
+    z20_optGewinn:     round2(optGainEur),
+    z21_optVerlust:    round2(Math.abs(optLossEur)),
+    z20_saldo:         round2(optGainEur + optLossEur),
+    // Rohdaten
+    stkGainEur:  round2(stkGainEur),
+    stkLossEur:  round2(stkLossEur),
+    optGainEur:  round2(optGainEur),
+    optLossEur:  round2(optLossEur),
+  };
+}
+
+function buildKiFlexSummary(trades, yearlyResults) {
+  return {
+    totalTrades:  trades.length,
+    years:        Object.keys(yearlyResults).sort(),
+    byYear:       yearlyResults,
+  };
+}
+
+function formatDate(raw) {
+  // "20240122" → "2024-01-22"
+  if (!raw || raw.length < 8) return raw || '';
+  return `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+}
+
+function formatDateTime(raw) {
+  // "20240122;135347" → "2024-01-22 13:53:47"
+  if (!raw) return '';
+  const parts = raw.split(';');
+  const date = formatDate(parts[0]);
+  const time = parts[1]
+    ? `${parts[1].slice(0,2)}:${parts[1].slice(2,4)}:${parts[1].slice(4,6)}`
+    : '00:00:00';
+  return `${date} ${time}`;
 }
 
 export const FLEX_MODULE_META = {
   version:   '1.1.0',
   created:   '2026-06-26',
-  formats:   ['lots_csv', 'kontoauszug', 'activity_xml (planned)', 'activity_csv (planned)'],
+  formats:   ['lots_csv', 'kontoauszug', 'transaction_history', 'ki_flex_csv', 'activity_flex_csv', 'activity_xml (planned)'],
   nextStep:  'Activity Flex Query mit TradeDate, BuySell, OpenCloseIndicator',
 };
