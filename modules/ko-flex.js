@@ -23,7 +23,10 @@
 export function detectFormat(text) {
   if (text.trim().startsWith('<?xml') || text.includes('<FlexQueryResponse'))
     return 'activity_xml';
-  // ki_flex_cash_csv: Trades + Cash Transactions in einer Datei
+  // ki_flex_full_csv: Account Info + Trades + Cash (neue Version mit 3 Sektionen)
+  if (text.includes('"Name","AccountType"') || text.includes('"ClientAccountID","Name"'))
+    return 'ki_flex_full_csv';
+  // ki_flex_cash_csv: Trades + Cash Transactions (älteres Format)
   if (text.includes('ClientAccountID') && text.includes('FXRateToBase') &&
       (text.includes('Dividends') || text.includes('Withholding Tax') || text.includes('Broker Interest')))
     return 'ki_flex_cash_csv';
@@ -383,6 +386,7 @@ export function parseFlexFile(text) {
   switch (format) {
     case 'lots_csv':     return parseLotsCSV(text);
     case 'kontoauszug':  return parseKontoauszug(text);
+    case 'ki_flex_full_csv':    return parseKiFlexFullCSV(text);
     case 'ki_flex_cash_csv':    return parseKiFlexCashCSV(text);
     case 'ki_flex_csv':         return parseKiFlexCSV(text);
     case 'activity_flex_csv':   return parseActivityFlexCSV(text);
@@ -1188,9 +1192,115 @@ function buildKiFlexCashSummary(trades, cash, yearlyResults) {
   };
 }
 
+// ── KI-FLEX FULL CSV PARSER (Account Info + Trades + Cash) ───
+
+/**
+ * Parst das neue Flex Query Format mit 3 Sektionen:
+ * 1. Account Information (Name, AccountType)
+ * 2. Trades (FifoPnlRealized, FXRateToBase, CostBasis, etc.)
+ * 3. Cash Transactions (Dividenden, WHT, Zinsen)
+ *
+ * Ermöglicht automatische Erkennung von:
+ * - Einzel- vs. Gemeinschaftskonto (AND im Namen)
+ * - Kontoinhaber-Namen für DOCX-Header
+ *
+ * @param {string} csvText
+ * @returns {KiFlexFullResult}
+ */
+export function parseKiFlexFullCSV(csvText) {
+  const lines = csvText.split(/\r?\n/);
+
+  // Alle Header-Zeilen finden
+  const headerIdxs = lines
+    .map((l, i) => l.startsWith('"ClientAccountID"') ? i : -1)
+    .filter(i => i >= 0);
+
+  if (headerIdxs.length < 2) throw new Error('Ungültiges ki_flex_full Format');
+
+  // Sektion 1: Account Information
+  const accLine   = lines[1] || '';
+  const accParts  = splitCSVLine(accLine);
+  const kontoName = accParts[1] || '';
+  const accType   = accParts[2] || '';
+  const accountId = accParts[0] || '';
+  const isJoint   = / and /i.test(kontoName);
+  const inhaber   = isJoint
+    ? kontoName.split(/ and /i).map(n => n.trim())
+    : [kontoName];
+
+  // Sektion 2: Trades (headerIdxs[1] bis headerIdxs[2])
+  const tradeStart = headerIdxs[1];
+  const tradeEnd   = headerIdxs.length > 2 ? headerIdxs[2] : lines.length;
+  const tradeCols  = splitCSVLine(lines[tradeStart]);
+  const tradeRows  = [];
+  for (let i = tradeStart + 1; i < tradeEnd; i++) {
+    if (!lines[i]?.trim()) continue;
+    const vals = splitCSVLine(lines[i]);
+    const row  = {};
+    tradeCols.forEach((c, idx) => row[c] = (vals[idx] || '').trim());
+    if (['STK','OPT'].includes(row['AssetClass'])) tradeRows.push(row);
+  }
+
+  // Sektion 3: Cash Transactions
+  const cashStart = headerIdxs.length > 2 ? headerIdxs[2] : tradeEnd;
+  const cashCols  = splitCSVLine(lines[cashStart]);
+  const cashRows  = [];
+  for (let i = cashStart + 1; i < lines.length; i++) {
+    if (!lines[i]?.trim()) continue;
+    const vals = splitCSVLine(lines[i]);
+    const row  = {};
+    cashCols.forEach((c, idx) => row[c] = (vals[idx] || '').trim());
+    if (row['Type']) cashRows.push(row);
+  }
+
+  // Trades konvertieren
+  const trades = tradeRows.map(r => convertKiFlexTrade(r));
+
+  // Cash klassifizieren
+  const cashResult = parseCashTransactions(cashRows);
+
+  // Jahres-Ergebnisse berechnen
+  // Jahr aus Cash Transactions (zuverlässig) oder TradeDate
+  const cashYears = [...new Set(cashRows.map(r => (r['Date/Time']||'').slice(0,4)).filter(Boolean))];
+  const tradeYears = [...new Set(tradeRows.map(r => r['TradeDate']?.slice(0,4)).filter(Boolean))];
+  const years = [...new Set([...cashYears, ...tradeYears])].sort();
+
+  const yearlyResults = {};
+  for (const year of years) {
+    // Trades haben kein TradeDate → alle Trades diesem Jahr zuordnen
+    // (jede Datei enthält nur ein Steuerjahr)
+    const hasTradeDate = tradeRows.some(r => r['TradeDate']);
+    const yt = hasTradeDate
+      ? tradeRows.filter(r => r['TradeDate']?.slice(0,4) === year)
+      : tradeRows;  // kein TradeDate → alle Trades gehören zu diesem Jahr
+    const yc = cashRows.filter(r => (r['Date/Time']||'').slice(0,4) === year);
+    yearlyResults[year] = calcYearlyTaxFull(yt, yc, year);
+  }
+
+  // Datumsbereich
+  const allDates = [
+    ...tradeRows.map(r => formatDate(r['TradeDate']||'')),
+    ...cashRows.map(r => formatDate((r['Date/Time']||'').slice(0,8))),
+  ].filter(Boolean).sort();
+
+  return {
+    format:       'ki_flex_full_csv',
+    accountId,
+    kontoName,
+    accType,
+    isJoint,
+    inhaber,
+    dateRange:    { from: allDates[0]||'', to: allDates[allDates.length-1]||'' },
+    trades,
+    cashTransactions: cashResult,
+    yearlyResults,
+    summary:      buildKiFlexCashSummary(trades, cashResult, yearlyResults),
+  };
+}
+
 export const FLEX_MODULE_META = {
   version:   '1.1.0',
   created:   '2026-06-26',
-  formats:   ['lots_csv', 'kontoauszug', 'transaction_history', 'ki_flex_cash_csv', 'ki_flex_csv', 'activity_flex_csv', 'activity_xml (planned)'],
+  formats:   ['lots_csv', 'kontoauszug', 'transaction_history', 'ki_flex_full_csv', 'ki_flex_cash_csv', 'ki_flex_csv', 'activity_flex_csv', 'activity_xml (planned)'],
   nextStep:  'Activity Flex Query mit TradeDate, BuySell, OpenCloseIndicator',
 };
