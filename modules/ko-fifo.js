@@ -104,6 +104,10 @@ export function calculateFIFO(trades, fxRateMap = {}, year = '2024') {
   // Trades chronologisch sortieren
   const sorted = [...trades].sort((a, b) => a.dateTime.localeCompare(b.dateTime));
 
+  // Prämien aus noch nicht abgeschlossenen Short-Optionen
+  // { "AAPL 19APR24 180 C": premiumEur } → bei Assignment in Aktien-Basis verrechnen
+  const pendingPremiums = {};
+
   for (const trade of sorted) {
     const tradeYear = trade.date.slice(0, 4);
     if (tradeYear !== year) continue;  // nur aktuelles Steuerjahr
@@ -112,10 +116,10 @@ export function calculateFIFO(trades, fxRateMap = {}, year = '2024') {
 
     switch (trade.assetClass) {
       case 'Aktien':
-        processStock(trade, stockLots, events, eurRate);
+        processStock(trade, stockLots, events, eurRate, pendingPremiums);
         break;
       case 'Aktien- und Indexoptionen':
-        processOption(trade, optionLots, events, eurRate);
+        processOption(trade, optionLots, events, eurRate, pendingPremiums);
         break;
       case 'Devisen':
         // EUR.USD = automatische Margin-Konvertierung, KEIN §23 EStG
@@ -144,19 +148,31 @@ export function calculateFIFO(trades, fxRateMap = {}, year = '2024') {
 
 // ── AKTIEN (FIFO nach § 20 Abs. 4 Satz 7 EStG) ──────────────
 
-function processStock(trade, lots, events, eurRate) {
+function processStock(trade, lots, events, eurRate, pendingPremiums = {}) {
   const sym = trade.symbol;
   if (!lots[sym]) lots[sym] = [];
 
   if (trade.qty > 0) {
     // KAUF → Lot hinzufügen
-    const costEur = Math.abs(trade.proceeds + (trade.commFee || 0)) * eurRate;
+    let costEur = Math.abs(trade.proceeds + (trade.commFee || 0)) * eurRate;
+
+    // Bei Assignment (A,O): Prämie der Short-Option vom Einstandspreis abziehen
+    // § 20 Abs. 1 Nr. 11 EStG: Prämie mindert Anschaffungskosten der Aktien
+    if (trade.codes?.includes(CODE.ASSIGNED)) {
+      // Suche passende Option (Symbol enthält Ticker)
+      const optSym = Object.keys(pendingPremiums).find(s => s.startsWith(sym + ' '));
+      if (optSym && pendingPremiums[optSym]) {
+        costEur -= pendingPremiums[optSym];  // Prämie reduziert Einstandspreis
+        delete pendingPremiums[optSym];
+      }
+    }
+
     lots[sym].push({
       symbol:       sym,
       date:         trade.date,
       qty:          trade.qty,
       costPerUnit:  costEur / trade.qty,
-      totalCostEur: costEur,
+      totalCostEur: Math.max(0, costEur),  // darf nicht negativ werden
       currency:     trade.currency,
       fxRate:       eurRate,
     });
@@ -207,36 +223,36 @@ function processStock(trade, lots, events, eurRate) {
 
 // ── OPTIONEN ─────────────────────────────────────────────────
 
-function processOption(trade, lots, events, eurRate) {
+/**
+ * Optionen-Verarbeitung nach deutschem Steuerrecht:
+ *
+ * Stillhaltergeschäfte (Short Puts/Calls) § 20 Abs. 1 Nr. 11 EStG:
+ * - Short-Open: Prämie wird als Einnahme erfasst
+ * - Close (C/MLG): Rückkauf → Gewinn/Verlust
+ * - Expired (Ep): Prämie vollständig realisiert → kein weiterer Buchung
+ * - Assigned (A,C): Prämie mindert Einstandspreis der Aktien → keine separate Buchung!
+ *
+ * Long-Optionen (Termingeschäfte) § 20 Abs. 6 EStG:
+ * - Open: Kaufpreis als Einstandswert
+ * - Close/Expired: Gewinn/Verlust
+ */
+function processOption(trade, lots, events, eurRate, pendingPremiums) {
   const sym   = trade.symbol;
   const codes = trade.codes || [];
-  const isShort = trade.qty < 0 && codes.includes(CODE.OPEN);   // Short = Stillhalter
-  const isClose = codes.includes(CODE.CLOSE) || codes.includes(CODE.ASSIGNED);
-  const isExpired = codes.includes(CODE.EXPIRED);
+  const isShortOpen = trade.qty < 0 && codes.includes(CODE.OPEN);
+  const isLongOpen  = trade.qty > 0 && codes.includes(CODE.OPEN);
+  const isAssigned  = codes.includes(CODE.ASSIGNED);  // A,C
+  const isExpired   = codes.includes(CODE.EXPIRED);   // Ep
+  const isClose     = codes.includes(CODE.CLOSE) && !isAssigned;
 
   if (!lots[sym]) lots[sym] = [];
 
-  if (isShort) {
-    // SHORT OPTION ERÖFFNEN (Stillhalter) — Prämieneinnahme §20 Abs.1 Nr.11
+  if (isShortOpen) {
+    // SHORT OPTION ERÖFFNEN — Prämie merken, noch NICHT buchen
+    // (bei Assignment wird Prämie in Aktien-Einstandspreis verrechnet)
     const premiumEur = Math.abs(trade.proceeds) * eurRate -
                        Math.abs(trade.commFee || 0) * eurRate;
-    // Prämie sofort als Einnahme erfassen (realisiert bei Erhalt)
-    events.push({
-      type:        'stillhalter_praemie',
-      symbol:      sym,
-      closeDate:   trade.date,
-      openDate:    trade.date,
-      qty:         Math.abs(trade.qty),
-      proceedsEur: round2(premiumEur),
-      costEur:     0,
-      gainLossEur: round2(premiumEur),
-      fxRate:      eurRate,
-      topf:        '1_allgemein',  // Stillhalter → Topf 1 (§20 Abs.1 Nr.11)
-      currency:    trade.currency,
-      codes,
-    });
 
-    // Lot für spätere Glattstellung merken
     lots[sym].push({
       symbol:       sym,
       date:         trade.date,
@@ -246,10 +262,15 @@ function processOption(trade, lots, events, eurRate) {
       currency:     trade.currency,
       fxRate:       eurRate,
       isShort:      true,
+      premiumEur,   // für spätere Verrechnung bei Assignment
     });
 
-  } else if (codes.includes(CODE.OPEN) && trade.qty > 0) {
-    // LONG OPTION KAUFEN (Termingeschäft §20 Abs.6)
+    // Prämie als "offen" merken
+    if (!pendingPremiums[sym]) pendingPremiums[sym] = 0;
+    pendingPremiums[sym] += premiumEur;
+
+  } else if (isLongOpen) {
+    // LONG OPTION KAUFEN (Termingeschäft § 20 Abs. 6)
     const costEur = Math.abs(trade.proceeds + (trade.commFee || 0)) * eurRate;
     lots[sym].push({
       symbol:       sym,
@@ -262,61 +283,100 @@ function processOption(trade, lots, events, eurRate) {
       isShort:      false,
     });
 
-  } else if (isClose || isExpired) {
-    // GLATTSTELLUNG oder VERFALL
-    if (lots[sym]?.length > 0) {
-      const lot = lots[sym][0];
-      const isShortLot = lot.isShort;
+  } else if (isAssigned && lots[sym]?.length > 0) {
+    // ASSIGNMENT: Aktien werden geliefert
+    // Prämie fließt in Aktien-Einstandspreis → pendingPremiums[sym] merken
+    // Die Aktien kommen als separater Aktien-Trade mit Code A,O
+    // processStock() wird die Aktien mit normalem Strike-Preis erfassen
+    // Wir müssen die Prämie dort abziehen → via pendingPremiums
+    lots[sym].shift();  // Option-Lot schließen ohne Gewinn-Buchung
 
-      let gainLoss;
-      if (isExpired && isShortLot) {
-        // Short Option verfallen → Prämie vollständig behalten, Kosten = 0
-        gainLoss = 0;  // Prämie bereits bei Eröffnung erfasst
-        lots[sym].shift();
-        return;
-      }
-
-      const closeProceeds = Math.abs(trade.proceeds) * eurRate -
-                            Math.abs(trade.commFee || 0) * eurRate;
-
-      if (isShortLot) {
-        // Short glattstellen → Rückkaufkosten gegen Prämie
-        gainLoss = round2(lot.totalCostEur - closeProceeds);
-        events.push({
-          type:        gainLoss >= 0 ? 'stillhalter_gewinn' : 'stillhalter_verlust',
-          symbol:      sym,
-          closeDate:   trade.date,
-          openDate:    lot.date,
-          qty:         Math.abs(trade.qty),
-          proceedsEur: round2(lot.totalCostEur),
-          costEur:     round2(closeProceeds),
-          gainLossEur: gainLoss,
-          fxRate:      eurRate,
-          topf:        '1_allgemein',
-          currency:    trade.currency,
-          codes,
-        });
-      } else {
-        // Long Option schließen → Termingeschäft §20 Abs.6
-        gainLoss = round2(closeProceeds - lot.totalCostEur);
-        events.push({
-          type:        gainLoss >= 0 ? 'termin_gewinn' : 'termin_verlust',
-          symbol:      sym,
-          closeDate:   trade.date,
-          openDate:    lot.date,
-          qty:         Math.abs(trade.qty),
-          proceedsEur: round2(closeProceeds),
-          costEur:     round2(lot.totalCostEur),
-          gainLossEur: gainLoss,
-          fxRate:      eurRate,
-          topf:        '3_termin',
-          currency:    trade.currency,
-          codes,
-        });
-      }
-
-      lots[sym].shift();
+  } else if (isExpired && lots[sym]?.length > 0) {
+    // EXPIRED: Option wertlos verfallen
+    const lot = lots[sym][0];
+    if (lot.isShort) {
+      // Short Option verfallen → Prämie vollständig realisiert
+      events.push({
+        type:        'stillhalter_praemie',
+        symbol:      sym,
+        closeDate:   trade.date,
+        openDate:    lot.date,
+        qty:         lot.qty,
+        proceedsEur: round2(lot.premiumEur || lot.totalCostEur),
+        costEur:     0,
+        gainLossEur: round2(lot.premiumEur || lot.totalCostEur),
+        fxRate:      lot.fxRate,
+        topf:        '1_allgemein',
+        currency:    trade.currency,
+        codes,
+        note:        'Verfall wertlos',
+      });
+      // Pending aufräumen
+      if (pendingPremiums[sym]) delete pendingPremiums[sym];
+    } else {
+      // Long Option verfallen → Totalverlust
+      events.push({
+        type:        'termin_verlust',
+        symbol:      sym,
+        closeDate:   trade.date,
+        openDate:    lot.date,
+        qty:         lot.qty,
+        proceedsEur: 0,
+        costEur:     round2(lot.totalCostEur),
+        gainLossEur: round2(-lot.totalCostEur),
+        fxRate:      lot.fxRate,
+        topf:        '3_termin',
+        currency:    trade.currency,
+        codes,
+        note:        'Verfall wertlos',
+      });
     }
+    lots[sym].shift();
+
+  } else if (isClose && lots[sym]?.length > 0) {
+    // GLATTSTELLUNG (Close ohne Assignment)
+    const lot = lots[sym][0];
+    const closeProceeds = Math.abs(trade.proceeds) * eurRate -
+                          Math.abs(trade.commFee || 0) * eurRate;
+
+    if (lot.isShort) {
+      // Short glattstellen: Prämie - Rückkaufkosten
+      const praemie = lot.premiumEur || lot.totalCostEur;
+      const gainLoss = round2(praemie - closeProceeds);
+      events.push({
+        type:        gainLoss >= 0 ? 'stillhalter_gewinn' : 'stillhalter_verlust',
+        symbol:      sym,
+        closeDate:   trade.date,
+        openDate:    lot.date,
+        qty:         lot.qty,
+        proceedsEur: round2(praemie),
+        costEur:     round2(closeProceeds),
+        gainLossEur: gainLoss,
+        fxRate:      eurRate,
+        topf:        '1_allgemein',
+        currency:    trade.currency,
+        codes,
+      });
+      if (pendingPremiums[sym]) delete pendingPremiums[sym];
+    } else {
+      // Long glattstellen: Termingeschäft § 20 Abs. 6
+      const gainLoss = round2(closeProceeds - lot.totalCostEur);
+      events.push({
+        type:        gainLoss >= 0 ? 'termin_gewinn' : 'termin_verlust',
+        symbol:      sym,
+        closeDate:   trade.date,
+        openDate:    lot.date,
+        qty:         lot.qty,
+        proceedsEur: round2(closeProceeds),
+        costEur:     round2(lot.totalCostEur),
+        gainLossEur: gainLoss,
+        fxRate:      eurRate,
+        topf:        '3_termin',
+        currency:    trade.currency,
+        codes,
+      });
+    }
+    lots[sym].shift();
   }
 }
 
