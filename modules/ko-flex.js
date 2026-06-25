@@ -23,7 +23,11 @@
 export function detectFormat(text) {
   if (text.trim().startsWith('<?xml') || text.includes('<FlexQueryResponse'))
     return 'activity_xml';
-  // ki_flex_csv: CSV ohne BOF/BOS, mit ClientAccountID Header
+  // ki_flex_cash_csv: Trades + Cash Transactions in einer Datei
+  if (text.includes('ClientAccountID') && text.includes('FXRateToBase') &&
+      (text.includes('Dividends') || text.includes('Withholding Tax') || text.includes('Broker Interest')))
+    return 'ki_flex_cash_csv';
+  // ki_flex_csv: nur Trades, kein Cash
   if (text.includes('ClientAccountID') && text.includes('FXRateToBase') && text.includes('TradeDate'))
     return 'ki_flex_csv';
   // activity_flex_csv zuerst: enthält auch "Symbol" Sektion
@@ -379,6 +383,7 @@ export function parseFlexFile(text) {
   switch (format) {
     case 'lots_csv':     return parseLotsCSV(text);
     case 'kontoauszug':  return parseKontoauszug(text);
+    case 'ki_flex_cash_csv':    return parseKiFlexCashCSV(text);
     case 'ki_flex_csv':         return parseKiFlexCSV(text);
     case 'activity_flex_csv':   return parseActivityFlexCSV(text);
     case 'activity_xml':        return { format, error: 'Activity XML Parser — coming soon' };
@@ -1012,9 +1017,180 @@ function formatDateTime(raw) {
   return `${date} ${time}`;
 }
 
+// ── KI-FLEX CASH CSV PARSER (Trades + Cash Transactions) ─────
+
+/**
+ * Parst das kombinierte Flex Query CSV mit Trades UND Cash Transactions.
+ * Die Datei enthält zwei Sektionen mit unterschiedlichen Headern.
+ *
+ * Sektion 1: Trades (FifoPnlRealized × FXRateToBase = exakter EUR-G/V)
+ * Sektion 2: Cash Transactions (Dividenden, WHT, Zinsen mit FXRateToBase)
+ *
+ * → Eine einzige Datei ersetzt: Jahresauszug + Dividenden HTML + FX-CSV
+ *
+ * @param {string} csvText
+ * @returns {KiFlexCashResult}
+ */
+export function parseKiFlexCashCSV(csvText) {
+  const lines = csvText.split(/\r?\n/);
+
+  // Zwei Header-Zeilen finden
+  const headerIdxs = lines
+    .map((l, i) => l.startsWith('"ClientAccountID"') ? i : -1)
+    .filter(i => i >= 0);
+
+  if (headerIdxs.length < 2) {
+    // Nur Trades, keine Cash Transactions → Fallback
+    return parseKiFlexCSV(csvText);
+  }
+
+  const tradeHeaderIdx = headerIdxs[0];
+  const cashHeaderIdx  = headerIdxs[1];
+
+  // Sektion 1: Trades parsen
+  const tradeLines = lines.slice(tradeHeaderIdx, cashHeaderIdx);
+  const tradeCols  = splitCSVLine(tradeLines[0]);
+  const tradeRows  = tradeLines.slice(1)
+    .filter(l => l.trim())
+    .map(l => {
+      const vals = splitCSVLine(l);
+      const row  = {};
+      tradeCols.forEach((c, i) => row[c] = (vals[i] || '').trim());
+      return row;
+    })
+    .filter(r => ['STK','OPT'].includes(r['AssetClass']));
+
+  // Sektion 2: Cash Transactions parsen
+  const cashLines = lines.slice(cashHeaderIdx);
+  const cashCols  = splitCSVLine(cashLines[0]);
+  const cashRows  = cashLines.slice(1)
+    .filter(l => l.trim())
+    .map(l => {
+      const vals = splitCSVLine(l);
+      const row  = {};
+      cashCols.forEach((c, i) => row[c] = (vals[i] || '').trim());
+      return row;
+    })
+    .filter(r => r['Type']?.trim());
+
+  // Trades konvertieren (gleich wie parseKiFlexCSV)
+  const trades = tradeRows.map(r => convertKiFlexTrade(r));
+
+  // Cash Transactions klassifizieren
+  const cashResult = parseCashTransactions(cashRows);
+
+  // AccountId + Zeitraum
+  const accountId = tradeRows[0]?.['ClientAccountID'] || cashRows[0]?.['ClientAccountID'] || '';
+  const allDates  = tradeRows.map(r => formatDate(r['TradeDate']))
+    .concat(cashRows.map(r => formatDate((r['Date/Time'] || '').slice(0, 8))))
+    .filter(Boolean).sort();
+
+  // Jahre aus Trades und Cash
+  const years = [...new Set([
+    ...tradeRows.map(r => r['TradeDate']?.slice(0, 4)),
+    ...cashRows.map(r => (r['Date/Time'] || '').slice(0, 4)),
+  ].filter(Boolean))].sort();
+
+  // Jahresweise Auswertung
+  const yearlyResults = {};
+  for (const year of years) {
+    const ytrades = tradeRows.filter(r => r['TradeDate']?.slice(0, 4) === year);
+    const ycash   = cashRows.filter(r => (r['Date/Time'] || '').slice(0, 4) === year);
+    yearlyResults[year] = calcYearlyTaxFull(ytrades, ycash, year);
+  }
+
+  return {
+    format:        'ki_flex_cash_csv',
+    accountId,
+    dateRange:     { from: allDates[0] || '', to: allDates[allDates.length-1] || '' },
+    trades,
+    cashTransactions: cashResult,
+    yearlyResults,
+    summary:       buildKiFlexCashSummary(trades, cashResult, yearlyResults),
+  };
+}
+
+function parseCashTransactions(rows) {
+  const dividenden    = [];
+  const quellensteuer = [];
+  const zinsen        = [];
+
+  for (const r of rows) {
+    const type   = r['Type'] || '';
+    const amt    = parseFloat(r['Amount'] || '0');
+    const fx     = parseFloat(r['FXRateToBase'] || '1') || 1;
+    const amtEur = round2(amt * fx);
+    const date   = formatDate((r['Date/Time'] || '').slice(0, 8));
+    const sym    = r['Symbol'] || '';
+    const desc   = r['Description'] || '';
+    const cur    = r['CurrencyPrimary'] || 'EUR';
+
+    if (type === 'Dividends' || type === 'Payment In Lieu Of Dividends') {
+      dividenden.push({ date, symbol: sym, description: desc,
+        amount: amt, currency: cur, fxRate: fx, amountEur: amtEur,
+        type: type === 'Dividends' ? 'dividende' : 'ersatzdividende' });
+
+    } else if (type === 'Withholding Tax' && amt < 0) {
+      quellensteuer.push({ date, symbol: sym, description: desc,
+        amount: Math.abs(amt), currency: cur, fxRate: fx,
+        amountEur: Math.abs(amtEur) });
+
+    } else if (type.includes('Interest')) {
+      zinsen.push({ date, description: desc,
+        amount: amt, currency: cur, fxRate: fx, amountEur: amtEur,
+        type: amt >= 0 ? 'haben' : 'soll' });
+    }
+  }
+
+  return { dividenden, quellensteuer, zinsen };
+}
+
+function calcYearlyTaxFull(trades, cash, year) {
+  // G/V aus Trades (exakt: FifoPnlRealized × FXRateToBase)
+  const base = calcYearlyTax(trades, year);
+
+  // Dividenden aus Cash
+  const divs = cash.filter(r =>
+    r['Type'] === 'Dividends' || r['Type'] === 'Payment In Lieu Of Dividends');
+  const whts = cash.filter(r =>
+    r['Type'] === 'Withholding Tax' && parseFloat(r['Amount'] || '0') < 0);
+  const ints = cash.filter(r =>
+    r['Type']?.includes('Interest') && parseFloat(r['Amount'] || '0') > 0);
+
+  const divEur = round2(divs.reduce((s, r) =>
+    s + parseFloat(r['Amount'] || '0') * (parseFloat(r['FXRateToBase'] || '1') || 1), 0));
+  const whtEur = round2(whts.reduce((s, r) =>
+    s + Math.abs(parseFloat(r['Amount'] || '0')) * (parseFloat(r['FXRateToBase'] || '1') || 1), 0));
+  const intEur = round2(ints.reduce((s, r) =>
+    s + parseFloat(r['Amount'] || '0') * (parseFloat(r['FXRateToBase'] || '1') || 1), 0));
+
+  return {
+    ...base,
+    // Anlage KAP Zeilen komplett
+    z7_dividenden:  divEur,
+    z41_quellensteuer: whtEur,
+    z14_zinsen:     intEur,
+    // Rohdaten
+    divEur, whtEur, intEur,
+    divCount: divs.length,
+    whtCount: whts.length,
+  };
+}
+
+function buildKiFlexCashSummary(trades, cash, yearlyResults) {
+  return {
+    totalTrades:      trades.length,
+    totalDividenden:  cash.dividenden.length,
+    totalQuellensteuer: cash.quellensteuer.length,
+    totalZinsen:      cash.zinsen.length,
+    years:            Object.keys(yearlyResults).sort(),
+    byYear:           yearlyResults,
+  };
+}
+
 export const FLEX_MODULE_META = {
   version:   '1.1.0',
   created:   '2026-06-26',
-  formats:   ['lots_csv', 'kontoauszug', 'transaction_history', 'ki_flex_csv', 'activity_flex_csv', 'activity_xml (planned)'],
+  formats:   ['lots_csv', 'kontoauszug', 'transaction_history', 'ki_flex_cash_csv', 'ki_flex_csv', 'activity_flex_csv', 'activity_xml (planned)'],
   nextStep:  'Activity Flex Query mit TradeDate, BuySell, OpenCloseIndicator',
 };
