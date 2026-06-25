@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v106</title>
+<title>Refundex — KAP-Assistent v108</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -136,7 +136,7 @@
 
   <!-- UPLOAD -->
   <!-- UPLOAD BEREICH: 4 Dateitypen -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
     <div class="upload-zone" onclick="document.getElementById('file-main').click()" title="Jahresauszug CSV">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">📊</div>
       <div class="upload-title" style="font-size:13px">Jahresauszug <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.CSV</span></div>
@@ -161,11 +161,22 @@
       <div class="upload-hint">*_PWC_DE.pdf · Format: PDF</div>
       <div id="status-pdf" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt andere</div>
     </div>
+    <div class="upload-zone" onclick="document.getElementById('file-flex').click()" title="KI-Flex Query CSV">
+      <div style="font-size:1.5rem;margin-bottom:0.4rem">📈</div>
+      <div class="upload-title" style="font-size:13px">Flex Query <span style="font-size:10px;background:#0d2a1a;padding:1px 5px;border-radius:3px;color:#22c55e">NEU</span></div>
+      <div class="upload-hint">Trades CSV · IBKR FifoPnL</div>
+      <div id="status-flex" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt G/V</div>
+    </div>
   </div>
-  <input type="file" id="file-main" accept=".csv" onchange="loadCSV(event,'main')">
+  <input type="file" id="file-main" accept=".csv" onchange="onFileMain(event)">
   <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)">
   <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)">
   <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)">
+  <input type="file" id="file-flex" accept=".csv" onchange="onFileFlex(event)">
+
+  <!-- FLEX INFO BANNER -->
+  <div id="flex-info" style="display:none;margin-bottom:1rem;padding:0.75rem 1rem;background:var(--green-bg);border:1px solid #1a6040;border-radius:8px;font-size:13px;color:var(--text)">
+  </div>
 
   <!-- EXECUTE BAR -->
   <div id="execute-bar" style="display:none;margin-bottom:1rem;padding:0.75rem 1rem;background:var(--amber-bg);border:1px solid #7a5a10;border-radius:8px;align-items:center;gap:12px">
@@ -21043,49 +21054,6 @@ function fmt(n, decimals=2) {
   const str = abs.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return (n < 0 ? '-' : '') + '€' + str;
 }
-function fmtRaw(n) { return n >= 0 ? fmt(n) : fmt(n); }
-
-// ============================================================
-// STATE
-// ============================================================
-let rawData = null;   // Jahresauszug CSV
-let divData = null;   // Dividendenbericht HTML (exakte EUR-Kurse)
-let fxData  = null;   // FX-Einkünfte CSV (Anlage SO)
-let pdfData = null;   // Informativer Steuerbericht PDF (höchste Priorität)
-
-// ============================================================
-// CSV LADEN
-// ============================================================
-function loadCSV(event, src='main') {
-  const file = event.target.files[0];
-  if (!file) return;
-  document.getElementById('status-main').textContent = 'Lade ' + file.name + '…';
-  const reader = new FileReader();
-  reader.onload = e => {
-    rawData = parseJahresCSV(e.target.result, file.name);
-    document.getElementById('status-main').textContent = '✅ ' + file.name;
-    document.getElementById('status-main').style.color = 'var(--green)';
-    { const _eb=document.getElementById('execute-bar'); if(_eb) _eb.style.display='none'; }
-    // EZB-Tageskurse laden
-    const fxPairs = [];
-    if (rawData && rawData.dividenden) {
-      for (const d of rawData.dividenden) {
-        if (d.cur && d.cur !== 'EUR' && d.date) {
-          fxPairs.push({ currency: d.cur, date: d.date });
-        }
-      }
-    }
-    if (fxPairs.length > 0) {
-      const bar = document.getElementById('fx-status-bar');
-      if (bar) bar.style.display = 'block';
-      loadECBRates(fxPairs);
-    } else {
-      recalculate();
-    }
-  };
-  reader.readAsText(file, 'utf-8');
-}
-
 // ============================================================
 // DIVIDENDENBERICHT HTML PARSER
 // ============================================================
@@ -21385,14 +21353,6 @@ JSON-Format:
 }
 
 
-async function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
 // ============================================================
 // PARSER (JAHRESAUSZUG)
 // ============================================================
@@ -21515,6 +21475,79 @@ function splitLine(line) {
 // ============================================================
 // BERECHNUNG
 // ============================================================
+// ── FLEX QUERY CSV UPLOAD ─────────────────────────────────────
+async function onFileFlex(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const el = document.getElementById('status-flex');
+  el.textContent = '⏳ Wird geparst…';
+  el.style.color = 'var(--amber)';
+
+  try {
+    const text = await file.text();
+
+    // Ko-flex.js Modul laden (falls noch nicht geladen)
+    if (!window.koFlex) {
+      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@main/modules/ko-flex.js');
+      window.koFlex = mod;
+    }
+
+    const result = window.koFlex.parseFlexFile(text);
+    if (!result || result.format === 'unknown') throw new Error('Unbekanntes Format');
+
+    // Steuerjahr aus UI
+    const year = document.getElementById('tax-year')?.value || new Date().getFullYear() - 1;
+    const yr   = result.yearlyResults?.[year];
+
+    if (!yr) {
+      // Zeige verfügbare Jahre
+      const years = Object.keys(result.yearlyResults || {}).sort();
+      el.textContent = `⚠️ Kein ${year} — verfügbar: ${years.join(', ')}`;
+      el.style.color = 'var(--amber)';
+      return;
+    }
+
+    // rawData mit Flex-Daten ergänzen
+    if (!rawData) rawData = { kontoName:'', kontoNr:'', year: String(year),
+      divEur:0, whtEur:0, zinsenGesamt:0,
+      optionen:{gain:0,loss:0}, aktien:{gain:0,loss:0}, fx:{gain:0,loss:0} };
+
+    // IBKR FifoPnlRealized × FXRateToBase direkt übernehmen
+    rawData.aktien.gain  = yr.stkGainEur;
+    rawData.aktien.loss  = Math.abs(yr.stkLossEur);
+    rawData.optionen.gain = yr.optGainEur;
+    rawData.optionen.loss = Math.abs(yr.optLossEur);
+
+    // Konto-Info falls vorhanden
+    if (result.accountId) rawData.kontoNr = rawData.kontoNr || result.accountId;
+
+    // Status
+    const nTrades = result.trades?.length || 0;
+    el.textContent = `✅ ${nTrades} Trades · ${year} geladen`;
+    el.style.color = 'var(--green)';
+
+    // Neuberechnung anstoßen
+    recalculate();
+
+    // Info-Banner
+    const banner = document.getElementById('flex-info');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.innerHTML = `
+        <strong>📈 Flex Query ${year}</strong> — IBKR FifoPnlRealized × FXRateToBase
+        <span style="margin-left:1rem">Aktien G/V: <strong style="color:var(--green)">€${yr.stkGainEur.toFixed(2)}</strong></span>
+        <span style="margin-left:1rem">Optionen G/V: <strong style="color:${yr.z20_saldo>=0?'var(--green)':'var(--red)'}">€${yr.z20_saldo.toFixed(2)}</strong></span>
+        <span style="margin-left:1rem">Trades: <strong>${nTrades}</strong></span>
+      `;
+    }
+
+  } catch (err) {
+    el.textContent = '❌ ' + err.message;
+    el.style.color = 'var(--red)';
+    console.error('Flex Query Fehler:', err);
+  }
+}
+
 function recalculate() {
   if (!rawData && !pdfData) return;
   if (!rawData) { rawData = { kontoName:pdfData.kontoName||'',kontoNr:pdfData.kontoNr||'',year:pdfData.year||'',divNAV:0,whtNAV:0,zinsenGesamt:0,optionen:{gain:0,loss:0},aktien:{gain:0,loss:0},fx:{gain:0,loss:0} }; }
@@ -21582,8 +21615,8 @@ function recalculate() {
         : '~';
 
   const zinsEur = (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
-  const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)*share : toEur(d.optionen.gain,'USD',year)*share;
-  const optLoss = pdfData?.optLoss ? -Math.abs(pdfData.optLoss)*share : toEur(d.optionen.loss,'USD',year)*share;  // negativ
+  const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)*share : d.flexDataEUR ? (d.optionen.gain||0)*share : toEur(d.optionen.gain,'USD',year)*share;
+  const optLoss = pdfData?.optLoss ? -Math.abs(pdfData.optLoss)*share : d.flexDataEUR ? -(d.optionen.loss||0)*share : toEur(d.optionen.loss,'USD',year)*share;  // negativ
   const optSaldo = optGain + optLoss;
   const akGain   = toEur(d.aktien.gain, 'USD', year) * share;
   const akLoss   = toEur(d.aktien.loss, 'USD', year) * share;
@@ -21789,8 +21822,6 @@ function setColor(id, cls) {
 
 // DRAG & DROP
 // Drag & Drop deaktiviert (drei separate Upload-Zonen)
-// const dz = document.getElementById('drop-zone');
-// Drag & Drop: Nutzer klickt direkt auf die drei Upload-Zonen
 
 // Settings live update
 // ============================================================
@@ -21882,12 +21913,6 @@ function downloadDOCX() {
   downloadNext(0);
 }
 
-
-async function generateDOCXviaClaude(data) {
-  // Anthropic API: Claude generiert Node.js-Code + führt ihn serverseitig aus
-  // Da wir kein Backend haben, nutzen wir docx.js direkt im Browser via CDN
-  return await buildDOCXinBrowser(data);
-}
 
 async function buildDOCXinBrowser(data) {
   const docxLib = window.docx;
@@ -22078,13 +22103,6 @@ async function buildDOCXinBrowser(data) {
 }
 
 
-function b64toBlob(b64, type) {
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type });
-}
-
 ['tax-year','fsa'].forEach(id => {
   document.getElementById(id).addEventListener('change', recalculate);
 });
@@ -22094,15 +22112,6 @@ function b64toBlob(b64, type) {
 
 
 // Init API-Key
-(function(){try{var k=sessionStorage.getItem('refundex_api_key');if(k){window._kapApiKey=k;var el=document.getElementById('kap-api-key');if(el)el.value=k;}}catch(e){}})();
-function printKAP() {
-  const s = document.createElement('style');
-  s.id = 'print-kap';
-  s.textContent = '@media print {header,.upload-grid,.execute-bar,.settings-bar,#empty-state{display:none!important;}.main{padding:0!important;max-width:100%!important;}body{background:white!important;color:black!important;}.kap-form-header{background:#f0f4ff!important;-webkit-print-color-adjust:exact;}.kap-zeile{background:#f0f4ff!important;color:#2563eb!important;-webkit-print-color-adjust:exact;}.kap-betrag.pos{color:#16a34a!important;-webkit-print-color-adjust:exact;}.kap-betrag.neg{color:#dc2626!important;-webkit-print-color-adjust:exact;}}';
-  document.head.appendChild(s);
-  window.print();
-  setTimeout(()=>{const el=document.getElementById('print-kap');if(el)el.remove();},2000);
-}
-</script>
+(function(){try{var k=sessionStorage.getItem('refundex_api_key');if(k){window._kapApiKey=k;var el=document.getElementById('kap-api-key');if(el)el.value=k;}}catch(e){}})();</script>
 </body>
 </html>
