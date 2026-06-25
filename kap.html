@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v112</title>
+<title>Refundex — KAP-Assistent v114</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21542,23 +21542,24 @@ async function onFileFlex(event) {
       }
       if (!accountId && result.accountId) accountId = result.accountId;
 
-      // Jahre zusammenführen
+      // Jahre zusammenführen — jede Datei hat genau 1 Jahr
+      // → Ergebnis direkt übernehmen, NICHT addieren
       for (const [year, yr] of Object.entries(result.yearlyResults || {})) {
         if (!allYearlyResults[year]) {
           allYearlyResults[year] = { ...yr };
         } else {
-          const e = allYearlyResults[year];
-          ['stkGainEur','stkLossEur','optGainEur','optLossEur',
-           'z7_dividenden','z41_quellensteuer','z14_zinsen',
-           'divEur','whtEur','intEur'].forEach(k => {
-            if (yr[k] !== undefined) e[k] = (e[k]||0) + (yr[k]||0);
-          });
+          // Gleiche Datei nochmals geladen → überschreiben
+          allYearlyResults[year] = { ...yr };
         }
         if (yr.z7_dividenden !== undefined) isCash = true;
       }
       totalTrades += result.trades?.length || 0;
       totalDivs   += result.cashTransactions?.dividenden?.length || 0;
     }
+
+    // Global speichern für Steuerjahr-Wechsel
+    flexYearlyResults = allYearlyResults;
+    if (kontoName) { flexKontoName = kontoName; flexIsJoint = isJoint; flexInhaber = inhaber; }
 
     // Steuerjahr aus UI
     const year = document.getElementById('tax-year')?.value || String(new Date().getFullYear() - 1);
@@ -21665,6 +21666,48 @@ async function onFileFlex(event) {
     console.error('Flex Query Fehler:', err);
   }
 }
+// ── STEUERJAHR WECHSEL ────────────────────────────────────────
+function applyFlexYear(year) {
+  if (!flexYearlyResults || !Object.keys(flexYearlyResults).length) return;
+  const yr = flexYearlyResults[String(year)];
+  if (!yr) return;
+
+  if (!rawData) rawData = { kontoName:'', kontoNr:'', year:String(year),
+    divNAV:0, whtNAV:0, zinsenGesamt:0,
+    optionen:{gain:0,loss:0}, aktien:{gain:0,loss:0}, fx:{gain:0,loss:0} };
+
+  rawData.aktien.gain   = yr.stkGainEur   || 0;
+  rawData.aktien.loss   = Math.abs(yr.stkLossEur  || 0);
+  rawData.optionen.gain = yr.optGainEur   || 0;
+  rawData.optionen.loss = Math.abs(yr.optLossEur  || 0);
+  rawData.flexDataEUR   = true;
+  rawData.year          = String(year);
+
+  if (yr.z7_dividenden !== undefined) {
+    rawData.divEurFlex = yr.z7_dividenden    || 0;
+    rawData.whtEurFlex = yr.z41_quellensteuer || 0;
+    rawData.zinsenFlex = yr.z14_zinsen        || 0;
+    rawData.flexCash   = true;
+  }
+
+  // Banner aktualisieren
+  const banner = document.getElementById('flex-info');
+  if (banner && banner.style.display !== 'none') {
+    const optSaldo = (yr.optGainEur||0) - Math.abs(yr.optLossEur||0);
+    const isCash = yr.z7_dividenden !== undefined;
+    const yrs = Object.keys(flexYearlyResults).sort();
+    banner.innerHTML = `
+      <strong>📈 Flex Query ${year}</strong>
+      ${isCash?`<span style="margin-left:0.8rem">Div: <strong style="color:var(--green)">€${(yr.z7_dividenden||0).toFixed(2)}</strong></span>`:''}
+      <span style="margin-left:0.8rem">Aktien: <strong style="color:var(--green)">€${(yr.stkGainEur||0).toFixed(2)}</strong></span>
+      <span style="margin-left:0.8rem">Optionen: <strong style="color:${optSaldo>=0?'var(--green)':'var(--red)'}">€${optSaldo.toFixed(2)}</strong></span>
+      ${isCash?`<span style="margin-left:0.8rem">Zinsen: <strong>€${(yr.z14_zinsen||0).toFixed(2)}</strong></span>`:''}
+      <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">${yrs.length} Jahr(e): ${yrs.join(', ')} · IBKR FifoPnL×FX</span>
+    `;
+  }
+  recalculate();
+}
+
 function recalculate() {
   if (!rawData && !pdfData) return;
   if (!rawData) { rawData = { kontoName:pdfData.kontoName||'',kontoNr:pdfData.kontoNr||'',year:pdfData.year||'',divNAV:0,whtNAV:0,zinsenGesamt:0,optionen:{gain:0,loss:0},aktien:{gain:0,loss:0},fx:{gain:0,loss:0} }; }
@@ -22214,8 +22257,16 @@ async function buildDOCXinBrowser(data) {
 }
 
 
-['tax-year','fsa'].forEach(id => {
+['fsa'].forEach(id => {
   document.getElementById(id).addEventListener('change', recalculate);
+});
+document.getElementById('tax-year').addEventListener('change', function() {
+  const yr = this.value;
+  if (Object.keys(flexYearlyResults).length > 0) {
+    applyFlexYear(yr);
+  } else {
+    recalculate();
+  }
 });
 
 // Init: API-Key aus sessionStorage
