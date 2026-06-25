@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v124-debug</title>
+<title>Refundex — KAP-Assistent v124</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21566,19 +21566,12 @@ async function onFileFlex(event) {
       if (!primaryYr && resultYears.length > 0)
         primaryYr = resultYears.map(([y]) => y).sort().pop();
 
-      console.group(`[KAP] Upload: ${file.name}`);
-      console.log('Format:', result.format, '| Primärjahr:', primaryYr);
       for (const [yr, data] of resultYears) {
-        const cnt = (data.divCount||0)+(data.whtCount||0)+(Math.abs(data.optGainEur||0)+Math.abs(data.optLossEur||0)>0?10:0);
-        const action = (yr === primaryYr || !flexYearlyResults[yr]) ? 'SCHREIBEN' : 'SKIP (bereits da)';
-        console.log(`  Jahr ${yr}: score=${cnt}, div=${data.z7_dividenden}, wht=${data.z41_quellensteuer} → ${action}`);
         if (yr === primaryYr || !flexYearlyResults[yr]) {
           flexYearlyResults[yr] = { ...data };
         }
         if (data.z7_dividenden !== undefined) isCash = true;
       }
-      console.log('flexYearlyResults nach diesem File:', Object.keys(flexYearlyResults));
-      console.groupEnd();
       totalTrades += result.trades?.length || 0;
       totalDivs   += result.cashTransactions?.dividenden?.length || 0;
     }
@@ -21823,13 +21816,6 @@ function applyFlexYear(year) {
   const yr = flexYearlyResults[String(year)];
   if (!yr) return;
 
-  // DEBUG — in Konsole sichtbar
-  console.group(`[KAP] applyFlexYear(${year})`);
-  console.log('flexYearlyResults keys:', Object.keys(flexYearlyResults));
-  console.log('yr.z7_dividenden:', yr.z7_dividenden, '| yr.z41_quellensteuer:', yr.z41_quellensteuer,
-              '| yr.divCount:', yr.divCount, '| yr.whtCount:', yr.whtCount);
-  console.log('yr.optGainEur:', yr.optGainEur, '| yr.stkGainEur:', yr.stkGainEur);
-
   if (!rawData) rawData = { kontoName:'', kontoNr:'', year:String(year),
     divNAV:0, whtNAV:0, zinsenGesamt:0,
     optionen:{gain:0,loss:0}, aktien:{gain:0,loss:0}, fx:{gain:0,loss:0} };
@@ -21857,13 +21843,6 @@ function applyFlexYear(year) {
     rawData.zinsenFlex = 0;
     rawData.flexCash   = false;
   }
-  console.log('→ rawData nach applyFlexYear:', {
-    year: rawData.year, flexCash: rawData.flexCash,
-    divEurFlex: rawData.divEurFlex, whtEurFlex: rawData.whtEurFlex,
-    zinsenFlex: rawData.zinsenFlex,
-    optGain: rawData.optionen?.gain, optLoss: rawData.optionen?.loss,
-  });
-  console.groupEnd();
 
   // Banner aktualisieren — zeigt aktives Jahr, verfügbare Jahre als Kontext
   const banner = document.getElementById('flex-info');
