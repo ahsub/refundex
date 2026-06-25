@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v116</title>
+<title>Refundex — KAP-Assistent v117</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -20963,6 +20963,10 @@ let pdfData   = null;  // PWC/CapTrader PDF Daten
 let divData   = null;  // Dividenden HTML Daten
 let fxData    = null;  // FX-Einkünfte CSV Daten
 let fxRateMap = {};    // { "USD:2024-04-15": 0.9291, ... }
+let flexYearlyResults = {};
+let flexKontoName     = '';
+let flexIsJoint       = false;
+let flexInhaber       = [];
 let fxLoadStatus = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
 function toEur(amount, currency, year, date) {
   if (!amount || currency === 'EUR') return amount || 0;
@@ -21519,7 +21523,7 @@ async function onFileFlex(event) {
   el.style.color = 'var(--amber)';
 
   try {
-    {
+    if (!window.koFlex) {
       const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c0485a8/modules/ko-flex.js');
       window.koFlex = mod;
     }
@@ -21639,9 +21643,10 @@ async function onFileFlex(event) {
 
     // Status
     const years = Object.keys(allYearlyResults).sort();
+    const validFiles = files.length;
     el.textContent = isCash
-      ? `✅ ${files.length} Datei(en) · ${totalTrades} Trades · ${totalDivs} Div · ${years.join(', ')}`
-      : `✅ ${files.length} Datei(en) · ${totalTrades} Trades · ${years.join(', ')}`;
+      ? `✅ ${validFiles} Datei(en) · ${totalTrades} Trades · ${totalDivs} Div · ${years.join(', ')}`
+      : `✅ ${validFiles} Datei(en) · ${totalTrades} Trades · ${years.join(', ')}`;
     el.style.color = 'var(--green)';
 
     // Info-Banner
@@ -21669,7 +21674,8 @@ async function onFileFlex(event) {
 }
 function onTaxYearRefresh() {
   const year = document.getElementById('tax-year').value.trim();
-  if (!year) return;
+  if (!year || year.length < 4) return;
+  if (rawData) rawData.year = year;
   if (Object.keys(flexYearlyResults).length > 0) {
     applyFlexYear(year);
   } else {
@@ -21693,6 +21699,9 @@ function applyFlexYear(year) {
   rawData.optionen.loss = Math.abs(yr.optLossEur  || 0);
   rawData.flexDataEUR   = true;
   rawData.year          = String(year);
+  // DOM synchronisieren
+  const tyEl = document.getElementById('tax-year');
+  if (tyEl && tyEl.value !== String(year)) tyEl.value = String(year);
 
   if (yr.z7_dividenden !== undefined) {
     rawData.divEurFlex = yr.z7_dividenden    || 0;
@@ -21723,7 +21732,7 @@ function recalculate() {
   if (!rawData && !pdfData) return;
   if (!rawData) { rawData = { kontoName:pdfData.kontoName||'',kontoNr:pdfData.kontoNr||'',year:pdfData.year||'',divNAV:0,whtNAV:0,zinsenGesamt:0,optionen:{gain:0,loss:0},aktien:{gain:0,loss:0},fx:{gain:0,loss:0} }; }
 
-  const year    = document.getElementById('tax-year').value || rawData.year;
+  const year    = rawData?.year || document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
   const isJoint = document.getElementById('account-type').value === 'joint';
   const share   = isJoint ? 0.5 : 1.0;
   const fsa = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
