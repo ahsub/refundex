@@ -1260,9 +1260,16 @@ export function parseKiFlexFullCSV(csvText) {
   const cashResult = parseCashTransactions(cashRows);
 
   // Jahres-Ergebnisse berechnen
-  // Jahr aus Cash Transactions (zuverlässig) oder TradeDate
-  const cashYears = [...new Set(cashRows.map(r => (r['Date/Time']||'').slice(0,4)).filter(Boolean))];
+  // Primäres Jahr aus Cash Transactions (Mehrheitsjahr)
+  const cashYearCounts = {};
+  cashRows.forEach(r => {
+    const y = (r['Date/Time']||'').slice(0,4);
+    if (y) cashYearCounts[y] = (cashYearCounts[y]||0) + 1;
+  });
   const tradeYears = [...new Set(tradeRows.map(r => r['TradeDate']?.slice(0,4)).filter(Boolean))];
+  const cashYears  = Object.keys(cashYearCounts);
+  // Primärjahr = Jahr mit den meisten Cash-Transaktionen
+  const primaryYear = Object.entries(cashYearCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
   const years = [...new Set([...cashYears, ...tradeYears])].sort();
 
   const yearlyResults = {};
@@ -1272,7 +1279,7 @@ export function parseKiFlexFullCSV(csvText) {
     const hasTradeDate = tradeRows.some(r => r['TradeDate']);
     const yt = hasTradeDate
       ? tradeRows.filter(r => r['TradeDate']?.slice(0,4) === year)
-      : tradeRows;  // kein TradeDate → alle Trades gehören zu diesem Jahr
+      : (year === primaryYear ? tradeRows : []);  // Trades → nur Primärjahr
     const yc = cashRows.filter(r => (r['Date/Time']||'').slice(0,4) === year);
     yearlyResults[year] = calcYearlyTaxFull(yt, yc, year);
   }
