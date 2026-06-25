@@ -21361,6 +21361,31 @@ JSON-Format:
 // ============================================================
 // PARSER (JAHRESAUSZUG)
 // ============================================================
+// ── JAHRESAUSZUG CSV UPLOAD ───────────────────────────────────
+async function onFileMain(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const el = document.getElementById('status-main');
+  el.textContent = '⏳ Wird geladen…';
+  el.style.color = 'var(--amber)';
+
+  try {
+    const text = await file.text();
+    rawData = parseJahresCSV(text, file.name);
+
+    if (!rawData) throw new Error('CSV konnte nicht geparst werden');
+
+    el.textContent = '✅ ' + file.name.slice(0, 25);
+    el.style.color = 'var(--green)';
+
+    recalculate();
+  } catch(err) {
+    el.textContent = '❌ ' + err.message;
+    el.style.color = 'var(--red)';
+    console.error('Jahresauszug Fehler:', err);
+  }
+}
+
 function parseJahresCSV(text, fileName) {
   const lines = text.split(/\r?\n/);
   const d = {
@@ -21849,10 +21874,10 @@ function downloadDOCX() {
   const divEur  = (_pdfDiv>0) ? _pdfDiv*share : divData ? divData.totalDivEur*share : toEur(d.divNAV||0,'USD',year)*share;
   const whtEur  = (_pdfDiv>0) ? (pdfData.creditableWht||0)*share : divData ? divData.totalWhtEur*share : toEur(d.whtNAV||0,'USD',year)*share;
   const zinsEur = (pdfData?.zinsenEur>0) ? pdfData.zinsenEur*share : (d.zinsenGesamt||0)*share;
-  const optGain = (pdfData?.optGain) ? Math.abs(pdfData.optGain)*share : toEur(d.optionen?.gain||0,'USD',year)*share;
-  const optLoss = (pdfData?.optLoss) ? -Math.abs(pdfData.optLoss)*share : toEur(d.optionen?.loss||0,'USD',year)*share;
-  const akGain  = toEur(d.aktien?.gain||0,'USD',year)*share;
-  const akLoss  = toEur(d.aktien?.loss||0,'USD',year)*share;
+  const optGain = (pdfData?.optGain) ? Math.abs(pdfData.optGain)*share : d.flexDataEUR ? (d.optionen?.gain||0)*share : toEur(d.optionen?.gain||0,'USD',year)*share;
+  const optLoss = (pdfData?.optLoss) ? -Math.abs(pdfData.optLoss)*share : d.flexDataEUR ? -(d.optionen?.loss||0)*share : toEur(d.optionen?.loss||0,'USD',year)*share;
+  const akGain  = d.flexDataEUR ? (d.aktien?.gain||0)*share : toEur(d.aktien?.gain||0,'USD',year)*share;
+  const akLoss  = d.flexDataEUR ? -(d.aktien?.loss||0)*share : toEur(d.aktien?.loss||0,'USD',year)*share;
   const fxVal   = fxData ? fxData.total*share : toEur((d.fx?.gain||0)+(d.fx?.loss||0),'USD',year)*share;
   const optSaldo = round2(optGain+optLoss);
   const optVortrag = Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain+20000));
