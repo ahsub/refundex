@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v132</title>
+<title>Refundex — KAP-Assistent v134</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -73,6 +73,26 @@
   .topf-row .val.pos{color:var(--green);}
   .topf-row .val.neg{color:var(--red);}
   .topf-row .val.warn{color:var(--amber);}
+  /* Hilfe-Modal Markdown */
+  #help-content h1{font-size:18px;font-weight:700;color:var(--text);margin:0 0 0.75rem;padding-bottom:0.5rem;border-bottom:2px solid var(--accent)}
+  #help-content h2{font-size:15px;font-weight:700;color:var(--accent);margin:1.25rem 0 0.5rem}
+  #help-content h3{font-size:13px;font-weight:700;color:var(--text);margin:1rem 0 0.4rem}
+  #help-content p{margin:0 0 0.75rem;color:var(--text)}
+  #help-content ul,#help-content ol{margin:0 0 0.75rem 1.25rem;color:var(--text)}
+  #help-content li{margin-bottom:0.3rem}
+  #help-content code{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px;font-family:var(--mono)}
+  #help-content pre{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:0.75rem;overflow-x:auto;margin:0 0 0.75rem}
+  #help-content pre code{background:none;border:none;padding:0}
+  #help-content blockquote{border-left:3px solid var(--accent);margin:0.5rem 0 0.75rem;padding:0.4rem 0.8rem;background:var(--bg3);border-radius:0 6px 6px 0;color:var(--muted)}
+  #help-content table{border-collapse:collapse;width:100%;margin:0 0 0.75rem;font-size:13px}
+  #help-content th{background:var(--bg3);padding:6px 10px;text-align:left;border:1px solid var(--border);font-weight:600;color:var(--accent)}
+  #help-content td{padding:5px 10px;border:1px solid var(--border);vertical-align:top}
+  #help-content tr:nth-child(even) td{background:var(--bg3)}
+  #help-content strong{color:var(--text);font-weight:600}
+  #help-content a{color:var(--accent)}
+  .help-nav-item{display:flex;align-items:center;gap:0.5rem;padding:0.45rem 1rem;cursor:pointer;font-size:12px;color:var(--muted);border-radius:0;transition:background 0.1s;border-left:3px solid transparent}
+  .help-nav-item:hover{background:var(--bg2);color:var(--text)}
+  .help-nav-item.active{background:var(--bg2);color:var(--text);border-left-color:var(--accent);font-weight:600}
   /* ETF Vorabpauschale */
   .etf-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;position:relative;}
   .etf-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;}
@@ -142,52 +162,73 @@
     <div class="logo"><span>R</span>efundex <span class="logo-sub">KAP-Assistent</span></div>
   </div>
   <div style="display:flex;gap:1rem;align-items:center">
+    <button onclick="openHelp()" class="nav-link" style="background:none;border:none;cursor:pointer;padding:0;font-size:12px;color:var(--accent)">❓ Hilfe</button>
     <a href="formfiller.html" class="nav-link">FormFiller</a>
     <a href="index.html" class="nav-link">← Dashboard</a>
   </div>
 </header>
 
+<!-- HILFE MODAL -->
+<div id="help-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px)">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:min(860px,95vw);height:min(85vh,700px);background:var(--bg2);
+    border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden">
+
+    <!-- Modal Header -->
+    <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg3)">
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <span style="font-size:18px">❓</span>
+        <strong style="font-size:15px">Refundex Hilfe</strong>
+        <span id="help-module-title" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <button onclick="closeHelp()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0;line-height:1">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div style="display:flex;flex:1;overflow:hidden">
+
+      <!-- Sidebar Navigation -->
+      <div id="help-nav" style="width:220px;min-width:220px;border-right:1px solid var(--border);overflow-y:auto;padding:0.5rem 0;background:var(--bg3)">
+        <div style="padding:0.5rem 1rem;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Themen</div>
+      </div>
+
+      <!-- Content Area -->
+      <div id="help-content" style="flex:1;overflow-y:auto;padding:1.5rem 2rem;font-size:14px;line-height:1.7">
+        <div style="color:var(--muted);text-align:center;padding:3rem">⏳ Lade Hilfe-Inhalte…</div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div style="padding:0.6rem 1.25rem;border-top:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
+      <span>Refundex Dokumentation · ahsub.github.io/refundex-docs</span>
+      <span id="help-load-status"></span>
+    </div>
+  </div>
+</div>
+
 <main class="main">
 
   <!-- UPLOAD -->
-  <!-- UPLOAD BEREICH: 4 Dateitypen -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
-    <div class="upload-zone" onclick="document.getElementById('file-main').click()" title="Jahresauszug CSV">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">📊</div>
-      <div class="upload-title" style="font-size:13px">Jahresauszug <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.CSV</span></div>
-      <div class="upload-hint">Jahresauszug CSV · CapTrader</div>
-      <div id="status-main" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Nicht geladen</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;max-width:600px">
+    <div class="upload-zone" onclick="document.getElementById('file-flex').click()" title="Flex Query CSV">
+      <div style="font-size:1.5rem;margin-bottom:0.4rem">📈</div>
+      <div class="upload-title" style="font-size:13px">Flex Query <span style="font-size:10px;background:#0d2a1a;padding:1px 5px;border-radius:3px;color:#22c55e">.CSV</span></div>
+      <div class="upload-hint">IBKR · Account Info + Trades + Cash</div>
+      <div id="status-flex" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Nicht geladen</div>
     </div>
-    <div class="upload-zone" onclick="document.getElementById('file-div').click()" title="Dividendenbericht HTML">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">💰</div>
-      <div class="upload-title" style="font-size:13px">Dividendenbericht <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.HTML</span></div>
-      <div class="upload-hint">*_dividends.html · Format: HTML</div>
-      <div id="status-div" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
-    </div>
-    <div class="upload-zone" onclick="document.getElementById('file-fx').click()" title="FX-Einkünfte CSV">
+    <div class="upload-zone" onclick="document.getElementById('file-fx').click()" title="FX-Einkünfte CSV (optional)">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">💱</div>
       <div class="upload-title" style="font-size:13px">FX-Einkünfte <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.CSV</span></div>
-      <div class="upload-hint">*_fx.csv · Format: CSV</div>
+      <div class="upload-hint">Devisengewinne · Anlage SO</div>
       <div id="status-fx" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
     </div>
-    <div class="upload-zone" onclick="document.getElementById('file-pdf').click()" title="Informativer Steuerbericht PDF">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">📑</div>
-      <div class="upload-title" style="font-size:13px">Steuerbericht <span style="font-size:10px;background:#1a3060;padding:1px 5px;border-radius:3px">.PDF</span></div>
-      <div class="upload-hint">*_PWC_DE.pdf · Format: PDF</div>
-      <div id="status-pdf" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt andere</div>
-    </div>
-    <div class="upload-zone" onclick="document.getElementById('file-flex').click()" title="KI-Flex Query CSV">
-      <div style="font-size:1.5rem;margin-bottom:0.4rem">📈</div>
-      <div class="upload-title" style="font-size:13px">Flex Query <span style="font-size:10px;background:#0d2a1a;padding:1px 5px;border-radius:3px;color:#22c55e">NEU</span></div>
-      <div class="upload-hint">Trades CSV · IBKR FifoPnL</div>
-      <div id="status-flex" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt G/V</div>
-    </div>
   </div>
+  <input type="file" id="file-flex" accept=".csv" multiple onchange="onFileFlex(event)" style="display:none">
+  <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)" style="display:none">
+  <!-- Legacy-Inputs (inaktiv, für Rückwärtskompatibilität der Handler) -->
   <input type="file" id="file-main" accept=".csv" onchange="onFileMain(event)" style="display:none">
   <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)" style="display:none">
-  <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)" style="display:none">
   <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)" style="display:none">
-  <input type="file" id="file-flex" accept=".csv" multiple onchange="onFileFlex(event)" style="display:none">
 
   <!-- KONTO INFO BANNER -->
   <div id="konto-info" style="display:none;margin-bottom:0.75rem;padding:0.6rem 1rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;align-items:center;gap:0.5rem;flex-wrap:wrap">
@@ -22914,6 +22955,162 @@ async function buildDOCXinBrowser(data) {
     }
   });
 });
+
+// ============================================================
+// HILFE-SYSTEM — lädt Markdown-Docs von GitHub
+// ============================================================
+
+const HELP_BASE = 'https://raw.githubusercontent.com/ahsub/refundex-docs/main';
+let _helpIndex = null;
+let _helpCache = {};
+let _helpActiveId = null;
+
+async function openHelp() {
+  document.getElementById('help-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+
+  if (!_helpIndex) {
+    await loadHelpIndex();
+  }
+  if (_helpActiveId) {
+    loadHelpModule(_helpActiveId);
+  }
+}
+
+function closeHelp() {
+  document.getElementById('help-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// Schließen bei Klick auf Hintergrund
+document.getElementById('help-modal')?.addEventListener('click', function(e) {
+  if (e.target === this) closeHelp();
+});
+
+// ESC-Taste
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeHelp(); });
+
+async function loadHelpIndex() {
+  const statusEl = document.getElementById('help-load-status');
+  try {
+    statusEl.textContent = '⏳ Lade Index…';
+    const res = await fetch(`${HELP_BASE}/index.json`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _helpIndex = await res.json();
+
+    const modules = _helpIndex.apps?.refundex?.modules || [];
+    const navEl = document.getElementById('help-nav');
+    navEl.innerHTML = '<div style="padding:0.5rem 1rem;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Themen</div>';
+    modules.forEach((mod, i) => {
+      const item = document.createElement('div');
+      item.className = 'help-nav-item' + (i === 0 ? ' active' : '');
+      item.innerHTML = `<span>${mod.icon}</span><span>${mod.title}</span>`;
+      item.onclick = () => loadHelpModule(mod.id);
+      item.dataset.id = mod.id;
+      navEl.appendChild(item);
+    });
+
+    statusEl.textContent = '';
+    // Erstes Modul laden
+    if (modules.length) loadHelpModule(modules[0].id);
+  } catch(e) {
+    statusEl.textContent = '❌ Docs nicht erreichbar';
+    document.getElementById('help-content').innerHTML =
+      `<div style="color:var(--muted);padding:2rem;text-align:center">
+        <div style="font-size:2rem;margin-bottom:1rem">📡</div>
+        <div>Hilfe-Inhalte nicht erreichbar.</div>
+        <div style="margin-top:0.5rem;font-size:12px">Bitte prüfen Sie Ihre Internetverbindung.</div>
+        <div style="margin-top:1rem"><a href="${HELP_BASE}/index.json" target="_blank" style="color:var(--accent);font-size:12px">Direkt auf GitHub öffnen ↗</a></div>
+      </div>`;
+  }
+}
+
+async function loadHelpModule(id) {
+  _helpActiveId = id;
+
+  // Navigations-Highlight
+  document.querySelectorAll('.help-nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+
+  // Modul-Titel
+  const mod = _helpIndex?.apps?.refundex?.modules?.find(m => m.id === id);
+  document.getElementById('help-module-title').textContent = mod ? `— ${mod.title}` : '';
+
+  const contentEl = document.getElementById('help-content');
+
+  // Cache-Hit
+  if (_helpCache[id]) {
+    contentEl.innerHTML = _helpCache[id];
+    contentEl.scrollTop = 0;
+    return;
+  }
+
+  contentEl.innerHTML = '<div style="color:var(--muted);padding:2rem;text-align:center">⏳ Lade…</div>';
+
+  try {
+    const res = await fetch(`${HELP_BASE}/docs/${id}.md`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const md = await res.text();
+    const html = markdownToHtml(md);
+    _helpCache[id] = html;
+    contentEl.innerHTML = html;
+    contentEl.scrollTop = 0;
+  } catch(e) {
+    contentEl.innerHTML = `<div style="color:var(--muted);padding:2rem">❌ Modul nicht geladen: ${e.message}</div>`;
+  }
+}
+
+// Minimaler Markdown-Renderer (kein externe Bibliothek nötig)
+function markdownToHtml(md) {
+  let html = md
+    // Code-Blöcke (vor allem anderen)
+    .replace(/```[\w]*\n([\s\S]*?)```/g, (_, code) =>
+      `<pre><code>${escHtml(code.trim())}</code></pre>`)
+    // Inline-Code
+    .replace(/`([^`]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`)
+    // Überschriften
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Blockquote
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    // Tabellen
+    .replace(/^\|(.+)\|\n\|[-| :]+\|\n((?:\|.+\|\n?)*)/gm, (_, header, body) => {
+      const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+      const trs = body.trim().split('\n').map(row => {
+        const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+        return `<tr>${tds}</tr>`;
+      }).join('');
+      return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+    })
+    // Listen (nummeriert)
+    .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+    // Listen (Bullet)
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    // Listen wrappen
+    .replace(/(<li>[\s\S]+?<\/li>)\n(?!<li>)/g, '<ul>$1</ul>\n')
+    // Bold, Italic
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    // Horizontale Linie
+    .replace(/^---$/gm, '<hr>')
+    // Absätze
+    .split(/\n\n+/)
+    .map(block => {
+      if (/^<(h[1-3]|ul|ol|pre|table|blockquote|hr)/.test(block.trim())) return block;
+      return `<p>${block.replace(/\n/g, ' ')}</p>`;
+    })
+    .join('\n');
+
+  return html;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 // Init: API-Key aus sessionStorage
 (function(){const k=sessionStorage.getItem('refundex_api_key');if(k){window._kapApiKey=k;}})();
