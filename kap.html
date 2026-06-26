@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v131</title>
+<title>Refundex — KAP-Assistent v132</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21930,8 +21930,9 @@ function recalculate() {
           optGain, optLoss, akGain, akLoss,
           fxSaldo, fxSource, fsa, vorabpauschale } = kap;
 
-  // ETF-Sektion rendern (nutzt etfList direkt)
-  renderEtfSektion(year);
+  // ETF-Sektion rendern — aber NUR wenn kein ETF-Eingabefeld aktiv ist (verhindert Fokus-Verlust)
+  const etfFocused = document.activeElement?.closest?.('#etf-section');
+  if (!etfFocused) renderEtfSektion(year);
 
   const optSaldo = round2(optGain + optLoss);
   const akSaldo  = round2(akGain  + akLoss);
@@ -22164,7 +22165,9 @@ function calcEtfVorabpauschale(etf, year) {
   const k1 = parseFloat(etf.kurs1jan)   || 0;
   const k2 = parseFloat(etf.kurs31dez)  || 0;
   const n  = parseFloat(etf.anteile)    || 0;
-  const ausschuettung = parseFloat(etf.ausschuettung) || 0;
+  const ausschuettung = (etf.fondsTyp === 'ausschuettend')
+    ? (parseFloat(etf.ausschuettung) || 0)
+    : 0;  // Thesaurierend: keine Ausschüttung, Vorabpauschale = voller Basisertrag
   const tfs = TFS_QUOTEN[etf.tfsTyp] ?? 0.30;
 
   if (basiszins <= 0 || k1 <= 0 || n <= 0) return { basisertrag: 0, vorabpauschale: 0, steuerpflichtig: 0 };
@@ -22277,7 +22280,8 @@ function updateEtfTotal(year) {
     (basiszins !== undefined ? ` (Basiszins ${year}: ${(basiszins*100).toFixed(2)}%)` : '');
   const totalEl = document.getElementById('etf-total');
   if (totalEl) totalEl.style.display = etfList.length > 0 ? 'flex' : 'none';
-  recalculate();
+  // Kein recalculate() hier — würde renderEtfSektion() triggern und Fokus zerstören
+  // KAP-Formular wird beim nächsten blur/fullRender aktualisiert
 }
 
 function lookupEtfAusschuettung(isin, year) {
@@ -22343,6 +22347,13 @@ function renderEtfSektion(year) {
             onblur="updateEtf(${etf.id},'name',this.value,true)">
         </div>
         <div class="etf-field">
+          <label>Fondstyp</label>
+          <select onchange="updateEtf(${etf.id},'fondsTyp',this.value,true)">
+            <option value="thesaurierend" ${(etf.fondsTyp||'thesaurierend')==='thesaurierend'?'selected':''}>Thesaurierend</option>
+            <option value="ausschuettend" ${etf.fondsTyp==='ausschuettend'?'selected':''}>Ausschüttend</option>
+          </select>
+        </div>
+        <div class="etf-field">
           <label>Teilfreistellung</label>
           <select onchange="updateEtf(${etf.id},'tfsTyp',this.value,true)">${tfsOptions}</select>
         </div>
@@ -22370,14 +22381,24 @@ function renderEtfSektion(year) {
             oninput="updateEtf(${etf.id},'kurs31dez',this.value)"
             onblur="updateEtf(${etf.id},'kurs31dez',this.value,true)">
         </div>
-        <div class="etf-field">
-          <label>Ausschüttungen ${year} (EUR)</label>
+        ${(etf.fondsTyp||'thesaurierend') === 'ausschuettend' ? `
+        <div class="etf-field" style="grid-column:span 1">
+          <label style="display:flex;align-items:center;gap:0.3rem">
+            Ausschüttungen ${year} (EUR)
+            <span title="Bereits in Z.7 Dividenden erfasst — hier nur zur Berechnung der Vorabpauschale (mindert den Basisertrag)"
+              style="cursor:help;color:var(--muted);font-size:11px">ⓘ</span>
+          </label>
           <input type="text" inputmode="decimal" placeholder="0,00"
             data-etf-id="${etf.id}" data-field="ausschuettung"
             value="${etf.ausschuettung}"
             oninput="updateEtf(${etf.id},'ausschuettung',this.value)"
             onblur="updateEtf(${etf.id},'ausschuettung',this.value,true)">
-        </div>
+          <span style="font-size:10px;color:var(--muted);margin-top:2px">Mindert Vorabpauschale · nicht nochmals in Z.7</span>
+        </div>` : `
+        <div class="etf-field" style="grid-column:span 1">
+          <label style="color:var(--muted)">Ausschüttungen</label>
+          <div style="font-size:12px;color:var(--muted);padding:0.3rem 0">Thesaurierend → 0,00</div>
+        </div>`}
       </div>
       <div class="etf-result" id="etf-result-${etf.id}" style="display:${hasResult?'flex':'none'}">
         ${hasResult ? `
