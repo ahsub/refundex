@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v125</title>
+<title>Refundex — KAP-Assistent v129</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -73,6 +73,21 @@
   .topf-row .val.pos{color:var(--green);}
   .topf-row .val.neg{color:var(--red);}
   .topf-row .val.warn{color:var(--amber);}
+  /* ETF Vorabpauschale */
+  .etf-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;position:relative;}
+  .etf-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;}
+  .etf-card-title{font-size:13px;font-weight:600;color:var(--accent);}
+  .etf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;}
+  .etf-field{display:flex;flex-direction:column;gap:3px;}
+  .etf-field label{font-size:11px;color:var(--muted);font-weight:500;}
+  .etf-field input,.etf-field select{background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;font-size:13px;width:100%;}
+  .etf-result{margin-top:0.75rem;padding:0.6rem 0.8rem;background:var(--bg3);border-radius:6px;font-size:12px;display:flex;gap:1.5rem;flex-wrap:wrap;}
+  .etf-result span{color:var(--muted);}
+  .etf-result strong{color:var(--text);}
+  .etf-result .highlight{color:var(--green);font-weight:700;}
+  .etf-result .zero{color:var(--muted);}
+  .etf-total{background:var(--bg2);border:1px solid var(--accent);border-radius:var(--radius);padding:0.75rem 1rem;margin-top:0.5rem;display:flex;justify-content:space-between;align-items:center;}
+  @media(max-width:600px){.etf-grid{grid-template-columns:1fr 1fr;}}
 
   /* ANLAGE KAP FORMULAR */
   .kap-form{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
@@ -168,11 +183,11 @@
       <div id="status-flex" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional · überschreibt G/V</div>
     </div>
   </div>
-  <input type="file" id="file-main" accept=".csv" onchange="onFileMain(event)">
-  <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)">
-  <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)">
-  <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)">
-  <input type="file" id="file-flex" accept=".csv" multiple onchange="onFileFlex(event)">
+  <input type="file" id="file-main" accept=".csv" onchange="onFileMain(event)" style="display:none">
+  <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)" style="display:none">
+  <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)" style="display:none">
+  <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)" style="display:none">
+  <input type="file" id="file-flex" accept=".csv" multiple onchange="onFileFlex(event)" style="display:none">
 
   <!-- KONTO INFO BANNER -->
   <div id="konto-info" style="display:none;margin-bottom:0.75rem;padding:0.6rem 1rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;align-items:center;gap:0.5rem;flex-wrap:wrap">
@@ -310,6 +325,30 @@
           Überschreitende Verluste werden in das Folgejahr vorgetragen.
           <span id="para20-detail"></span>
         </div>
+      </div>
+    </div>
+
+    <!-- ETF VORABPAUSCHALE -->
+    <div class="section" id="etf-section">
+      <div class="section-title">
+        ETF Vorabpauschale <span style="font-size:11px;color:var(--muted);font-weight:400">§18 InvStG</span>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <button class="btn" onclick="etfReset()" id="etf-reset-btn" style="display:none;font-size:11px;padding:0.2rem 0.6rem;color:var(--muted)">↺ Zurücksetzen</button>
+          <button class="btn" onclick="addEtf()" style="font-size:12px;padding:0.25rem 0.7rem">+ ETF hinzufügen</button>
+        </div>
+      </div>
+      <div id="etf-load-banner" style="display:none;margin-bottom:0.75rem;padding:0.6rem 1rem;background:var(--bg3);border:1px solid var(--accent);border-radius:8px;font-size:12px;color:var(--muted)"></div>
+      <div class="hinweis info" style="margin-bottom:0.75rem">
+        <span>ℹ️</span>
+        <span>Kurs 1.1. und 31.12. aus dem Depotauszug oder fondsweb.de. Ausschüttungen werden automatisch aus der Flex Query befüllt wenn die ISIN bekannt ist.</span>
+      </div>
+      <div id="etf-list"></div>
+      <div id="etf-total" style="display:none" class="etf-total">
+        <span style="font-size:13px;font-weight:600">Vorabpauschale gesamt → <span style="color:var(--muted);font-size:11px" id="etf-share-label"></span></span>
+        <span style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--green)" id="etf-total-val">0,00 EUR</span>
+      </div>
+      <div id="etf-empty" style="color:var(--muted);font-size:13px;padding:0.5rem 0">
+        Kein ETF eingetragen — bei reinen Aktien-/Options-Depots nicht relevant.
       </div>
     </div>
 
@@ -20968,6 +21007,7 @@ let flexKontoName     = '';
 let flexIsJoint       = false;
 let flexInhaber       = [];
 let flexUploadedFiles = [];  // File-Referenzen für Reload bei Steuerjahr-Wechsel
+let etfList = [];            // [{isin, name, anteile, kurs1jan, kurs31dez, tfsTyp, ausschuettung}]
 let fxLoadStatus = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
 function toEur(amount, currency, year, date) {
   if (!amount || currency === 'EUR') return amount || 0;
@@ -21888,7 +21928,10 @@ function recalculate() {
 
   const { divEur, whtEur, divSource, zinsEur,
           optGain, optLoss, akGain, akLoss,
-          fxSaldo, fxSource, fsa } = kap;
+          fxSaldo, fxSource, fsa, vorabpauschale } = kap;
+
+  // ETF-Sektion rendern (nutzt etfList direkt)
+  renderEtfSektion(year);
 
   const optSaldo = round2(optGain + optLoss);
   const akSaldo  = round2(akGain  + akLoss);
@@ -21905,6 +21948,7 @@ function recalculate() {
     z7_div:         round2(divEur),
     z8_aktienGain:  round2(Math.max(0, akGain)),
     z9_aktienLoss:  round2(Math.abs(Math.min(0, akSaldo))),
+    z9_vorab:       round2(vorabpauschale),
     z12_optGain:    round2(optGainAbs),
     z13_optLoss:    round2(optLossAbs),
     z14_zinsen:     round2(zinsEur),
@@ -22018,6 +22062,7 @@ function calcKAP(d, year) {
     akGain, akLoss,
     fxSaldo, fxSource,
     fsa,
+    vorabpauschale: calcEtfGesamt(year),  // Brutto §18 InvStG
   };
 }
 
@@ -22031,8 +22076,304 @@ function projiziereErgebnis(brutto, kontoTyp) {
 }
 
 // ============================================================
-// RENDER OVERVIEW
+// ETF VORABPAUSCHALE §18 InvStG
 // ============================================================
+
+const BASISZINS = { 2022: -0.0088, 2023: 0.0255, 2024: 0.0229, 2025: 0.0230 };
+const TFS_QUOTEN = { aktien: 0.30, misch: 0.15, immobilien: 0.60, anleihen: 0.00 };
+const TFS_LABELS = { aktien: 'Aktienfonds 30%', misch: 'Mischfonds 15%', immobilien: 'Immobilienfonds 60%', anleihen: 'Anleihenfonds 0%' };
+const ETF_STORAGE_KEY = 'refundex_etf_v1';
+
+// ── LocalStorage: Speichern & Laden ──────────────────────────────────────────
+
+function etfSave() {
+  try {
+    const payload = {
+      year: document.getElementById('tax-year').value || String(new Date().getFullYear()-1),
+      list: etfList.map(e => ({ ...e })),
+    };
+    localStorage.setItem(ETF_STORAGE_KEY, JSON.stringify(payload));
+  } catch(e) { /* localStorage nicht verfügbar */ }
+}
+
+function etfLoad(targetYear) {
+  try {
+    const raw = localStorage.getItem(ETF_STORAGE_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    if (!saved?.list?.length) return false;
+
+    const savedYear = String(saved.year || '');
+    const currentYear = String(targetYear);
+    const yearDiff = parseInt(currentYear) - parseInt(savedYear);
+
+    if (savedYear === currentYear) {
+      // Gleiches Jahr → alles direkt übernehmen
+      etfList = saved.list.map(e => ({ ...e, id: Date.now() + Math.random() }));
+      return { mode: 'same', count: etfList.length, savedYear };
+    }
+
+    if (yearDiff === 1) {
+      // Folgejahr → Jahreswechsel-Logik:
+      // ISIN, Name, TFS, Anteile (Vorschlag) übernehmen
+      // Kurs 1.1. = Kurs 31.12. des Vorjahres
+      // Kurs 31.12. und Ausschüttungen leeren
+      etfList = saved.list.map(e => ({
+        ...e,
+        id: Date.now() + Math.random(),
+        kurs1jan:      e.kurs31dez || '',   // Vorjahres-31.12. → neues 1.1.
+        kurs31dez:     '',                   // muss neu eingetragen werden
+        ausschuettung: '0',                  // jahresspezifisch
+        _vorjahr:      true,                 // Markierung für UI-Hinweis
+      }));
+      return { mode: 'nextyear', count: etfList.length, savedYear };
+    }
+
+    if (yearDiff > 1) {
+      // Mehrere Jahre übersprungen → nur Stammdaten (ISIN, Name, TFS), alles andere leer
+      etfList = saved.list.map(e => ({
+        ...e,
+        id: Date.now() + Math.random(),
+        anteile: '', kurs1jan: '', kurs31dez: '', ausschuettung: '0',
+        _vorjahr: true,
+      }));
+      return { mode: 'older', count: etfList.length, savedYear };
+    }
+
+    return false; // Gespeichertes Jahr ist neuer → nicht laden
+  } catch(e) { return false; }
+}
+
+function etfReset() {
+  if (!confirm('ETF-Liste zurücksetzen und gespeicherte Daten löschen?')) return;
+  try { localStorage.removeItem(ETF_STORAGE_KEY); } catch(e) {}
+  etfList = [];
+  const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
+  renderEtfSektion(year);
+  recalculate();
+}
+
+function calcEtfVorabpauschale(etf, year) {
+  const basiszins = BASISZINS[String(year)] ?? 0;
+  const k1 = parseFloat(etf.kurs1jan)   || 0;
+  const k2 = parseFloat(etf.kurs31dez)  || 0;
+  const n  = parseFloat(etf.anteile)    || 0;
+  const ausschuettung = parseFloat(etf.ausschuettung) || 0;
+  const tfs = TFS_QUOTEN[etf.tfsTyp] ?? 0.30;
+
+  if (basiszins <= 0 || k1 <= 0 || n <= 0) return { basisertrag: 0, vorabpauschale: 0, steuerpflichtig: 0 };
+
+  const basisertragProAnteil = k1 * basiszins * 0.7;
+  const wertzuwachs = Math.max(0, k2 - k1);
+  const basisertragBegrenzt = Math.min(basisertragProAnteil, wertzuwachs);
+  const basisertragGesamt = basisertragBegrenzt * n;
+  const vorabpauschale = Math.max(0, basisertragGesamt - ausschuettung);
+  const steuerpflichtig = round2(vorabpauschale * (1 - tfs));
+
+  return {
+    basisertrag: round2(basisertragGesamt),
+    vorabpauschale: round2(vorabpauschale),
+    steuerpflichtig,
+  };
+}
+
+function calcEtfGesamt(year) {
+  return etfList.reduce((sum, etf) => sum + calcEtfVorabpauschale(etf, year).steuerpflichtig, 0);
+}
+
+function addEtf() {
+  const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
+  etfList.push({ id: Date.now(), isin: '', name: '', anteile: '', kurs1jan: '', kurs31dez: '', tfsTyp: 'aktien', ausschuettung: '0' });
+  renderEtfSektion(year);
+  etfSave();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.etf-isin-input');
+    if (inputs.length) inputs[inputs.length-1].focus();
+  }, 50);
+}
+
+function removeEtf(id) {
+  etfList = etfList.filter(e => e.id !== id);
+  const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
+  renderEtfSektion(year);
+  etfSave();
+  recalculate();
+}
+
+function updateEtf(id, field, value, fullRender) {
+  const etf = etfList.find(e => e.id === id);
+  if (!etf) return;
+  etf[field] = value;
+  if (etf._vorjahr) delete etf._vorjahr;  // Nutzer hat aktiv bearbeitet → Hinweis weg
+
+  // Automatisch Ausschüttung aus Flex Query befüllen wenn ISIN vollständig
+  if (field === 'isin' && value.length >= 12) {
+    const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
+    const aussch = lookupEtfAusschuettung(value, year);
+    if (aussch > 0 && (etf.ausschuettung === '0' || etf.ausschuettung === '')) {
+      etf.ausschuettung = String(round2(aussch));
+      // Ausschüttungsfeld direkt aktualisieren ohne DOM-Rebuild
+      const ausschEl = document.querySelector(`[data-etf-id="${id}"][data-field="ausschuettung"]`);
+      if (ausschEl) ausschEl.value = etf.ausschuettung;
+    }
+  }
+
+  const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
+
+  if (fullRender) {
+    renderEtfSektion(year);
+    etfSave();
+    recalculate();
+  } else {
+    updateEtfResult(id, year);
+    updateEtfTotal(year);
+    etfSave();
+  }
+}
+
+function updateEtfResult(id, year) {
+  const etf = etfList.find(e => e.id === id);
+  if (!etf) return;
+  const res = calcEtfVorabpauschale(etf, year);
+  const isJoint = document.getElementById('account-type').value === 'joint';
+  const resultEl = document.getElementById(`etf-result-${id}`);
+  if (!resultEl) return;
+  if (res.steuerpflichtig > 0 || (parseFloat(etf.kurs1jan) > 0 && parseFloat(etf.anteile) > 0)) {
+    resultEl.style.display = 'flex';
+    resultEl.innerHTML = `
+      <span>Basisertrag: <strong>${fmt(res.basisertrag)}</strong></span>
+      <span>Vorabpauschale: <strong>${fmt(res.vorabpauschale)}</strong></span>
+      <span>nach TFS ${Math.round((TFS_QUOTEN[etf.tfsTyp]||0)*100)}%: <strong class="${res.steuerpflichtig>0?'highlight':'zero'}">${fmt(res.steuerpflichtig)}</strong></span>
+      ${isJoint ? `<span>50%-Anteil: <strong class="highlight">${fmt(res.steuerpflichtig*0.5)}</strong></span>` : ''}
+    `;
+  }
+}
+
+function updateEtfTotal(year) {
+  const isJoint = document.getElementById('account-type').value === 'joint';
+  const gesamtBrutto = round2(etfList.reduce((s,e) => s + calcEtfVorabpauschale(e,year).steuerpflichtig, 0));
+  const gesamtAnzeige = isJoint ? round2(gesamtBrutto * 0.5) : gesamtBrutto;
+  const totalValEl = document.getElementById('etf-total-val');
+  const basiszins = BASISZINS[String(year)];
+  if (totalValEl) totalValEl.textContent = fmt(gesamtAnzeige) + (basiszins !== undefined ? ` (Basiszins ${year}: ${(basiszins*100).toFixed(2)}%)` : '');
+  const totalEl = document.getElementById('etf-total');
+  if (totalEl) totalEl.style.display = etfList.length > 0 ? 'flex' : 'none';
+  recalculate();
+}
+
+function lookupEtfAusschuettung(isin, year) {
+  // Suche in flexYearlyResults nach Dividenden für diese ISIN
+  const yr = flexYearlyResults[String(year)];
+  if (!yr?.cashTransactions?.dividenden) return 0;
+  return yr.cashTransactions.dividenden
+    .filter(d => d.isin === isin || d.description?.includes(isin))
+    .reduce((sum, d) => sum + (d.amtEur || 0), 0);
+}
+
+function renderEtfSektion(year) {
+  const listEl  = document.getElementById('etf-list');
+  const totalEl = document.getElementById('etf-total');
+  const emptyEl = document.getElementById('etf-empty');
+  const shareLabel = document.getElementById('etf-share-label');
+  const resetBtn = document.getElementById('etf-reset-btn');
+  if (!listEl) return;
+
+  const isJoint = document.getElementById('account-type').value === 'joint';
+  const basiszins = BASISZINS[String(year)];
+
+  if (etfList.length === 0) {
+    listEl.innerHTML = '';
+    totalEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    if (resetBtn) resetBtn.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  if (resetBtn) resetBtn.style.display = 'inline-flex';
+
+  listEl.innerHTML = etfList.map((etf, idx) => {
+    const res = calcEtfVorabpauschale(etf, year);
+    const hasResult = res.steuerpflichtig > 0 || (parseFloat(etf.kurs1jan) > 0 && parseFloat(etf.anteile) > 0);
+    const tfsOptions = Object.entries(TFS_LABELS).map(([k,v]) =>
+      `<option value="${k}" ${etf.tfsTyp===k?'selected':''}>${v}</option>`).join('');
+
+    return `<div class="etf-card" id="etf-card-${etf.id}">
+      <div class="etf-card-header">
+        <span class="etf-card-title">ETF ${idx+1}${etf.name ? ' — ' + etf.name : ''}${etf._vorjahr ? ' <span style="font-size:10px;background:#7a5a10;color:#fbbf60;padding:1px 5px;border-radius:3px;font-weight:500">Kurse bitte aktualisieren</span>' : ''}</span>
+        <button onclick="removeEtf(${etf.id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0">✕</button>
+      </div>
+      <div class="etf-grid">
+        <div class="etf-field">
+          <label>ISIN</label>
+          <input class="etf-isin-input" type="text" placeholder="IE00B4L5Y983" maxlength="12"
+            data-etf-id="${etf.id}" data-field="isin"
+            value="${etf.isin}"
+            oninput="updateEtf(${etf.id},'isin',this.value.toUpperCase())"
+            onblur="updateEtf(${etf.id},'isin',this.value.toUpperCase(),true)">
+        </div>
+        <div class="etf-field">
+          <label>Name (optional)</label>
+          <input type="text" placeholder="iShares Core MSCI World"
+            value="${etf.name}"
+            oninput="updateEtf(${etf.id},'name',this.value)"
+            onblur="updateEtf(${etf.id},'name',this.value,true)">
+        </div>
+        <div class="etf-field">
+          <label>Teilfreistellung</label>
+          <select onchange="updateEtf(${etf.id},'tfsTyp',this.value,true)">${tfsOptions}</select>
+        </div>
+        <div class="etf-field">
+          <label>Anteile am 1.1.</label>
+          <input type="number" placeholder="125.00" step="0.001" min="0"
+            data-etf-id="${etf.id}" data-field="anteile"
+            value="${etf.anteile}"
+            oninput="updateEtf(${etf.id},'anteile',this.value)"
+            onblur="updateEtf(${etf.id},'anteile',this.value,true)">
+        </div>
+        <div class="etf-field">
+          <label>Kurs 1.1. (EUR)</label>
+          <input type="number" placeholder="85.42" step="0.01" min="0"
+            data-etf-id="${etf.id}" data-field="kurs1jan"
+            value="${etf.kurs1jan}"
+            oninput="updateEtf(${etf.id},'kurs1jan',this.value)"
+            onblur="updateEtf(${etf.id},'kurs1jan',this.value,true)">
+        </div>
+        <div class="etf-field">
+          <label>Kurs 31.12. (EUR)</label>
+          <input type="number" placeholder="94.17" step="0.01" min="0"
+            data-etf-id="${etf.id}" data-field="kurs31dez"
+            value="${etf.kurs31dez}"
+            oninput="updateEtf(${etf.id},'kurs31dez',this.value)"
+            onblur="updateEtf(${etf.id},'kurs31dez',this.value,true)">
+        </div>
+        <div class="etf-field">
+          <label>Ausschüttungen ${year} (EUR)</label>
+          <input type="number" placeholder="0.00" step="0.01" min="0"
+            data-etf-id="${etf.id}" data-field="ausschuettung"
+            value="${etf.ausschuettung}"
+            oninput="updateEtf(${etf.id},'ausschuettung',this.value)"
+            onblur="updateEtf(${etf.id},'ausschuettung',this.value,true)">
+        </div>
+      </div>
+      <div class="etf-result" id="etf-result-${etf.id}" style="display:${hasResult?'flex':'none'}">
+        ${hasResult ? `
+          <span>Basisertrag: <strong>${fmt(res.basisertrag)}</strong></span>
+          <span>Vorabpauschale: <strong>${fmt(res.vorabpauschale)}</strong></span>
+          <span>nach TFS ${Math.round((TFS_QUOTEN[etf.tfsTyp]||0)*100)}%: <strong class="${res.steuerpflichtig>0?'highlight':'zero'}">${fmt(res.steuerpflichtig)}</strong></span>
+          ${isJoint ? `<span>50%-Anteil: <strong class="highlight">${fmt(res.steuerpflichtig*0.5)}</strong></span>` : ''}
+        ` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Gesamtsumme (Brutto, projiziereErgebnis übernimmt 50%)
+  const gesamtBrutto = round2(etfList.reduce((s,e) => s + calcEtfVorabpauschale(e,year).steuerpflichtig, 0));
+  const gesamtAnzeige = isJoint ? round2(gesamtBrutto * 0.5) : gesamtBrutto;
+  if (shareLabel) shareLabel.textContent = isJoint ? '50%-Anteil je Ehegatte' : 'Einzelkonto';
+  document.getElementById('etf-total-val').textContent = fmt(gesamtAnzeige) + (basiszins !== undefined ? ` (Basiszins ${year}: ${(basiszins*100).toFixed(2)}%)` : '');
+  totalEl.style.display = 'flex';
+}
+
 function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo, divSrc, fxSrc, d) {
   const ds = (!divSrc || divSrc === '~') ? '~' : '';
   const fs = (fxSrc  && fxSrc  !== '~') ? '' : '~';
@@ -22096,6 +22437,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
     { z:'7',  text:`Kapitalerträge (ohne Dividenden aus Aktien nach Z. 8) — Dividenden${jointNote}`,    val:kap.z7_div,       cls: kap.z7_div > 0 ? 'pos' : 'neutral', approx: divSrc==='~' },
     { z:'8',  text:`Gewinne aus der Veräußerung von Aktien${jointNote}`,                               val:kap.z8_aktienGain, cls: kap.z8_aktienGain > 0 ? 'pos' : 'neutral' },
     { z:'9',  text:`Verluste aus der Veräußerung von Aktien${jointNote}`,                              val:-kap.z9_aktienLoss, cls: kap.z9_aktienLoss > 0 ? 'neg' : 'neutral' },
+    ...(kap.z9_vorab > 0 ? [{ z:'9', text:`Vorabpauschale ETF §18 InvStG${jointNote}`, val:kap.z9_vorab, cls:'pos', badge:'ETF' }] : []),
     { z:'12', text:`Gewinne aus Termingeschäften (Optionsprämien)${jointNote}`,                        val:kap.z12_optGain,   cls: kap.z12_optGain > 0 ? 'pos' : 'neutral', approx: !pdfData?.optGain },
     { z:'13', text:`Verluste aus Termingeschäften §20 Abs.6${jointNote}`,                              val:-kap.z13_optLoss,  cls: kap.z13_optLoss > 0 ? 'neg' : 'neutral' },
     { z:'14', text:`Zinsen und sonstige Kapitalerträge${jointNote}`,                                   val:kap.z14_zinsen,    cls: kap.z14_zinsen > 0 ? 'pos' : 'neutral' },
@@ -22431,6 +22773,54 @@ async function buildDOCXinBrowser(data) {
           children:[new TextRun({ text: '☐  ' + t, font:'Arial', size:20 })] })),
         p(''),
 
+        p(''),
+
+        // ETF Vorabpauschale — nur wenn ETFs vorhanden
+        ...(etfList.length > 0 ? [
+          h('4. ETF Vorabpauschale §18 InvStG', HeadingLevel.HEADING_1),
+          p(`Basiszins ${year}: ${((BASISZINS[String(year)]||0)*100).toFixed(2)}%`, {color:'7F7F7F', size:18}),
+          p(''),
+          new Table({
+            width:{ size:9360, type:WidthType.DXA },
+            columnWidths:[2800,1400,1400,1400,1160,1200],
+            rows:[
+              new TableRow({ tableHeader:true, children:[
+                cell('ISIN / Name',        {w:2800, bold:true, fill:'D6E4F0'}),
+                cell('Anteile',            {w:1400, bold:true, fill:'D6E4F0', right:true}),
+                cell('Kurs 1.1.',          {w:1400, bold:true, fill:'D6E4F0', right:true}),
+                cell('Kurs 31.12.',        {w:1400, bold:true, fill:'D6E4F0', right:true}),
+                cell('TFS',               {w:1160, bold:true, fill:'D6E4F0', right:true}),
+                cell('Steuerpflichtig',    {w:1200, bold:true, fill:'D6E4F0', right:true}),
+              ]}),
+              ...etfList.map(etf => {
+                const res = calcEtfVorabpauschale(etf, year);
+                const tfsLabel = Math.round((TFS_QUOTEN[etf.tfsTyp]||0)*100) + '%';
+                return new TableRow({ children:[
+                  cell((etf.isin||'—') + (etf.name ? '\n'+etf.name : ''), {w:2800}),
+                  cell(etf.anteile||'—',       {w:1400, right:true}),
+                  cell(etf.kurs1jan ? fmtD(parseFloat(etf.kurs1jan)) : '—', {w:1400, right:true}),
+                  cell(etf.kurs31dez? fmtD(parseFloat(etf.kurs31dez)): '—', {w:1400, right:true}),
+                  cell(tfsLabel,               {w:1160, right:true}),
+                  cell(fmtD(res.steuerpflichtig), {w:1200, right:true, bold:true,
+                    color: res.steuerpflichtig>0?'1a5e1a':'7F7F7F'}),
+                ]});
+              }),
+              new TableRow({ children:[
+                cell('Gesamt (Brutto)', {w:2800, bold:true}),
+                cell('', {w:1400}), cell('', {w:1400}),
+                cell('', {w:1400}), cell('', {w:1160}),
+                cell(fmtD(calcEtfGesamt(year)), {w:1200, right:true, bold:true, color:'1a5e1a'}),
+              ]}),
+            ]
+          }),
+          p(''),
+          p(isJoint
+            ? `50%-Anteil je Ehegatte → Z. 9 Anlage KAP: ${fmtD(round2(calcEtfGesamt(year)*0.5))}`
+            : `Eintrag Z. 9 Anlage KAP: ${fmtD(calcEtfGesamt(year))}`,
+            {bold:true, color:'1F3864'}),
+          p(''),
+        ] : []),
+
         h('5. Rechtliche Hinweise', HeadingLevel.HEADING_1),
         p('Dieses Dokument wurde automatisiert erstellt und ersetzt keine professionelle Steuerberatung. ' +
           'Alle Angaben ohne Gewähr. Maßgeblich sind die offiziellen CapTrader-Belege.',
@@ -22482,6 +22872,36 @@ async function buildDOCXinBrowser(data) {
 
 // Init: API-Key aus sessionStorage
 (function(){const k=sessionStorage.getItem('refundex_api_key');if(k){window._kapApiKey=k;}})();
+
+// Init: ETF-Liste aus LocalStorage laden
+(function(){
+  try {
+    const year = document.getElementById('tax-year')?.value || String(new Date().getFullYear()-1);
+    const result = etfLoad(year);
+    if (!result) return;
+
+    const bannerEl = document.getElementById('etf-load-banner');
+    let bannerText = '';
+
+    if (result.mode === 'same') {
+      bannerText = `✅ ${result.count} ETF${result.count>1?'s':''} aus gespeicherter Liste geladen (${result.savedYear})`;
+    } else if (result.mode === 'nextyear') {
+      bannerText = `📅 ${result.count} ETF${result.count>1?'s':''} aus ${result.savedYear} übernommen — Kurs 1.1. aus Vorjahr-31.12. vorausgefüllt. Bitte Kurs 31.12.${year} und Anteile prüfen.`;
+    } else if (result.mode === 'older') {
+      bannerText = `📋 ${result.count} ETF-Stammdaten aus ${result.savedYear} übernommen — bitte alle Kurse und Anteile für ${year} eintragen.`;
+    }
+
+    if (bannerEl && bannerText) {
+      bannerEl.textContent = bannerText;
+      bannerEl.style.display = 'block';
+      // Banner nach 8 Sekunden ausblenden
+      setTimeout(() => { bannerEl.style.opacity='0'; bannerEl.style.transition='opacity 1s';
+        setTimeout(()=>{ bannerEl.style.display='none'; }, 1000); }, 8000);
+    }
+
+    renderEtfSektion(year);
+  } catch(e) {}
+})();
 
 
 // Init API-Key
