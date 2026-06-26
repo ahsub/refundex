@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v124</title>
+<title>Refundex — KAP-Assistent v125</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -21873,8 +21873,7 @@ function recalculate() {
 
   const year    = rawData?.year || document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
   const isJoint = document.getElementById('account-type').value === 'joint';
-  const share   = isJoint ? 0.5 : 1.0;
-  const fsa = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
+  const kontoTyp = isJoint ? 'joint' : 'single';
   const spouse  = document.getElementById('spouse-select').value;
 
   // Badge aktualisieren
@@ -21883,65 +21882,20 @@ function recalculate() {
   badge.className = 'badge ' + (isJoint ? 'badge-joint' : 'badge-single');
   document.getElementById('spouse-select').parentElement.style.display = isJoint ? 'flex' : 'none';
 
-  const d = rawData;
+  // Brutto berechnen, dann projizieren
+  const brutto = calcKAP(rawData, year);
+  const kap    = projiziereErgebnis(brutto, kontoTyp);
 
-  // Priorität: pdfData > divData > Jahresauszug (Schätzung)
-  // Exakte EUR-Dividenden aus rawData.dividenden (mit EZB-Tageskursen)
-  let _exactDivEur = 0;
-  let _exactWhtEur = 0;
-  let _hasExactRates = false;
-  if (rawData?.dividenden?.length > 0) {
-    for (const div of rawData.dividenden) {
-      const eur = toEur(div.amt, div.cur, year, div.date);
-      _exactDivEur += eur;
-    }
-    // WHT ebenfalls exact
-    if (rawData.quellensteuer?.length > 0) {
-      for (const wht of rawData.quellensteuer) {
-        const eur = toEur(wht.amt, wht.cur || 'USD', year, wht.date);
-        _exactWhtEur += eur;
-      }
-    }
-    _hasExactRates = Object.keys(fxRateMap).length > 0;
-    // Auch ohne EZB-Kurse: dividenden[] ist präziser als NAV-Summe
-    if (rawData?.dividenden?.length > 0 && _exactDivEur > 0) {
-      _hasExactRates = true;  // Werte kommen aus Einzel-Transaktionen, nicht NAV-Aggregat
-    }
-  }
+  const { divEur, whtEur, divSource, zinsEur,
+          optGain, optLoss, akGain, akLoss,
+          fxSaldo, fxSource, fsa } = kap;
 
-  const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
-  const divEur = d.flexCash ? (d.divEurFlex||0)*share
-    : (_pdfDiv>0) ? _pdfDiv*share
-    : (_hasExactRates && _exactDivEur>0) ? _exactDivEur*share
-    : divData ? divData.totalDivEur*share
-    : toEur(d.divNAV,'USD',year)*share;
-  const whtEur = d.flexCash ? (d.whtEurFlex||0)*share
-    : (_pdfDiv>0) ? (pdfData.creditableWht||0)*share
-    : (_hasExactRates && _exactWhtEur>0) ? _exactWhtEur*share
-    : divData ? divData.totalWhtEur*share
-    : toEur(d.whtNAV,'USD',year)*share;
-  const _fxExact = Object.keys(fxRateMap).length > 0;
-  const divSource = d.flexCash ? '(IBKR exakt)'
-    : (_pdfDiv>0) ? '(exakt PDF)'
-    : divData ? '(exakt)'
-    : (_exactDivEur > 0) ? (_fxExact ? '(EZB-Tageskurs)' : '(Jahresdurchschnitt)')
-    : '~';
-
-  const zinsEur = d.flexCash ? (d.zinsenFlex||0)*share : (pdfData?.zinsenEur > 0) ? pdfData.zinsenEur*share : d.zinsenGesamt*share;
-  const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)*share : d.flexDataEUR ? (d.optionen.gain||0)*share : toEur(d.optionen.gain,'USD',year)*share;
-  const optLoss = pdfData?.optLoss ? -Math.abs(pdfData.optLoss)*share : d.flexDataEUR ? -(d.optionen.loss||0)*share : toEur(d.optionen.loss,'USD',year)*share;  // negativ
-  const optSaldo = optGain + optLoss;
-  const akGain = d.flexDataEUR ? (d.aktien?.gain||0)*share : toEur(d.aktien.gain,'USD',year)*share;
-  const akLoss = d.flexDataEUR ? -(d.aktien?.loss||0)*share : toEur(d.aktien.loss,'USD',year)*share;
-  const akSaldo  = akGain + akLoss;
-  const fxGain   = fxData ? Math.max(0, fxData.total) * share : toEur(d.fx.gain, 'USD', year) * share;
-  const fxLoss   = fxData ? Math.min(0, fxData.total) * share : toEur(d.fx.loss, 'USD', year) * share;
-  const fxSaldo  = fxData ? fxData.total * share : fxGain + fxLoss;
-  const fxSource = fxData ? '(exakt)' : '~';
+  const optSaldo = round2(optGain + optLoss);
+  const akSaldo  = round2(akGain  + akLoss);
+  const optLossAbs = Math.abs(optLoss);
+  const optGainAbs = optGain;
 
   // §20 Abs.6 Verlustbeschränkung
-  const optLossAbs   = Math.abs(optLoss);
-  const optGainAbs   = optGain;
   const verrLimit    = 20000;
   const verrechenbar = Math.min(optLossAbs, optGainAbs + verrLimit);
   const vortrag      = Math.max(0, optLossAbs - verrechenbar);
@@ -21954,7 +21908,7 @@ function recalculate() {
     z12_optGain:    round2(optGainAbs),
     z13_optLoss:    round2(optLossAbs),
     z14_zinsen:     round2(zinsEur),
-    z17_fsa:        round2(fsa * share),
+    z17_fsa:        round2(kap.fsa),
     z41_wht:        round2(whtEur),
     opt_saldo:      round2(optSaldo),
     opt_vortrag:    round2(vortrag),
@@ -21962,10 +21916,10 @@ function recalculate() {
     fx_saldo:       round2(fxSaldo),
   };
 
-  // UI rendern
+  const d = rawData;
   renderOverview(kapWerte, divEur, whtEur, zinsEur, optSaldo, optGainAbs, optLossAbs, akSaldo, akGain, akLoss, fxSaldo, divSource, fxSource, d);
   renderToepfe(kapWerte, divEur, zinsEur, optGainAbs, optLossAbs, verrechenbar, optSaldo, akGain, akLoss, akSaldo, divSource, fxSource, d);
-  // Kontoname: CSV-Version hat beide Inhaber → immer bevorzugen
+
   const kontoName = window._csvKontoName
     || (d.kontoName?.includes(' AND ') ? d.kontoName : null)
     || pdfData?.kontoName
@@ -21991,12 +21945,90 @@ function recalculate() {
   { const _x=document.getElementById('docx-btn'); if(_x) _x.style.display='inline-flex'; }
   { const _y=document.getElementById('docx-dl-btn'); if(_y) _y.style.display='inline-flex'; }
 
-  // Spouse Label
   const spouseLabels = { '1': d.kontoName.split(/ AND /i)[0] || 'Inhaber 1', '2': d.kontoName.split(/ AND /i)[1] || 'Inhaber 2', 'both': 'Beide Inhaber' };
   document.getElementById('spouse-label').textContent = isJoint ? (spouseLabels[spouse] || '') : '';
 }
 
 function round2(n) { return Math.round(n * 100) / 100; }
+
+// ============================================================
+// PROJEKTIONS-SCHICHT — Gemini-Architektur
+// ============================================================
+
+// 1. Brutto-Berechnung: immer 100%, kein share, kein kontoTyp
+function calcKAP(d, year) {
+  // Exakte EUR-Dividenden aus rawData.dividenden[] (EZB-Tageskurse)
+  let _exactDivEur = 0, _exactWhtEur = 0, _hasExactRates = false;
+  if (d?.dividenden?.length > 0) {
+    for (const div of d.dividenden)
+      _exactDivEur += toEur(div.amt, div.cur, year, div.date);
+    if (d.quellensteuer?.length > 0)
+      for (const wht of d.quellensteuer)
+        _exactWhtEur += toEur(wht.amt, wht.cur||'USD', year, wht.date);
+    _hasExactRates = _exactDivEur > 0;
+  }
+
+  const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
+  const _fxExact = Object.keys(fxRateMap).length > 0;
+
+  // Dividenden — Priorität: Flex Cash → PDF → EZB-Tageskurs → divData → NAV
+  const divEur = d.flexCash ? (d.divEurFlex||0)
+    : (_pdfDiv>0)                           ? _pdfDiv
+    : (_hasExactRates && _exactDivEur>0)    ? _exactDivEur
+    : divData                               ? divData.totalDivEur
+    : toEur(d.divNAV,'USD',year);
+
+  const whtEur = d.flexCash ? (d.whtEurFlex||0)
+    : (_pdfDiv>0)                           ? (pdfData.creditableWht||0)
+    : (_hasExactRates && _exactWhtEur>0)    ? _exactWhtEur
+    : divData                               ? divData.totalWhtEur
+    : toEur(d.whtNAV,'USD',year);
+
+  const divSource = d.flexCash           ? '(IBKR exakt)'
+    : (_pdfDiv>0)                        ? '(exakt PDF)'
+    : divData                            ? '(exakt)'
+    : (_exactDivEur>0)                   ? (_fxExact ? '(EZB-Tageskurs)' : '(Jahresdurchschnitt)')
+    : '~';
+
+  const zinsEur = d.flexCash ? (d.zinsenFlex||0)
+    : (pdfData?.zinsenEur>0) ? pdfData.zinsenEur
+    : (d.zinsenGesamt||0);
+
+  const optGain = pdfData?.optGain ? Math.abs(pdfData.optGain)
+    : d.flexDataEUR ? (d.optionen?.gain||0)
+    : toEur(d.optionen?.gain||0,'USD',year);
+
+  const optLoss = pdfData?.optLoss ? -Math.abs(pdfData.optLoss)
+    : d.flexDataEUR ? -(d.optionen?.loss||0)
+    : toEur(d.optionen?.loss||0,'USD',year);  // negativ
+
+  const akGain = d.flexDataEUR ? (d.aktien?.gain||0) : toEur(d.aktien?.gain||0,'USD',year);
+  const akLoss = d.flexDataEUR ? -(d.aktien?.loss||0) : toEur(d.aktien?.loss||0,'USD',year);  // negativ
+
+  const fxSaldo  = fxData ? fxData.total
+    : toEur((d.fx?.gain||0)+(d.fx?.loss||0),'USD',year);
+  const fxSource = fxData ? '(exakt)' : '~';
+
+  const fsa = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
+
+  return {
+    divEur, whtEur, divSource,
+    zinsEur,
+    optGain, optLoss,
+    akGain, akLoss,
+    fxSaldo, fxSource,
+    fsa,
+  };
+}
+
+// 2. Projektions-Funktion: einziger Ort mit 0.5 — direkt vor UI/DOCX
+function projiziereErgebnis(brutto, kontoTyp) {
+  if (kontoTyp !== 'joint') return { ...brutto };   // Einzelkonto → 100%
+  const netto = {};
+  for (const [k, v] of Object.entries(brutto))
+    netto[k] = typeof v === 'number' ? v * 0.5 : v;
+  return netto;
+}
 
 // ============================================================
 // RENDER OVERVIEW
@@ -22149,36 +22181,33 @@ function downloadDOCX() {
 
   const year    = document.getElementById('tax-year').value || rawData?.year || '2025';
   const isJoint = document.getElementById('account-type').value === 'joint';
-  const share   = isJoint ? 0.5 : 1.0;
-  const fsa     = (v => isNaN(v) ? 0 : v)(parseFloat(document.getElementById('fsa').value));
+  const kontoTyp = isJoint ? 'joint' : 'single';
   const d       = rawData || {};
 
-  const _pdfDiv = pdfData ? (pdfData.line19||0)+(pdfData.line18||0) : 0;
-  const divEur  = (_pdfDiv>0) ? _pdfDiv*share : divData ? divData.totalDivEur*share : toEur(d.divNAV||0,'USD',year)*share;
-  const whtEur  = (_pdfDiv>0) ? (pdfData.creditableWht||0)*share : divData ? divData.totalWhtEur*share : toEur(d.whtNAV||0,'USD',year)*share;
-  const zinsEur = (pdfData?.zinsenEur>0) ? pdfData.zinsenEur*share : (d.zinsenGesamt||0)*share;
-  const optGain = (pdfData?.optGain) ? Math.abs(pdfData.optGain)*share : d.flexDataEUR ? (d.optionen?.gain||0)*share : toEur(d.optionen?.gain||0,'USD',year)*share;
-  const optLoss = (pdfData?.optLoss) ? -Math.abs(pdfData.optLoss)*share : d.flexDataEUR ? -(d.optionen?.loss||0)*share : toEur(d.optionen?.loss||0,'USD',year)*share;
-  const akGain  = d.flexDataEUR ? (d.aktien?.gain||0)*share : toEur(d.aktien?.gain||0,'USD',year)*share;
-  const akLoss  = d.flexDataEUR ? -(d.aktien?.loss||0)*share : toEur(d.aktien?.loss||0,'USD',year)*share;
-  const fxVal   = fxData ? fxData.total*share : toEur((d.fx?.gain||0)+(d.fx?.loss||0),'USD',year)*share;
-  const optSaldo = round2(optGain+optLoss);
-  const optVortrag = Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain+20000));
-  const divSrc  = (_pdfDiv>0)?'(EZB-Tageskurs PDF)':divData?'(exakt)':Object.keys(fxRateMap).length>0?'(EZB-Tageskurs)':'(Jahresdurchschnitt)';
+  // Brutto berechnen, dann projizieren — identisch zu recalculate()
+  const brutto = calcKAP(d, year);
+  const kap    = projiziereErgebnis(brutto, kontoTyp);
+
+  const { divEur, whtEur, divSource, zinsEur,
+          optGain, optLoss, akGain, akLoss,
+          fxSaldo, fxSource, fsa } = kap;
+
+  const optSaldo   = round2(optGain + optLoss);
+  const optVortrag = round2(Math.max(0, Math.abs(optLoss) - Math.min(Math.abs(optLoss), optGain + 20000)));
+  const akSaldo    = round2(akGain + akLoss);
 
   const kontoName = window._csvKontoName || d.kontoName || '';
   const kontoNr   = pdfData?.kontoNr || d.kontoNr || '';
   const ehegatten = kontoName.split(/ AND /i).map(n => n.trim());
 
-  // Basis-Payload (Werte sind bereits 50%-Anteile)
   const basePayload = {
     kontoNr, year, isJoint, fsa,
     divEur:round2(divEur), whtEur:round2(whtEur), zinsEur:round2(zinsEur),
     optGain:round2(Math.max(0,optGain)), optLoss:round2(Math.min(0,optLoss)),
-    optSaldo, optVortrag:round2(optVortrag),
+    optSaldo, optVortrag,
     akGain:round2(Math.max(0,akGain)), akLoss:round2(Math.min(0,akLoss)),
-    akSaldo:round2(akGain+akLoss), fxSaldo:round2(fxVal),
-    divSource: divSrc, fxSource: fxData?'(exakt)':'~',
+    akSaldo, fxSaldo:round2(fxSaldo),
+    divSource, fxSource,
   };
 
   // Bei Gemeinschaftskonto: 2 Dokumente (eines pro Ehegatte)
