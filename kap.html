@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v134</title>
+<title>Refundex — KAP-Assistent v137</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -159,7 +159,7 @@
 
 <header class="header">
   <div style="display:flex;align-items:center">
-    <div class="logo"><span>R</span>efundex <span class="logo-sub">KAP-Assistent</span></div>
+    <div class="logo"><span>R</span>efundex <span class="logo-sub">KAP-Assistent</span> <span style="font-size:9px;background:#2a1a5e;color:#a0a0f0;padding:1px 5px;border-radius:3px;font-weight:600;letter-spacing:0.05em;vertical-align:middle">BETA</span></div>
   </div>
   <div style="display:flex;gap:1rem;align-items:center">
     <button onclick="openHelp()" class="nav-link" style="background:none;border:none;cursor:pointer;padding:0;font-size:12px;color:var(--accent)">❓ Hilfe</button>
@@ -230,6 +230,32 @@
   <input type="file" id="file-div"  accept=".html,.htm" onchange="loadDivHTML(event)" style="display:none">
   <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)" style="display:none">
 
+  <!-- BETA DISCLAIMER -->
+  <div id="beta-banner" style="margin-bottom:1rem;padding:0.65rem 1rem;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:8px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:0.6rem;color:#a0a0c8">
+      <span style="font-size:14px">🧪</span>
+      <span>
+        <strong style="color:#c0c0f0">Beta-Version</strong> ·
+        Werte vor Abgabe der Steuererklärung gegen die offizielle
+        <strong style="color:#c0c0f0">CapTrader-Jahressteuerbescheinigung</strong> abgleichen ·
+        Kein Ersatz für Steuerberatung · Angaben ohne Gewähr
+      </span>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;white-space:nowrap">
+      <a href="mailto:ahildebrand@me.com?subject=REFUNDEX"
+         style="font-size:11px;color:#4f8ef7;text-decoration:none;padding:0.25rem 0.6rem;border:1px solid #3a3a6e;border-radius:5px">
+        ✉️ Feedback
+      </a>
+      <a href="https://github.com/ahsub/refundex/issues/new"
+         target="_blank"
+         style="font-size:11px;color:#4f8ef7;text-decoration:none;padding:0.25rem 0.6rem;border:1px solid #3a3a6e;border-radius:5px">
+        🐛 Bug melden
+      </a>
+      <button onclick="document.getElementById('beta-banner').style.display='none'"
+              style="background:none;border:none;color:#7a85a0;cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
+    </div>
+  </div>
+
   <!-- KONTO INFO BANNER -->
   <div id="konto-info" style="display:none;margin-bottom:0.75rem;padding:0.6rem 1rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;align-items:center;gap:0.5rem;flex-wrap:wrap">
   </div>
@@ -256,9 +282,10 @@
       <input type="text" class="setting-input" id="fsa" value="0" style="width:90px"> €
     </div>
     <div class="setting-group">
-      <span class="setting-label">API-Key:</span>
-      <input type="password" id="kap-api-key" placeholder="sk-ant-..."
-        style="width:160px" class="setting-input"
+      <span class="setting-label" style="color:var(--muted)">API-Key:</span>
+      <input type="password" id="kap-api-key" placeholder="optional — nicht erforderlich"
+        style="width:160px;opacity:0.5" class="setting-input"
+        title="Nur für zukünftige KI-Features — für die Steuerberechnung nicht benötigt"
         oninput="window._kapApiKey=this.value;try{sessionStorage.setItem('refundex_api_key',this.value);}catch(e){}">
     </div>
     <div class="setting-group">
@@ -22564,10 +22591,10 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
 // ============================================================
 function renderChecklist(kap, isJoint, kontoName) {
   const items = [
-    { ok: true,  text: 'CapTrader Jahresauszug CSV hochgeladen' },
+    { ok: true,  text: 'Flex Query CSV hochgeladen — IBKR FifoPnlRealized-Daten' },
     { ok: true,  text: `Kontoart korrekt: ${isJoint?'Gemeinschaftskonto (50/50)':'Einzelkonto'}` },
     { ok: false, text: 'Offizielle CapTrader-Steuerbescheinigung herunterladen (Performance & Berichte → Steuerbescheinigung)' },
-    { ok: false, text: 'USD-Beträge (~) gegen Steuerbescheinigung abgleichen — dort stehen die offiziellen EUR-Beträge' },
+    { ok: false, text: 'Alle Beträge gegen Steuerbescheinigung abgleichen — bei Abweichung > 1% bitte Feedback senden' },
     { ok: false, text: 'Freistellungsauftrag prüfen: Wie viel bei CapTrader, wie viel bei anderen Banken?' },
     { ok: kap.z41_wht > 0, text: 'Anlage KAP: Quellensteuer-Anrechnung ' + fmt(kap.z41_wht) + ' in Zeile 41 eintragen' },
     { ok: kap.z13_optLoss > 0, text: '§20 Abs.6: Optionsverluste ' + fmt(kap.z13_optLoss) + ' separat in Zeile 13 — nicht mit Aktienverlusten vermischen', warn: kap.z13_optLoss > 0 },
@@ -22580,7 +22607,18 @@ function renderChecklist(kap, isJoint, kontoName) {
       <span>${i.ok?'✅':i.warn?'⚠️':'☐'}</span>
       <span>${i.text}</span>
     </div>
-  `).join('');
+  `).join('') + `
+    <div style="margin-top:1rem;padding:0.6rem 0.8rem;background:var(--bg3);border-radius:6px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
+      <span>🧪 Beta-Version · Feedback hilft uns Refundex zu verbessern</span>
+      <div style="display:flex;gap:0.5rem">
+        <a href="mailto:ahildebrand@me.com?subject=REFUNDEX"
+           style="color:var(--accent);text-decoration:none;font-size:11px">✉️ E-Mail</a>
+        <span style="color:var(--border)">·</span>
+        <a href="https://github.com/ahsub/refundex/issues/new" target="_blank"
+           style="color:var(--accent);text-decoration:none;font-size:11px">🐛 GitHub Issue</a>
+      </div>
+    </div>
+  `;
 }
 
 // ============================================================
