@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v130</title>
+<title>Refundex — KAP-Assistent v131</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -22086,14 +22086,20 @@ const ETF_STORAGE_KEY = 'refundex_etf_v1';
 
 // ── LocalStorage: Speichern & Laden ──────────────────────────────────────────
 
-function etfSave() {
-  try {
-    const payload = {
-      year: document.getElementById('tax-year').value || String(new Date().getFullYear()-1),
-      list: etfList.map(e => ({ ...e })),
-    };
-    localStorage.setItem(ETF_STORAGE_KEY, JSON.stringify(payload));
-  } catch(e) { /* localStorage nicht verfügbar */ }
+let _etfSaveTimer = null;
+function etfSave(immediate) {
+  if (_etfSaveTimer) clearTimeout(_etfSaveTimer);
+  const doSave = () => {
+    try {
+      const payload = {
+        year: document.getElementById('tax-year').value || String(new Date().getFullYear()-1),
+        list: etfList.map(e => ({ ...e })),
+      };
+      localStorage.setItem(ETF_STORAGE_KEY, JSON.stringify(payload));
+    } catch(e) {}
+  };
+  if (immediate) doSave();
+  else _etfSaveTimer = setTimeout(doSave, 600);
 }
 
 function etfLoad(targetYear) {
@@ -22200,19 +22206,29 @@ function removeEtf(id) {
   recalculate();
 }
 
+// Dezimalfelder: Komma → Punkt normalisieren
+const ETF_DECIMAL_FIELDS = new Set(['anteile','kurs1jan','kurs31dez','ausschuettung']);
+
+function normalizeDecimal(value) {
+  return value.replace(',', '.');
+}
+
 function updateEtf(id, field, value, fullRender) {
   const etf = etfList.find(e => e.id === id);
   if (!etf) return;
-  etf[field] = value;
-  if (etf._vorjahr) delete etf._vorjahr;  // Nutzer hat aktiv bearbeitet → Hinweis weg
 
-  // Automatisch Ausschüttung aus Flex Query befüllen wenn ISIN vollständig
+  // Dezimalfelder: Komma → Punkt
+  if (ETF_DECIMAL_FIELDS.has(field)) value = normalizeDecimal(value);
+
+  etf[field] = value;
+  if (etf._vorjahr) delete etf._vorjahr;
+
+  // ISIN vollständig → Ausschüttung aus Flex Query vorschlagen
   if (field === 'isin' && value.length >= 12) {
     const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
     const aussch = lookupEtfAusschuettung(value, year);
     if (aussch > 0 && (etf.ausschuettung === '0' || etf.ausschuettung === '')) {
       etf.ausschuettung = String(round2(aussch));
-      // Ausschüttungsfeld direkt aktualisieren ohne DOM-Rebuild
       const ausschEl = document.querySelector(`[data-etf-id="${id}"][data-field="ausschuettung"]`);
       if (ausschEl) ausschEl.value = etf.ausschuettung;
     }
@@ -22221,13 +22237,15 @@ function updateEtf(id, field, value, fullRender) {
   const year = document.getElementById('tax-year').value || String(new Date().getFullYear()-1);
 
   if (fullRender) {
+    // Nur bei TFS-Dropdown oder blur — vollständiger Render
     renderEtfSektion(year);
-    etfSave();
+    etfSave(true);
     recalculate();
   } else {
+    // Bei oninput: NUR Ergebnis-Div updaten, kein DOM-Rebuild, kein Fokus-Verlust
     updateEtfResult(id, year);
     updateEtfTotal(year);
-    etfSave();
+    etfSave();  // debounced
   }
 }
 
@@ -22255,7 +22273,8 @@ function updateEtfTotal(year) {
   const gesamtAnzeige = isJoint ? round2(gesamtBrutto * 0.5) : gesamtBrutto;
   const totalValEl = document.getElementById('etf-total-val');
   const basiszins = BASISZINS[String(year)];
-  if (totalValEl) totalValEl.textContent = fmt(gesamtAnzeige) + (basiszins !== undefined ? ` (Basiszins ${year}: ${(basiszins*100).toFixed(2)}%)` : '');
+  if (totalValEl) totalValEl.textContent = fmt(gesamtAnzeige) +
+    (basiszins !== undefined ? ` (Basiszins ${year}: ${(basiszins*100).toFixed(2)}%)` : '');
   const totalEl = document.getElementById('etf-total');
   if (totalEl) totalEl.style.display = etfList.length > 0 ? 'flex' : 'none';
   recalculate();
@@ -22304,7 +22323,12 @@ function renderEtfSektion(year) {
       </div>
       <div class="etf-grid">
         <div class="etf-field">
-          <label>ISIN</label>
+          <label>ISIN
+            ${etf.isin && etf.isin.length >= 12
+              ? `<a href="https://www.justetf.com/de/etf-profile.html?isin=${etf.isin}" target="_blank"
+                   style="margin-left:0.4rem;font-size:10px;color:var(--accent);text-decoration:none"
+                   title="justetf.com öffnen">↗ justetf</a>` : ''}
+          </label>
           <input class="etf-isin-input" type="text" placeholder="IE00B4L5Y983" maxlength="12"
             data-etf-id="${etf.id}" data-field="isin"
             value="${etf.isin}"
@@ -22324,7 +22348,7 @@ function renderEtfSektion(year) {
         </div>
         <div class="etf-field">
           <label>Anteile am 1.1.</label>
-          <input type="number" placeholder="125.00" step="0.001" min="0"
+          <input type="text" inputmode="decimal" placeholder="125,000"
             data-etf-id="${etf.id}" data-field="anteile"
             value="${etf.anteile}"
             oninput="updateEtf(${etf.id},'anteile',this.value)"
@@ -22332,7 +22356,7 @@ function renderEtfSektion(year) {
         </div>
         <div class="etf-field">
           <label>Kurs 1.1. (EUR)</label>
-          <input type="number" placeholder="85.42" step="0.01" min="0"
+          <input type="text" inputmode="decimal" placeholder="85,42"
             data-etf-id="${etf.id}" data-field="kurs1jan"
             value="${etf.kurs1jan}"
             oninput="updateEtf(${etf.id},'kurs1jan',this.value)"
@@ -22340,7 +22364,7 @@ function renderEtfSektion(year) {
         </div>
         <div class="etf-field">
           <label>Kurs 31.12. (EUR)</label>
-          <input type="number" placeholder="94.17" step="0.01" min="0"
+          <input type="text" inputmode="decimal" placeholder="94,17"
             data-etf-id="${etf.id}" data-field="kurs31dez"
             value="${etf.kurs31dez}"
             oninput="updateEtf(${etf.id},'kurs31dez',this.value)"
@@ -22348,7 +22372,7 @@ function renderEtfSektion(year) {
         </div>
         <div class="etf-field">
           <label>Ausschüttungen ${year} (EUR)</label>
-          <input type="number" placeholder="0.00" step="0.01" min="0"
+          <input type="text" inputmode="decimal" placeholder="0,00"
             data-etf-id="${etf.id}" data-field="ausschuettung"
             value="${etf.ausschuettung}"
             oninput="updateEtf(${etf.id},'ausschuettung',this.value)"
