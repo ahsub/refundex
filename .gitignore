@@ -1,0 +1,22 @@
+# Refundex Engine — .gitignore
+# ────────────────────────────────────────────────
+# Persönliche Steuerdaten NIEMALS ins Repo!
+
+# Generierte Reports (enthalten persönliche Finanzdaten)
+engine/output/
+engine/Steuerreport_*.html
+engine/*_audit_*.json
+
+# IBKR XML-Exporte (Quelldaten mit persönlichen Transaktionen)
+engine/data/
+engine/*.xml
+
+# Python-Cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Umgebungen
+.env
+venv/
+.venv/
