@@ -5,12 +5,15 @@ build_report.py — Refundex Steuerreport-Generator v3.0
 Erzeugt druckbaren HTML-Steuerreport (Anlage KAP) aus IBKR Flex Query XML.
 Integriert: fifo_fx.py (FX-FIFO) + kapmassnm.py (Kapitalmaßnahmen)
 """
-import sys, xml.etree.ElementTree as ET
+import sys, xml.etree.ElementTree as ET, json, os
 from collections import defaultdict
 from datetime import datetime
 sys.path.insert(0, '/home/claude')
 from fifo_fx import fx_fifo_from_lines
 from kapmassnm import compute_kapmassnm
+from verlusttoepfe import KapitaleinkunfteInput, berechne_verlusttoepfe, VerlustvortragState
+from aktien_fifo import compute_aktien_fifo
+from termingeschaefte import compute_termingeschaefte
 
 # ── Konfiguration ─────────────────────────────────────────────────────────────
 XMLS = [
@@ -104,12 +107,24 @@ km_gl        = km_report.gesamt_gewinn + km_report.gesamt_verlust
 km_symbols   = {e.symbol for e in km_report.ergebnisse}
 
 # ── 6. KAP-Zeilen ─────────────────────────────────────────────────────────────
-kap19_pos = opt_g + div_total + zins + syep + fx_g + max(0, km_sachausch) + max(0, km_gl)
-kap19_neg = opt_v + fx_v + min(0, km_gl)
-kap19     = kap19_pos + kap19_neg
-kap22     = abs(opt_v) + abs(fx_v) + abs(min(0, km_gl))
-kap41     = tax_anr
-SPARER    = 1000.0
+akt = compute_aktien_fifo(XMLS, str(STEUERJAHR))
+ter = compute_termingeschaefte(XMLS, str(STEUERJAHR))
+_inp = KapitaleinkunfteInput(
+    steuerjahr=STEUERJAHR,
+    stillhalter_praemien=opt_g, stillhalter_glatt=opt_v,
+    dividenden=div_total, zinsen=zins, syep=syep,
+    fx_gewinne=fx_g, fx_verluste=fx_v,
+    km_sachausch=km_sachausch, km_gl=km_gl,
+    aktien_gewinne=akt.gewinne, aktien_verluste=akt.verluste,
+    termin_gewinne=ter.gewinne, termin_verluste=ter.verluste,
+    quellensteuer_anr=tax_anr, sollzinsen=sollzins,
+)
+_vt     = berechne_verlusttoepfe(_inp)
+kap19   = _vt.kap_z19;  kap20 = _vt.kap_z20
+kap22   = _vt.kap_z22;  kap23 = _vt.kap_z23
+kap41   = _vt.kap_z41;  SPARER = _vt.sparer_einzel
+kap19_pos = _inp.topf1_brutto_positiv + max(0, km_sachausch)
+kap19_neg = _inp.topf1_brutto_negativ + min(0, km_gl)
 
 # ── 7. Positionen ─────────────────────────────────────────────────────────────
 def plist(pos):
@@ -329,12 +344,20 @@ HTML = f"""<!DOCTYPE html>
     <span class="kap-amt" id="kap19-e">{fmt(kap19)}</span>
     <span class="kap-split kap-amt" id="kap19-g">je&nbsp;{fmt(kap19/2)}</span>
   </div>
+  {'''<div class="kap-row" style="margin-top:8px">
+    <span class="kap-zl"><b>Zeile 20</b></span>
+    <span class="kap-desc">Aktiengewinne (§ 20 Abs. 2 Nr. 1 EStG)</span>
+    <span class="kap-amt">''' + fmt(kap20) + '''</span></div>''' if kap20 > 0.005 else ''}
   <div class="kap-row" style="margin-top:8px">
     <span class="kap-zl"><b>Zeile 22</b></span>
     <span class="kap-desc">In Zeile 19 enthaltene Verluste (ohne Aktienverluste)</span>
     <span class="kap-amt" id="kap22-e">{fmt(kap22)}</span>
     <span class="kap-split kap-amt" id="kap22-g">je&nbsp;{fmt(kap22/2)}</span>
   </div>
+  {'''<div class="kap-row" style="margin-top:8px">
+    <span class="kap-zl"><b>Zeile 23</b></span>
+    <span class="kap-desc">Aktienverluste (§ 20 Abs. 6 Satz 4 EStG — nur mit Aktiengewinnen)</span>
+    <span class="kap-amt">''' + fmt(kap23) + '''</span></div>''' if kap23 > 0.005 else ''}
   <div class="kap-row" style="margin-top:8px">
     <span class="kap-zl"><b>Zeile 41</b></span>
     <span class="kap-desc">Anrechenbare ausländische Quellensteuer (DBA-begrenzt)</span>
@@ -566,7 +589,7 @@ und stellt keine steuerliche Beratung dar. Die Verantwortung für die Steuererkl
 Steuerpflichtigen. Für komplexe Sachverhalte (FX, Kapitalmaßnahmen, Verlustvorträge) wird die
 Hinzuziehung eines Steuerberaters empfohlen.
 </div>
-<div class="footer">Erstellt mit <b>Refundex Engine v3.0</b> · fifo_fx v1.1 · kapmassnm v1.0 · {NOW}</div>
+<div class="footer">Erstellt mit <b>Refundex Engine v4.0</b> · fifo_fx v1.1 · kapmassnm v1.0 · {NOW}</div>
 
 <script>
 var MODE='einzel';
@@ -591,7 +614,7 @@ function updateNames(){{
 </script>
 </body></html>"""
 
-OUT = '/mnt/user-data/outputs/Steuerreport_2025_U12074449_v3.html'
+OUT = '/mnt/user-data/outputs/Steuerreport_2025_U12074449_v4.html'
 with open(OUT,'w',encoding='utf-8') as f:
     f.write(HTML)
 print(f'\n✅ Report gespeichert: {OUT}')
