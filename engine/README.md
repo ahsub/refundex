@@ -4,84 +4,58 @@ Python-basierte Steuerberechnungs-Engine für deutsche IBKR/CapTrader-Depot-Ausw
 
 ## Module
 
-| Datei | Beschreibung | Status |
-|-------|-------------|--------|
-| `fifo_fx.py` | FX-FIFO (§ 20 Abs. 2 Nr. 7 EStG, Rn. 131 BMF) — Guthaben/VB-Trennung, Zufluss-First | ✅ v1.1 |
-| `kapmassnm.py` | Kapitalmaßnahmen (§ 20 Abs. 4a EStG) — SO/TO/TC/DW, IBKR value-Feld | ✅ v1.0 |
-| `vorabpauschale.py` | Vorabpauschale (§ 18 InvStG) — Aktienfonds/Misch/Immobilien DE+Ausl., Fälligkeit | ✅ v1.0 |
-| `build_report.py` | HTML-Report Anlage KAP — Einzel/Gemeinschaftskonto, §20 Abs. 6 Satz 5 | ✅ v3.0 |
-| `config.py` | Zentrale Konfiguration — XML-Pfade, DBA-Sätze, Basiszins | ✅ v1.0 |
+| Datei | § EStG | Topf | Status |
+|-------|--------|------|--------|
+| `fifo_fx.py` | § 20 Abs. 2 Nr. 7, Rn. 131 BMF | 1 | ✅ v1.1 |
+| `kapmassnm.py` | § 20 Abs. 4a (SO/TO/TC/DW) | 1 | ✅ v1.0 |
+| `vorabpauschale.py` | § 18 InvStG, § 20 InvStG | KAP-INV | ✅ v1.0 |
+| `verlusttoepfe.py` | § 20 Abs. 6 Satz 3/4/5 | 1+2+3 | ✅ v1.0 |
+| `aktien_fifo.py` | § 20 Abs. 2 Nr. 1 | **2 (Aktien)** | ✅ v1.0 |
+| `termingeschaefte.py` | § 20 Abs. 2 Nr. 3 | **3 (Termin, Cap 20k)** | ✅ v1.0 |
+| `build_report.py` | Anlage KAP HTML | — | ✅ v3.0 |
+| `config.py` | Konfiguration | — | ✅ v1.0 |
 
-## Schnellstart
+## Tests: 95/95 ✅
+
+```
+test_fifo_fx.py          18 Tests
+test_kapmassnm.py        11 Tests
+test_vorabpauschale.py   25 Tests
+test_verlusttoepfe.py    25 Tests
+test_aktien_fifo.py       8 Tests
+test_termingeschaefte.py  8 Tests
+```
+
+## Verlustverrechnungstöpfe
+
+```
+TOPF 1 — Allgemein (§ 20 Abs. 6 Satz 3)
+├── Dividenden / Zinsen / SYEP         fifo_fx.py + build_report.py
+├── Stillhalterprämien / FX            fifo_fx.py
+├── Kapitalmaßnahmen (SO/TO/DW)        kapmassnm.py
+└── Zertifikate / Knock-Outs           ⬜ (zertifikate.py geplant)
+
+TOPF 2 — Aktien (§ 20 Abs. 6 Satz 4)  aktien_fifo.py
+├── Nur mit Aktiengewinnen verrechenbar
+└── FIFO je ISIN, jahresübergreifend
+
+TOPF 3 — Termingeschäfte (§ 20 Abs. 6 Satz 5)  termingeschaefte.py
+├── Long-Optionen / CFD / Futures / Warrants
+├── Verrechenbar mit Termin-Gewinnen + Stillhalterprämien
+└── MAX 20.000 EUR Verlust/Jahr → verlusttoepfe.py
+```
+
+**Häufige Irrtümer (bereits abgefangen):**
+- Knock-Out Zertifikate → Topf 1 (keine Termingeschäfte!)
+- Stillhalter-Verluste → Topf 1 (kein Cap!)
+- Long-Option-Verluste → Topf 3 (Cap 20.000 EUR!)
+
+## Quickstart
 
 ```bash
-# 1. XML-Exporte in data/ ablegen, config.py anpassen
-python build_report.py    # → output/Steuerreport_YYYY_UXXXXXXX.html
-pytest tests/ -v          # → 54/54 passed ✅
+python build_report.py  # → output/Steuerreport_YYYY.html
+pytest tests/ -v        # → 95/95 ✅
 ```
-
-## Vorabpauschale (§ 18 InvStG)
-
-```python
-from vorabpauschale import ETFPosition, compute_vorabpauschale
-
-positionen = [
-    ETFPosition(
-        isin='IE00B4L5Y983', name='iShares MSCI World',
-        fondstyp='aktien',       # 'aktien' | 'misch' | 'immobilien_de' | 'immobilien_aus' | 'anleihen'
-        anteile=100,
-        kurs_01_01=80.0,         # Rücknahmepreis 01.01. in EUR
-        kurs_31_12=88.0,         # Rücknahmepreis 31.12. in EUR (für Begrenzung)
-        ausschuettung=0,         # Tatsächliche Ausschüttungen im Jahr (EUR)
-        thesaurierend=True
-    ),
-]
-report = compute_vorabpauschale(positionen, steuerjahr=2025)
-print(f'Steuerpflichtig: {report.gesamt_steuerpflichtig:.2f} EUR → Anlage KAP-INV')
-```
-
-Basiszinsen: 2023=2,55% · 2024=2,29% · 2025=2,53%*
-
-*⚠️ 2025 Basiszins bitte gegen aktuelles BMF-Schreiben verifizieren. kap.html zeigt 2,30% (ältere Quelle).
-
-Teilfreistellung:
-- Aktienfonds: 30 % steuerfrei
-- Mischfonds: 15 % steuerfrei
-- Immobilienfonds Inland: 60 % steuerfrei
-- Immobilienfonds Ausland: 80 % steuerfrei ← höher als Inland!
-- Anleihen/Sonstige: 0 %
-
-**Wichtig:** IBKR/CapTrader führen Vorabpauschale nicht automatisch ab.
-Muss vom Anleger selbst ermittelt und in Anlage KAP-INV erklärt werden.
-
-## Tests: 54/54 ✅
-
-```
-tests/test_fifo_fx.py       18 Tests — FX-FIFO, SEK/GBP/USD, Zufluss-First
-tests/test_kapmassnm.py     11 Tests — ENVXW SO/TO/DW, BubbleTax-Referenz
-tests/test_vorabpauschale.py 25 Tests — Basiszins, TFS, Begrenzung, Fälligkeit
-```
-
-## Ergebnisqualität (BubbleTax-Abgleich 2025)
-
-| Kategorie | Engine | BubbleTax | Δ |
-|-----------|--------|-----------|---|
-| Dividenden | 3.722,47 EUR | 3.7**,** EUR | ✅ |
-| QST anrechenbar | 280,36 EUR | 28*,** EUR | ✅ |
-| FX SEK Netto | +20,70 EUR | +2*,** EUR | ✅ |
-| ENVXW SO Sachausch. | +156,24 EUR | +15*,** EUR | ✅ |
-| ENVXW Netto | +153,12 EUR | +15*,** EUR | ✅ |
-| Stillhalter Netto | +4.537 EUR | +3.2** EUR | ~IBKR vs EZB Kurse |
-
-## Rechtsgrundlagen
-
-- § 18 InvStG — Vorabpauschale
-- § 20 InvStG — Teilfreistellung
-- § 20 EStG — Einkünfte aus Kapitalvermögen
-- § 20 Abs. 4a — Kapitalmaßnahmen
-- § 20 Abs. 6 Satz 5 — Termingeschäft-Verlustgrenze
-- § 32d Abs. 3 — Pflichtveranlagung bei ausländischem Broker
-- Rn. 131 BMF (BStBl I 2025) — FX-FIFO
 
 ---
 *Refundex Engine · ahsub/refundex/engine*
