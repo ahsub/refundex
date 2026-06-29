@@ -156,6 +156,15 @@
 </style>
 </head>
 <body>
+<div id="engine-import-section" style="background:#fffbeb;border:1.5px solid #d97706;border-radius:5px;padding:12px 16px;margin:12px 0;font-size:9.5pt">
+  <b>&#9889; Refundex Engine Import</b>
+  <span style="font-size:8.5pt;color:#555;margin-left:8px">KAP-Werte direkt aus <code>kap_data.json</code> laden</span><br><br>
+  <label id="engine-import-btn" style="cursor:pointer;display:inline-block;padding:6px 14px;background:#1a3a5c;color:#fff;border-radius:4px;font-size:9pt">
+    &#128194; kap_data.json laden
+    <input type="file" accept=".json" onchange="importEngineJSON(event)" style="display:none">
+  </label>
+  <span style="font-size:8pt;color:#666;margin-left:10px">Erzeugt von: <code>python engine/build_report.py</code></span>
+</div>
 
 <header class="header">
   <div style="display:flex;align-items:center">
@@ -23186,5 +23195,33 @@ function escHtml(s) {
 
 // Init API-Key
 (function(){try{var k=sessionStorage.getItem('refundex_api_key');if(k){window._kapApiKey=k;var el=document.getElementById('kap-api-key');if(el)el.value=k;}}catch(e){}})();</script>
-</body>
+<script>
+function importEngineJSON(event) {
+  var file = event.target.files[0]; if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var d = JSON.parse(e.target.result);
+      if (!d.kap || !d.meta) { alert('Ungültiges kap_data.json'); return; }
+      var k = d.kap, m = d.meta;
+      var f = function(v) { return (+v).toLocaleString('de-DE',{minimumFractionDigits:2})+' EUR'; };
+      var rows = '<div><b>Zeile 19</b></div><div style=text-align:right>'+f(k.z19)+'</div>';
+      if (k.z20>0.01) rows += '<div><b>Zeile 20</b> Aktiengewinne</div><div style=text-align:right>'+f(k.z20)+'</div>';
+      rows += '<div><b>Zeile 22</b> Verluste</div><div style=text-align:right>'+f(k.z22)+'</div>';
+      if (k.z23>0.01) rows += '<div><b>Zeile 23</b> Aktienverluste</div><div style=text-align:right>'+f(k.z23)+'</div>';
+      rows += '<div><b>Zeile 41</b> Quellensteuer</div><div style=text-align:right>'+f(k.z41)+'</div>';
+      rows += '<div style=margin-top:6px><b>Nach Sparer-Pauschbetrag:</b></div><div style="text-align:right;color:#166534;margin-top:6px"><b>'+f(k.z19_nach_sparer)+'</b></div>';
+      var warn = d.warnungen&&d.warnungen.length?'<div style=color:#991b1b;margin-top:8px>&#9888; '+d.warnungen.join('<br>')+'</div>':'';
+      var html = '<div style="background:#f0fdf4;border:1.5px solid #16a34a;border-radius:5px;padding:14px 18px;margin:8px 0;font-size:9.5pt">'
+        +'<b>&#10003; Engine Import &mdash; Steuerjahr '+m.steuerjahr+' &middot; '+m.konto+'</b>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px">'+rows+'</div>'
+        +warn+'<div style="color:#666;font-size:8pt;margin-top:6px">'+m.erstellt+' &middot; Engine v'+m.version+'</div></div>';
+      var el=document.getElementById('engine-import-result');
+      if (!el){el=document.createElement('div');el.id='engine-import-result';
+        document.getElementById('engine-import-btn').insertAdjacentElement('afterend',el);}
+      el.innerHTML=html;
+    } catch(err) { alert('Fehler: '+err.message); }
+  };
+  reader.readAsText(file);
+}</script></body>
 </html>
