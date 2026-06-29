@@ -44,16 +44,18 @@ import calendar
 # https://www.bundesfinanzministerium.de → Steuern → Kapitalvermögen
 
 BASISZINS: Dict[int, float] = {
-    2019: 0.0052,   # 0,52 %
-    2020: 0.0000,   # 0,00 % (negativ → 0 gesetzt, keine Vorabpauschale)
-    2021: 0.0000,   # 0,00 %
+    2019: 0.0052,   # 0,52 %  (BMF-Schreiben Jan 2019)
+    2020: 0.0000,   # negativ → 0 gesetzt (keine Vorabpauschale)
+    2021: 0.0000,   # negativ → 0 gesetzt
     2022: 0.0000,   # -0,88 % → negativ → 0 gesetzt
     2023: 0.0255,   # 2,55 %  (BMF-Schreiben Jan 2023)
     2024: 0.0229,   # 2,29 %  (BMF-Schreiben Jan 2024)
-    2025: 0.0253,   # 2,53 %  ← ⚠️ Bitte mit aktuellem BMF-Schreiben verifizieren!
+    2025: 0.0253,   # 2,53 %  (BMF-Schreiben 10.01.2025, GZ IV C 1 - S 1980/00230/009/002) ✅
+    2026: 0.0320,   # 3,20 %  (BMF-Schreiben 13.01.2026, GZ IV C 1 - S 1980/00230/012/001)
+                    #          Bundesbank-Stichtag: 02.01.2026 | Fälligkeit: 04.01.2027
 }
-# ⚠️ WICHTIG: 2025er Basiszins muss gegen offizielle BMF-Veröffentlichung
-#              abgeglichen werden! kap.html verwendet 2,30 % (ältere Version).
+# Quelle: https://www.bundesfinanzministerium.de → Steuern → Abgeltungsteuer
+# Neue Werte erscheinen jeweils im Januar des Folgejahres.
 
 # ─── Teilfreistellungssätze (§ 20 InvStG) ────────────────────────────────────
 TEILFREISTELLUNG: Dict[str, float] = {
