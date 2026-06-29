@@ -1,56 +1,80 @@
 # Refundex Engine
 
 Python-basierte Steuerberechnungs-Engine für deutsche IBKR/CapTrader-Depot-Auswertungen.
+Erstellt druckbare HTML-Reports für die Anlage KAP der deutschen Einkommensteuererklärung.
+
+## Verzeichnisstruktur
+
+```
+engine/
+├── config.py           ← Konfiguration (XML-Pfade, Steuerjahr, DBA-Sätze)
+├── fifo_fx.py          ← FX-FIFO Engine (§ 20 Abs. 2 Nr. 7 EStG)
+├── kapmassnm.py        ← Kapitalmaßnahmen (§ 20 Abs. 4a EStG)
+├── build_report.py     ← HTML-Report-Generator (Anlage KAP)
+├── requirements.txt    ← Abhängigkeiten
+├── data/               ← IBKR XML-Exporte (NICHT im Repo — .gitignore)
+│   ├── Steuerauswertung_2023.xml
+│   ├── Steuerauswertung_2024.xml
+│   └── Steuerauswertung_2025.xml
+├── output/             ← Generierte Reports (NICHT im Repo — .gitignore)
+└── tests/
+    ├── test_fifo_fx.py     ← 18 Tests
+    └── test_kapmassnm.py   ← 11 Tests
+```
+
+## Schnellstart
+
+```bash
+# 1. XML-Exporte aus IBKR in data/ ablegen
+# 2. config.py anpassen (Pfade, Steuerjahr, Konto-ID)
+# 3. Report generieren
+python build_report.py
+# → output/Steuerreport_2025_U12074449.html
+
+# Tests ausführen
+pip install pytest
+pytest tests/ -v
+# → 29/29 passed ✅
+```
 
 ## Module
 
 | Datei | Beschreibung | Status |
 |-------|-------------|--------|
-| `fifo_fx.py` | FX-FIFO (§ 20 Abs. 2 Nr. 7 EStG, Rn. 131 BMF) — Guthaben/VB-Trennung, Zufluss-First | ✅ v1.1 |
-| `kapmassnm.py` | Kapitalmaßnahmen (§ 20 Abs. 4a EStG) — SO/TO/TC/DW, IBKR value-Feld | ✅ v1.0 |
-| `build_report.py` | HTML-Steuerreport-Generator — Anlage KAP, Einzel/Gemeinschaftskonto | ✅ v2 |
-| `requirements.txt` | Abhängigkeiten (Python stdlib only) | ✅ |
-| `dividenden.py` | Dividenden + QST-Anrechnung je DBA | ⬜ geplant |
-| `pytest/` | Unit-Tests je §-Paragraph | ⬜ geplant |
+| `fifo_fx.py` | FX-FIFO: Guthaben/VB-Trennung, Zufluss-First, Rn. 131 BMF | ✅ v1.1 |
+| `kapmassnm.py` | SO/TO/TC/DW: IBKR value-Feld, BubbleTax-Match | ✅ v1.0 |
+| `build_report.py` | HTML-Report: Anlage KAP, Einzel/Gemeinschaftskonto, §20 Abs. 6 Satz 5 | ✅ v3.0 |
+| `config.py` | Zentrale Konfiguration (kein Hardcoding in Modulen) | ✅ v1.0 |
 
-## Nutzung
+## Ergebnisqualität (Abgleich BubbleTax 2025)
 
-```bash
-# 3 IBKR Flex Query XML-Exporte bereitstellen (mind. 3 Jahre für korrekten FIFO-Stack)
-python build_report.py
-# → erzeugt lokal:
-#     Steuerreport_2025_UXXXXXXX.html   (druckbares PDF)
-#     fx_audit_2025.json                (Prüfnachweis Finanzamt)
-```
+| Kategorie | Engine | BubbleTax | Δ |
+|-----------|--------|-----------|---|
+| Dividenden | 3.722,47 EUR | 3.7**,** EUR | ✅ |
+| QST anrechenbar | 280,36 EUR | 28*,** EUR | ✅ |
+| FX SEK Netto | +20,70 EUR | +2*,** EUR | ✅ |
+| FX GBP Netto | +6,68 EUR | +*,** EUR | ✅ |
+| ENVXW SO Sachausch. | +156,24 EUR | +15*,** EUR | ✅ |
+| ENVXW Netto | +153,12 EUR | +15*,** EUR | ✅ |
+| Stillhalter | 27.532 / -22.994 EUR | 26.*** / 22.*** EUR | ~1.300 EUR* |
 
-## Ergebnisqualität (Abgleich mit BubbleTax 2025)
+*Differenz: IBKR-Kurse (fxRateToBase) vs. EZB-Referenzkurse über ~300 Transaktionen
 
-| Kategorie | Engine | BubbleTax | Status |
-|-----------|--------|-----------|--------|
-| Stillhaltergeschäfte | 27.532 / −22.994 EUR | 26.XXX / −22.XXX EUR | ✅ |
-| Dividenden | 3.722 EUR | 3.7XX EUR | ✅ |
-| QST anrechenbar | 280,36 EUR | 28X EUR | ✅ |
-| FX SEK | +20,70 EUR | +2X EUR | ✅ |
-| FX GBP | +6,68 EUR | +X EUR | ✅ |
-| ENVXW SO | +156,24 EUR | +15X EUR | ✅ |
-| ENVXW DW | −3,12 EUR | −X EUR | ✅ |
-
-## Rechtliche Grundlagen
+## Rechtsgrundlagen
 
 - § 20 EStG — Einkünfte aus Kapitalvermögen
-- § 20 Abs. 1 Nr. 11 — Stillhaltergeschäfte
+- § 20 Abs. 1 Nr. 11 — Stillhaltergeschäfte (kein Termingeschäft-Cap)
 - § 20 Abs. 2 Nr. 7 — Fremdwährungsgewinne
-- § 20 Abs. 4a — Kapitalmaßnahmen
-- § 20 Abs. 6 Satz 5 — Termingeschäft-Verlustbeschränkung
+- § 20 Abs. 4a — Kapitalmaßnahmen (SO/TO/TC/DW)
+- § 20 Abs. 6 Satz 5 — Termingeschäft-Verlustgrenze (2025: nicht anwendbar)
+- § 32d Abs. 3 — Pflichtveranlagung bei ausländischem Broker
 - Rn. 131 BMF (BStBl I 2025) — FX-FIFO-Methodik
 
-## Datenschutz
+## Datenschutz ⚠️
 
-Generierte Reports enthalten persönliche Steuerdaten — **niemals ins Repo!**
+Generierte Reports und XML-Exporte enthalten persönliche Steuerdaten.
+**Niemals in ein öffentliches Repository pushen!**
+Beide Verzeichnisse (`data/`, `output/`) sind in `.gitignore` ausgeschlossen.
 
-`.gitignore` muss enthalten:
-```
-engine/Steuerreport_*.html
-engine/*_audit_*.json
-engine/*.xml
-```
+---
+*Erstellt mit Refundex · ahsub/refundex/engine*
