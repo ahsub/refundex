@@ -1,6 +1,6 @@
 # Refundex — RUNBOOK (Bus-Factor-Dokument)
 
-**Version:** 1.0
+**Version:** 1.1
 **Stand:** 03.07.2026
 **Ablage:** `ahsub/refundex/docs/RUNBOOK.md`
 **Zweck:** Dieses Dokument versetzt eine technikaffine dritte Person in die Lage, Refundex zu verstehen, zu betreiben und im Notfall wiederherzustellen — ohne den Inhaber fragen zu können. Es adressiert Schwäche W1 (Bus-Faktor 1) aus `docs/STRATEGIE.md`.
@@ -35,9 +35,9 @@ Browserbasierter deutscher Steuerassistent für Kunden IBKR-basierter Broker (Ca
 └──────────────────────────────────────────────────────────────┘
             ▲ statisches Hosting                ▲ Markdown lazy-load
 ┌───────────────────────────┐   ┌──────────────────────────────┐
-│ GitHub Pages              │   │ ahsub/refundex-docs          │
-│ ahsub.github.io/refundex/ │   │ index.json + docs/*.md       │
-│ Quelle: Repo ahsub/refundex│  │ (10 Hilfe-Module; Struktur   │
+│ Cloudflare Pages          │   │ ahsub/refundex-docs          │
+│ (Direct Upload, Zip)      │   │ index.json + docs/*.md       │
+│ Quelle: Deployment-Zip     │  │ (10 Hilfe-Module; Struktur   │
 └───────────────────────────┘   │  wird mit UIQ geteilt)       │
                                 └──────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────┐
@@ -60,10 +60,13 @@ Browserbasierter deutscher Steuerassistent für Kunden IBKR-basierter Broker (Ca
 
 | Repo | Inhalt | Deploy |
 |---|---|---|
-| `ahsub/refundex` | kap.html, Python-Engine, Tests, `docs/` (STRATEGIE, ROADMAP, RUNBOOK, Datenmodell) | GitHub Pages, automatisch bei Push auf main |
+| `ahsub/refundex` | Anwendungsdateien (index.html, kap.html, guide.html, formfiller.html, refundex-docs.html, `modules/`), Python-Engine, Tests, `docs/` | **Quellcode-Ablage — Push publiziert NICHT automatisch** |
 | `ahsub/refundex-docs` | Hilfe-Module (Markdown) + `index.json` | Kein Build — kap.html lädt zur Laufzeit via raw/CDN |
 
-**Deploy-Verfahren:** Push über GitHub Contents API (`PUT /repos/ahsub/refundex/contents/{pfad}`), Muster SHA-first (bestehende Datei: erst GET für SHA, dann PUT mit SHA). Auth: klassischer PAT mit `repo`-Scope, **7 Tage Laufzeit, nach jeder Session löschen**. Alternativ: normaler Git-Push oder GitHub-Web-Upload.
+**Zwei getrennte Vorgänge — beide nötig:**
+
+1. **Quellcode nach GitHub** (Versionshistorie, Zusammenarbeit mit Claude): Push über GitHub Contents API (`PUT /repos/ahsub/refundex/contents/{pfad}`), Muster SHA-first (bestehende Datei: erst GET für SHA, dann PUT mit SHA). Auth: klassischer PAT mit `repo`-Scope, **7 Tage Laufzeit, nach jeder Session löschen**.
+2. **Publikation über Cloudflare Pages** (macht die App live): Deployment-Zip mit allen Anwendungsdateien in korrekter Struktur (Root-HTMLs + `modules/`-Ordner; NICHT `engine/`, NICHT `docs/`) im Cloudflare-Dashboard unter Workers & Pages als Direct Upload hochladen. Claude baut das Zip am Sessionende (`refundex-deploy-vNNN.zip`); der Upload selbst erfolgt durch den Inhaber im Dashboard. **Merksatz: GitHub-Commit ≠ live — erst der Pages-Upload publiziert.**
 
 **Versionierung:** kap.html trägt die Version im `<title>` (aktuell v139) — bei jeder Änderung hochzählen. Strategiedokumente tragen eigene Versionen mit Fortschreibungshistorie am Dokumentende.
 
@@ -92,7 +95,7 @@ Der wichtigste wiederkehrende Betriebsprozess (Roadmap-Item 1.6). Reihenfolge ei
 | Hilfe-Modal leer | refundex-docs nicht erreichbar / index.json-Bruch | index.json-Syntax prüfen; CDN-Cache (purge.jsdelivr.net) |
 | Vorabpauschale offensichtlich falsch | Basiszins des Jahres fehlt/veraltet in einer der beiden Rechenwelten | Checkliste §4 Schritt 1–2 |
 | ETF-Karten verschwunden | localStorage geleert (Browserwechsel, Private Mode) | Erwartetes Verhalten — Daten sind bewusst nur lokal; Kurse neu eintragen |
-| GitHub-Pages-Seite alt | Pages-Build hängt oder Browser-Cache | Repo → Actions/Pages-Status; Hard-Reload |
+| Live-Seite zeigt alten Stand | Pages-Upload vergessen (GitHub-Commit allein publiziert nicht!) oder Browser-Cache | Aktuelles Deployment-Zip im CF-Dashboard hochladen; Hard-Reload |
 
 ---
 
@@ -106,7 +109,7 @@ Der wichtigste wiederkehrende Betriebsprozess (Roadmap-Item 1.6). Reihenfolge ei
 | Nutzerdaten | — | Existieren serverseitig nicht (localStorage nur beim Nutzer). Nichts wiederherzustellen, nichts kompromittierbar |
 | Steuerliche Referenzwerte | Verlust der GZ-Dokumentation | In diesem RUNBOOK (§4) und in vorabpauschale.py dokumentiert |
 | GitHub-Account `ahsub` | Sperrung/Verlust | [INHABER: Recovery-Codes / Backup-Zugang dokumentieren — Ablageort angeben] |
-| Domain/Erreichbarkeit | GitHub Pages down | Statisches HTML — jede Kopie von kap.html funktioniert lokal per Doppelklick vollständig offline |
+| Domain/Erreichbarkeit | Cloudflare Pages down | Statisches HTML — jede Kopie von kap.html funktioniert lokal per Doppelklick vollständig offline |
 
 **Minimal-Wiederaufbau ohne alles:** kap.html (eine Datei!) auf beliebigem statischem Host + refundex-docs-Repo = voll funktionsfähige App. Die Python-Engine ist für Endnutzer nicht erforderlich.
 
@@ -137,3 +140,4 @@ Der wichtigste wiederkehrende Betriebsprozess (Roadmap-Item 1.6). Reihenfolge ei
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 03.07.2026 | Erstfassung: Systemlandkarte, Deploy-Wege, Steuerjahr-Update-Checkliste (= Roadmap-Item 1.6), Störungs-Runbook, Disaster Recovery; 3 Inhaber-Platzhalter offen |
+| 1.1 | 03.07.2026 | KORREKTUR §3: Hosting läuft über Cloudflare Pages (Direct Upload als Zip), nicht GitHub Pages; Zwei-Vorgänge-Prinzip (GitHub = Quellcode, CF Pages = Publikation) dokumentiert; Deployment-Zip-Inhalt definiert |
