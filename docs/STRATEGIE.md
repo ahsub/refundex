@@ -1,6 +1,6 @@
 # Refundex — Strategiedokument
 
-**Version:** 1.1
+**Version:** 1.2
 **Stand:** 03.07.2026
 **Ablage:** `ahsub/refundex/docs/STRATEGIE.md`
 **Fortschreibung:** Claude versioniert dieses Dokument (v1.1, v1.2 …) bei jeder strategischen Weichenstellung und pusht es mit ins Repo — analog zu `ahsub/ko-aggregator/docs/STRATEGIE.md` (UnderlyingIQ).
@@ -105,7 +105,8 @@ Refundex und UnderlyingIQ sind **zwei Module einer gemeinsamen Investment-Suite*
 | O3 | **Kein direkter Wettbewerber in der Nische** — generische Steuersoftware kann Flex Queries nicht lesen; Steuerberater sind teuer und IBKR-fremd | Zeitfenster nutzen |
 | O4 | **Suite-Cross-Selling** — UIQ-Nutzer sind qualifizierte Refundex-Interessenten und umgekehrt (identische Zielgruppe: aktive Selbstentscheider) | Phase 3 |
 | O5 | **§23-Erweiterung** — Edelmetalle/Alt-Krypto (Anlage SO) als natürliche, klar abgrenzbare Erweiterung | Bereits als Next-Session-Item identifiziert |
-| O6 | **Broker-neutrale Zielgruppe über Säule 2** — mit manuellem Erfassungs-Adapter adressiert das QSt-Cockpit jeden deutschen Anleger mit Auslandsdividenden bei beliebiger Bank; deutlich breiter als die IBKR-Nische der Säule 1 | Strategische Verbreiterung ohne Verwässerung des Kerns |
+| O6 | **Broker-neutrale Zielgruppe über Säule 2** — mit manuellem Erfassungs-Adapter adressiert das QSt-Cockpit jeden deutschen Anleger mit Auslandsdividenden bei beliebiger Bank; deutlich breiter als die IBKR-Nische der Säule 1. **Empirisch belegt (07/2026):** Investmentclub-Umfrage — kein einziges Mitglied hat je eine Rückforderung versucht, einhelliger Grund: „zu kompliziert". Der Schmerz existiert, die Hürde ist exakt die Komplexität, die das Cockpit abbaut | Produkthypothese bestätigt |
+| O7 | **Tax-Voucher-Infrastruktur existiert** — CapTrader stellt lt. FAQ (Stand 07/2026) Tax Voucher für 11 Länder aus, darunter CH (15 CHF), DK (125 DKK), I (25 €), F (125 €); die größte Verfahrensunsicherheit der Stufe B ist damit im Grundsatz ausgeräumt, und die Preisliste ermöglicht ein deterministisches Netto-Rückholpotenzial (Überschuss − Voucher-Kosten) je Land | Gate-Bedingung (b) im Kern erfüllt; Restfragen siehe ROADMAP 3.7 |
 
 ### Risiken (extern)
 
@@ -150,3 +151,4 @@ Analog zum UIQ-Filter (STRATEGIE.md §6 dort), angepasst auf Refundex. Ein Featu
 |---|---|---|
 | 1.0 | 03.07.2026 | Erstfassung: Leitbild, Suite-Positionierung, SWOT, Compliance-Rahmen (StBerG-Abgrenzung), Entscheidungsfilter |
 | 1.1 | 03.07.2026 | Leitbild auf zwei Säulen verbreitert (KAP + QSt-Rückholung); Grundgesetz 6 Broker-Neutralität über Normalisiertes Ertragsdatenmodell mit Adapter-Architektur inkl. Extraction-Review-Gate; SWOT-Chance O6 (broker-neutrale Zielgruppe) |
+| 1.2 | 03.07.2026 | O6 empirisch belegt (Club-Umfrage: null Erfahrung, Komplexität als Hürde); O7 neu: CapTrader-Tax-Voucher-Infrastruktur für 11 Länder inkl. Preisliste → Netto-Rückholpotenzial berechenbar, Gate (b) im Kern erfüllt |
