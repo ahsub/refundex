@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 1.3
+**Version:** 1.4
 **Stand:** 03.07.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -29,7 +29,7 @@
 | # | Item | Kriterium „fertig" | Filter-Notiz |
 |---|---|---|---|
 | 1.1 | ✅ **ERLEDIGT (v139, 03.07.2026)** — **Disclaimer-Verstärkung (4 Punkte)** — (a) No-Guarantee-Klausel, (b) Steuerberater-Klausel geschärft, (c) Basiszins-/Rechtsstand-Unsicherheit sichtbar, (d) explizite Nicht-Abdeckungsliste (Krypto, Edelmetalle, betriebliche Erträge) | Sichtbar in App + Report + guide.html | StBerG-Pflicht, vor allem anderen |
-| 1.2 | **`guide.html`** — integrierter Leitfaden: Featureliste, Haftungshinweise, Schritt-für-Schritt Flex-Query-Einrichtung (197-Zeichen-Prompt), Bedienung, Grenzen | Ein Neuling kommt ohne Rückfragen vom leeren Depotauszug zum KAP-Ergebnis | 80/20: größter Hebel für Beta-Tauglichkeit |
+| 1.2 | ✅ **ERLEDIGT (03.07.2026)** — **`guide.html`** — integrierter Leitfaden: Featureliste, Haftungshinweise, Schritt-für-Schritt Flex-Query-Einrichtung (197-Zeichen-Prompt), Bedienung, Grenzen | Ein Neuling kommt ohne Rückfragen vom leeren Depotauszug zum KAP-Ergebnis | 80/20: größter Hebel für Beta-Tauglichkeit |
 | 1.3 | **Feedback-Kanal real** — Platzhalter `feedback@refundex.de` durch funktionierende Adresse oder GitHub-Issues-only ersetzen | Eingehende Meldung erreicht Axel nachweislich | Beta-Voraussetzung |
 | 1.4 | **§23 EStG-Randfälle dokumentieren** — physische Edelmetalle (1-Jahres-Frist), Alt-Krypto (vor 2025): zunächst nur als Hilfe-Modul + Nicht-Abdeckungshinweis (Anlage SO, persönlicher Steuersatz) | Hilfe-Modul online; Berechnung erst Phase 3 | 80/20: dokumentieren jetzt, rechnen später |
 | 1.5 | ✅ **ERLEDIGT (v1.0, 03.07.2026)** — **`docs/RUNBOOK.md`** — Bus-Factor-Dokument analog UIQ: Systemlandkarte, Repo-/Deploy-Wege, Steuerjahr-Update-Prozess, Disaster Recovery | Ein technikaffiner Dritter kann das System betreiben | W1-Gegenmaßnahme |
@@ -97,3 +97,4 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.1 | 03.07.2026 | Lynx von 3.3 nach 1.8 vorgezogen; Säule 2 aufgenommen: 2.6 Ertragsdatenmodell + Adapter 1/2, 2.7 QSt-Cockpit, 3.7 Formular-Vorbefüllung CH/DK hinter Recherche-Gate (4 Bedingungen), 3.8 PDF-Adapter nur mit Extraction-Review-Gate, 3.9 Tracking; Nicht-Ziel 4 präzisiert |
 | 1.2 | 03.07.2026 | Gate-Protokoll 3.7: (b) im Kern erfüllt (CapTrader-FAQ: Voucher für 11 Länder + Preisliste, Restfragen per Ticket), (c) erfüllt (Club-Umfrage); 2.7 um Netto-Rückholpotenzial + Break-even-Ampel erweitert; 1.8 zweistufig (Wording sofort, Verifikation via Beta-Community-Aufruf, kein Lynx-Depot im Club) |
 | 1.3 | 03.07.2026 | Erledigungsstände: 1.1 ✅ (kap.html v139: 4-Punkte-Haftungsblock, Basiszins-Hinweis, Nicht-Abdeckungsliste), 1.5 ✅ + 1.6 ✅ (RUNBOOK.md v1.0 inkl. Steuerjahr-Checkliste), 1.8 Stufe i ✅ (Lynx-Wording + Aufruf), 2.6 Spec ✅ (DATENMODELL_ERTRAEGE.md v1.0) |
+| 1.4 | 03.07.2026 | 1.2 ✅ guide.html erstellt (Belegketten-Hero, Flex-Query-Setup, 5-Schritte-Bedienung, 4-Punkte-Haftungsblock, FAQ inkl. Lynx + QSt-Ausblick); kap.html v140 mit Leitfaden-Link im Banner |
