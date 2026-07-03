@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refundex — Leitfaden</title>
+<meta name="description" content="Schritt-für-Schritt-Anleitung: IBKR/CapTrader Flex Query einrichten und die Anlage KAP mit Refundex berechnen.">
+<style>
+  :root {
+    --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
+    --text:#e8eaf0; --muted:#7a85a0; --accent:#4f8ef7;
+    --green:#22c55e; --green-bg:#0d2a1a;
+    --amber:#f59e0b; --amber-bg:#2a1f08;
+    --red:#ef4444; --red-bg:#2a0d0d;
+    --radius:10px; --mono:'JetBrains Mono','Fira Mono',monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
+  body {
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:15px; line-height:1.65;
+  }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .wrap { max-width:860px; margin:0 auto; padding:0 1.25rem; }
+
+  /* Header */
+  header {
+    border-bottom:1px solid var(--border); background:var(--bg2);
+    position:sticky; top:0; z-index:10;
+  }
+  .header-inner { display:flex; align-items:center; justify-content:space-between; padding:0.8rem 0; gap:1rem; flex-wrap:wrap; }
+  .logo { font-size:18px; font-weight:700; letter-spacing:-0.01em; }
+  .logo span.r { color:var(--accent); }
+  .logo .sub { font-size:12px; font-weight:400; color:var(--muted); margin-left:0.4rem; }
+  .app-link {
+    background:var(--accent); color:#fff; padding:0.4rem 0.9rem;
+    border-radius:6px; font-size:13px; font-weight:600;
+  }
+  .app-link:hover { text-decoration:none; opacity:0.9; }
+
+  /* Hero mit Belegkette */
+  .hero { padding:3rem 0 2.25rem; border-bottom:1px solid var(--border); }
+  .hero h1 { font-size:clamp(26px,4.5vw,38px); font-weight:800; letter-spacing:-0.02em; line-height:1.2; }
+  .hero h1 em { font-style:normal; color:var(--accent); }
+  .hero p.lead { color:var(--muted); font-size:16px; margin-top:0.9rem; max-width:620px; }
+  .kette {
+    display:flex; gap:0; margin-top:2rem; border:1px solid var(--border);
+    border-radius:var(--radius); overflow:hidden; flex-wrap:wrap;
+  }
+  .kette .stufe {
+    flex:1 1 180px; padding:0.9rem 1rem; background:var(--bg2);
+    border-right:1px solid var(--border); min-width:150px;
+  }
+  .kette .stufe:last-child { border-right:none; }
+  .kette .snum { font-family:var(--mono); font-size:11px; color:var(--accent); }
+  .kette .stitel { font-weight:700; font-size:13px; margin-top:0.15rem; }
+  .kette .sdesc { font-size:11.5px; color:var(--muted); margin-top:0.2rem; }
+
+  /* Inhaltsnavigation */
+  nav.toc { padding:1.1rem 0; border-bottom:1px solid var(--border); font-size:13px; }
+  nav.toc ol { list-style:none; display:flex; flex-wrap:wrap; gap:0.4rem 1.4rem; }
+  nav.toc a { color:var(--muted); }
+  nav.toc a:hover { color:var(--accent); text-decoration:none; }
+
+  /* Sections */
+  section { padding:2.5rem 0; border-bottom:1px solid var(--border); }
+  section:last-of-type { border-bottom:none; }
+  h2 { font-size:21px; font-weight:800; letter-spacing:-0.01em; margin-bottom:1rem; }
+  h2 .snum { font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:400; margin-right:0.5rem; }
+  h3 { font-size:15px; font-weight:700; margin:1.5rem 0 0.5rem; }
+  p + p { margin-top:0.8rem; }
+  p.dim { color:var(--muted); }
+
+  /* Tabellen */
+  table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:13.5px; }
+  th { text-align:left; color:var(--muted); font-weight:600; font-size:12px;
+       text-transform:uppercase; letter-spacing:0.04em; padding:0.5rem 0.7rem;
+       border-bottom:1px solid var(--border); }
+  td { padding:0.5rem 0.7rem; border-bottom:1px solid var(--bg3); vertical-align:top; }
+  td.mono, .mono { font-family:var(--mono); font-size:12.5px; }
+  td.z { color:var(--accent); font-family:var(--mono); white-space:nowrap; }
+
+  /* Schritt-Karten (echte Sequenz) */
+  .step { display:flex; gap:1rem; padding:1.1rem 0; border-bottom:1px dashed var(--bg3); }
+  .step:last-child { border-bottom:none; }
+  .step .num {
+    flex:0 0 34px; height:34px; border-radius:50%; background:var(--bg3);
+    border:1px solid var(--border); color:var(--accent); font-family:var(--mono);
+    font-size:13px; display:flex; align-items:center; justify-content:center; font-weight:700;
+  }
+  .step .body { flex:1; }
+  .step .body strong.t { display:block; font-size:14.5px; margin-bottom:0.25rem; }
+  .step .body p { font-size:13.5px; color:var(--muted); }
+  .step .body p b { color:var(--text); font-weight:600; }
+
+  /* Codeblock / Query-Prompt */
+  .code {
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius);
+    padding:0.9rem 1rem; font-family:var(--mono); font-size:12.5px; line-height:1.7;
+    overflow-x:auto; margin:0.8rem 0; color:#c8d0e8;
+  }
+
+  /* Hinweiskästen */
+  .box { border-radius:var(--radius); padding:0.8rem 1rem; margin:1rem 0; font-size:13.5px;
+         display:flex; gap:0.6rem; border:1px solid var(--border); background:var(--bg2); }
+  .box.ok    { background:var(--green-bg); border-color:#1a4a2e; }
+  .box.warn  { background:var(--amber-bg); border-color:#4a3a10; }
+  .box.crit  { background:var(--red-bg);   border-color:#4a1a1a; }
+
+  /* Haftung */
+  .haftung { counter-reset:hp; }
+  .haftung .hp { padding:1rem 0; border-bottom:1px dashed var(--bg3); }
+  .haftung .hp:last-child { border-bottom:none; }
+  .haftung .hp strong.t { display:block; margin-bottom:0.3rem; }
+  .haftung .hp strong.t::before {
+    counter-increment:hp; content:counter(hp) " · ";
+    font-family:var(--mono); color:var(--red); font-weight:400;
+  }
+  .haftung .hp p { font-size:13.5px; color:var(--muted); }
+
+  /* FAQ */
+  details { border:1px solid var(--border); border-radius:var(--radius);
+            background:var(--bg2); margin-bottom:0.6rem; }
+  summary { cursor:pointer; padding:0.8rem 1rem; font-weight:600; font-size:14px; list-style:none; }
+  summary::-webkit-details-marker { display:none; }
+  summary::before { content:"+"; font-family:var(--mono); color:var(--accent); margin-right:0.6rem; }
+  details[open] summary::before { content:"–"; }
+  details .a { padding:0 1rem 0.9rem; font-size:13.5px; color:var(--muted); }
+  details .a b { color:var(--text); }
+
+  /* Footer */
+  footer { padding:2rem 0 3rem; color:var(--muted); font-size:12.5px; }
+  footer .links { display:flex; gap:1.25rem; flex-wrap:wrap; margin-bottom:0.8rem; }
+
+  @media (max-width:640px) {
+    .kette { flex-direction:column; }
+    .kette .stufe { border-right:none; border-bottom:1px solid var(--border); }
+    .kette .stufe:last-child { border-bottom:none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap header-inner">
+    <div class="logo"><span class="r">R</span>efundex <span class="sub">Leitfaden</span></div>
+    <a class="app-link" href="kap.html">→ Zur App</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h1>Von der Flex Query zur <em>fertigen Anlage KAP</em> — in einem Durchlauf.</h1>
+    <p class="lead">Refundex berechnet aus den Rohdaten Ihres IBKR-basierten Brokers (CapTrader, Lynx*) zeilengenaue
+    Werte für die Anlage KAP — vollständig im Browser, ohne dass Ihre Depotdaten jemals einen Server erreichen.</p>
+    <div class="kette" aria-label="Die vier Stufen der Berechnung">
+      <div class="stufe"><div class="snum">STUFE 1</div><div class="stitel">Datenextraktion</div><div class="sdesc">Flex-Query-CSV wird deterministisch geparst</div></div>
+      <div class="stufe"><div class="snum">STUFE 2</div><div class="stitel">Klassifikation</div><div class="sdesc">Verlusttöpfe, §20 Abs. 6, §18 InvStG</div></div>
+      <div class="stufe"><div class="snum">STUFE 3</div><div class="stitel">Berechnung</div><div class="sdesc">FIFO, Verlustverrechnung, Vorabpauschale</div></div>
+      <div class="stufe"><div class="snum">STUFE 4</div><div class="stitel">Formular-Output</div><div class="sdesc">KAP-Zeilen, Checkliste, DOCX-Export</div></div>
+    </div>
+  </div>
+
+  <nav class="toc" aria-label="Inhalt">
+    <ol>
+      <li><a href="#warum">Warum Refundex</a></li>
+      <li><a href="#features">Was berechnet wird</a></li>
+      <li><a href="#flexquery">Flex Query einrichten</a></li>
+      <li><a href="#bedienung">Bedienung</a></li>
+      <li><a href="#grenzen">Grenzen &amp; Haftung</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ol>
+  </nav>
+
+  <section id="warum">
+    <h2><span class="snum">§1</span>Warum Refundex?</h2>
+    <p>Ausländische Broker wie Interactive Brokers (IBKR) und seine deutschen Partner CapTrader und Lynx führen
+    <b>keine deutsche Abgeltungsteuer</b> ab. Wer dort handelt, muss seine Kapitalerträge selbst in der
+    Anlage KAP erklären — aus Berichten, deren Format kein deutsches Steuerformular kennt: FIFO-Gewinne in USD,
+    Optionsprämien, Quellensteuern aus einem Dutzend Ländern, Verlusttöpfe mit eigenen Verrechnungsregeln.</p>
+    <p>Refundex übersetzt diese Rohdaten in die Sprache des Formulars. Grundprinzip ist die <b>Belegkette</b>:
+    Jeder ausgewiesene Wert ist auf eine konkrete Datenzeile Ihrer Flex Query oder eine dokumentierte Rechtsquelle
+    (BMF-Schreiben, Gesetzesnorm) rückführbar. Es gibt keine Schätzungen und keine KI-generierten Zahlen —
+    gleiche Eingabe ergibt immer das gleiche Ergebnis.</p>
+    <div class="box ok"><span>🔒</span><span><b>Datensouveränität:</b> Die Anwendung läuft vollständig lokal in Ihrem
+    Browser. Ihre Depotdaten werden nicht hochgeladen, nicht gespeichert, nicht übertragen. Sie können die Seite
+    sogar herunterladen und offline verwenden.</span></div>
+  </section>
+
+  <section id="features">
+    <h2><span class="snum">§2</span>Was Refundex berechnet</h2>
+    <table>
+      <thead><tr><th>KAP-Zeile</th><th>Inhalt</th><th>Datenquelle</th></tr></thead>
+      <tbody>
+        <tr><td class="z">Z. 7</td><td>Kapitalerträge / Dividenden</td><td class="mono">Flex Cash Transactions</td></tr>
+        <tr><td class="z">Z. 8</td><td>Gewinne aus Aktienveräußerungen (FIFO)</td><td class="mono">Flex Trades · FifoPnlRealized</td></tr>
+        <tr><td class="z">Z. 9</td><td>Aktienverluste</td><td class="mono">Flex Trades · FifoPnlRealized</td></tr>
+        <tr><td class="z">Z. 12</td><td>Gewinne aus Options-/Termingeschäften, Stillhalterprämien</td><td class="mono">Flex Trades</td></tr>
+        <tr><td class="z">Z. 13</td><td>Verluste aus Termingeschäften (§20 Abs. 6 EStG)</td><td class="mono">Flex Trades</td></tr>
+        <tr><td class="z">Z. 14</td><td>Zinsen (EUR-/USD-Guthaben)</td><td class="mono">Flex Cash Transactions</td></tr>
+        <tr><td class="z">Z. 17</td><td>Freistellungsauftrag</td><td>Manuelle Angabe</td></tr>
+        <tr><td class="z">Z. 41</td><td>Anrechenbare ausländische Quellensteuer</td><td class="mono">Flex Cash Transactions</td></tr>
+        <tr><td class="z">Z. 9*</td><td>ETF-Vorabpauschale (§18 InvStG) inkl. Teilfreistellung</td><td>Kurseingabe + Flex-Ausschüttungen</td></tr>
+      </tbody>
+    </table>
+    <p class="dim">Dazu: automatische Erkennung von Gemeinschaftskonten mit korrekter 50/50-Aufteilung je Ehegatte,
+    Verlusttopf-Logik inkl. 20.000-€-Verrechnungsgrenze bei Termingeschäften, eine Übertragungs-Checkliste
+    für ELSTER/WISO und ein DOCX-Export als Beleg-Dokumentation fürs Finanzamt.</p>
+  </section>
+
+  <section id="flexquery">
+    <h2><span class="snum">§3</span>Flex Query einrichten (einmalig, ~5 Minuten)</h2>
+    <p>Die Flex Query ist ein konfigurierbarer Datenexport Ihres Brokers — die präziseste verfügbare Quelle,
+    weil sie exakte EUR-Umrechnungskurse (FXRateToBase) je Transaktion enthält. Sie richten sie einmal ein
+    und rufen sie danach jedes Jahr mit zwei Klicks ab.</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <strong class="t">Kontoverwaltung öffnen</strong>
+        <p>In der IBKR-Kontoverwaltung (bei CapTrader/Lynx: Login → Kontoverwaltung) den Bereich
+        <b>Performance &amp; Berichte → Flex-Queries</b> öffnen und eine neue <b>Aktivitäts-Flex-Query</b> anlegen.
+        <i>(Menübezeichnungen können je nach Oberflächen-Version leicht abweichen.)</i></p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <strong class="t">Drei Sektionen mit diesen Feldern aktivieren</strong>
+        <div class="code">Account Information:  Name, AccountType<br>
+Trades:               FifoPnlRealized, FXRateToBase, CostBasis, OpenCloseIndicator,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AssetClass, ISIN, Multiplier, Put/Call, Strike, Expiry<br>
+Cash Transactions:    Dividenden, Quellensteuer (WHT), Zinsen</div>
+        <p>Format: <b>CSV</b>. Zeitraum: beim Abruf jeweils das gewünschte <b>Steuerjahr (1.1.–31.12.)</b> wählen.
+        Details mit Screenshots: Hilfe-Modul <a href="kap.html">„Flex Query einrichten"</a> in der App (❓-Button).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <strong class="t">Query ausführen und CSV herunterladen</strong>
+        <p>Die Query für das Steuerjahr ausführen und die CSV-Datei speichern. Mehrere Jahre? Einfach je Jahr
+        eine CSV ziehen — Refundex nimmt alle auf einmal entgegen und sortiert sie automatisch den Steuerjahren zu.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="bedienung">
+    <h2><span class="snum">§4</span>Bedienung in fünf Schritten</h2>
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body"><strong class="t">CSV hochladen</strong>
+      <p>Flex-Query-CSV(s) per Drag &amp; Drop in die Upload-Zone ziehen. Gemeinschaftskonten werden am
+      Kontonamen automatisch erkannt („A <b>AND</b> B") und alle Werte je Ehegatte hälftig ausgewiesen.</p></div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body"><strong class="t">Steuerjahr wählen</strong>
+      <p>Sind mehrere Jahre geladen, das gewünschte Steuerjahr umschalten — alle Werte aktualisieren sich.</p></div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body"><strong class="t">ETF-Vorabpauschale ergänzen (falls ETFs im Depot)</strong>
+      <p>Je ETF die Kurse vom 1.1. und 31.12. eintragen (Depotauszug oder fondsweb.de) — Ausschüttungen
+      werden aus der Flex Query übernommen, Teilfreistellung und amtlicher BMF-Basiszins
+      (2025: 2,53 % · 2026: 3,20 %) sind hinterlegt. Beim Jahreswechsel wird der 31.12.-Kurs automatisch
+      als neuer 1.1.-Kurs vorgeschlagen.</p></div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div class="body"><strong class="t">Ergebnis gegen die Steuerbescheinigung abgleichen</strong>
+      <p><b>Pflichtschritt:</b> Die offizielle Jahressteuerbescheinigung Ihres Brokers herunterladen und die
+      Refundex-Werte dagegen prüfen. Mit ~ markierte Beträge sind EZB-Näherungswerte — dort gilt im Zweifel
+      der offizielle Beleg.</p></div>
+    </div>
+    <div class="step">
+      <div class="num">5</div>
+      <div class="body"><strong class="t">Übertragen &amp; dokumentieren</strong>
+      <p>Werte anhand der Checkliste manuell in ELSTER oder WISO Steuer eintragen (bei Gemeinschaftskonten:
+      je Ehegatte eine Anlage KAP mit den 50%-Werten). Optional den DOCX-Report als Beleg-Erläuterung
+      für das Finanzamt exportieren.</p></div>
+    </div>
+  </section>
+
+  <section id="grenzen">
+    <h2><span class="snum">§5</span>Grenzen &amp; Haftung — bitte vollständig lesen</h2>
+    <div class="haftung">
+      <div class="hp">
+        <strong class="t">Keine Gewähr für Richtigkeit</strong>
+        <p>Refundex berechnet Richtwerte aus den von Ihnen hochgeladenen Broker-Daten nach allgemeinen,
+        dokumentierten Regeln. Trotz umfangreicher automatisierter Tests kann die Richtigkeit und Vollständigkeit
+        der Ergebnisse nicht garantiert werden. Maßgeblich sind ausschließlich die offiziellen Belege Ihres
+        Brokers (Jahressteuerbescheinigung, Dividendenberichte). Jede Verwendung erfolgt auf eigenes Risiko.</p>
+      </div>
+      <div class="hp">
+        <strong class="t">Keine Steuerberatung</strong>
+        <p>Refundex ist eine Berechnungs- und Übertragungshilfe — keine Hilfeleistung in Steuersachen im Sinne
+        des Steuerberatungsgesetzes (StBerG). Es werden keine individuellen Empfehlungen oder Gestaltungshinweise
+        gegeben. Bei komplexen Sachverhalten, Unsicherheiten oder hohen Beträgen ziehen Sie bitte eine
+        Steuerberaterin oder einen Steuerberater hinzu.</p>
+      </div>
+      <div class="hp">
+        <strong class="t">Rechtsstand &amp; Basiszins können veralten</strong>
+        <p>Steuerrecht ändert sich. Alle Berechnungen — insbesondere die ETF-Vorabpauschale — beruhen auf dem
+        jeweils einprogrammierten Rechtsstand und den amtlichen BMF-Basiszinssätzen (2025: 2,53 %, BMF-Schreiben
+        vom 10.01.2025 · 2026: 3,20 %, BMF-Schreiben vom 13.01.2026). Prüfen Sie vor Abgabe, ob für Ihr
+        Steuerjahr aktuellere Werte oder Rechtsänderungen gelten.</p>
+      </div>
+      <div class="hp">
+        <strong class="t">Nicht abgedeckt</strong>
+        <p>Kryptowährungen, physische Edelmetalle (§23 EStG / Anlage SO), betriebliche Kapitalerträge,
+        strukturierte Produkte in Sonderfällen sowie Depots außerhalb der IBKR-Infrastruktur. Diese Sachverhalte
+        müssen separat erklärt werden — Refundex weist nicht darauf hin, wenn solche Positionen in Ihrem
+        Depot vorhanden sind.</p>
+      </div>
+    </div>
+    <div class="box warn"><span>⚠️</span><span><b>Beta-Version:</b> Refundex befindet sich in der Erprobung.
+    Fehler bitte per <a href="https://github.com/ahsub/refundex/issues/new" target="_blank" rel="noopener">GitHub Issue</a>
+    oder <a href="mailto:ahildebrand@me.com?subject=REFUNDEX">E-Mail</a> melden — jede Rückmeldung verbessert das Werkzeug.</span></div>
+  </section>
+
+  <section id="faq">
+    <h2><span class="snum">§6</span>Häufige Fragen</h2>
+
+    <details>
+      <summary>Funktioniert Refundex auch mit Lynx?</summary>
+      <div class="a"><p>Sehr wahrscheinlich ja: Lynx nutzt wie CapTrader die IBKR-Infrastruktur mit identischer
+      Flex Query. Der Ablauf ist derselbe. Eine formale Verifikation mit einem echten Lynx-Depot steht noch aus —
+      <b>Lynx-Nutzer gesucht:</b> Eine anonymisierte Flex Query genügt.
+      <a href="mailto:ahildebrand@me.com?subject=REFUNDEX%20Lynx-Verifikation">✉️ Bitte melden.</a>
+      Bis dahin gilt der Abgleich mit der Lynx-Steuerbescheinigung besonders.</p></div>
+    </details>
+    <details>
+      <summary>Wohin werden meine Depotdaten übertragen?</summary>
+      <div class="a"><p><b>Nirgendwohin.</b> Die gesamte Verarbeitung findet in Ihrem Browser statt. Es gibt keinen
+      Refundex-Server, der Ihre Daten empfängt. Lediglich die Hilfetexte werden beim Öffnen des Hilfe-Fensters
+      von GitHub nachgeladen. Eingetragene ETF-Kurse bleiben im lokalen Speicher Ihres Browsers.</p></div>
+    </details>
+    <details>
+      <summary>Warum weichen einzelne Werte von meiner Steuerbescheinigung ab?</summary>
+      <div class="a"><p>Drei typische Gründe: <b>(1)</b> Mit ~ markierte Werte nutzen den EZB-Jahresdurchschnittskurs
+      als Näherung, wo die Flex Query keine exakten Kurse liefert. <b>(2)</b> Die Flex Query ist unvollständig
+      konfiguriert — Sektionen/Felder gegen §3 prüfen. <b>(3)</b> Broker und Refundex ordnen einen Sonderfall
+      unterschiedlich zu. Bei Abweichungen über ~1 % gerne ein GitHub Issue eröffnen; maßgeblich bleibt immer
+      die offizielle Bescheinigung.</p></div>
+    </details>
+    <details>
+      <summary>Wie funktioniert das mit dem Gemeinschaftskonto genau?</summary>
+      <div class="a"><p>Refundex erkennt Gemeinschaftskonten am „AND" im Kontonamen und weist alle Werte
+      zusätzlich hälftig je Ehegatte aus. In der Steuererklärung füllt <b>jeder Ehegatte eine eigene
+      Anlage KAP</b> mit den 50%-Werten aus. Details im Hilfe-Modul „Gemeinschaftskonten".</p></div>
+    </details>
+    <details>
+      <summary>Was ist mit ausländischer Quellensteuer, die über 15 % hinausgeht?</summary>
+      <div class="a"><p>In der Anlage KAP (Z. 41) ist regelmäßig nur der DBA-Satz — meist 15 % — anrechenbar.
+      Was z. B. die Schweiz (35 %) oder Dänemark (27 %) darüber hinaus einbehalten, ist nicht in Deutschland
+      anrechenbar, sondern <b>im Quellenland rückforderbar</b>. Ein Quellensteuer-Cockpit, das dieses
+      Rückholpotenzial je Land ausweist, ist in Entwicklung.</p></div>
+    </details>
+    <details>
+      <summary>Deckt Refundex auch Krypto oder Gold ab?</summary>
+      <div class="a"><p>Nein. Kryptowährungen und physische Edelmetalle sind private Veräußerungsgeschäfte
+      nach §23 EStG (Anlage SO, persönlicher Steuersatz, 1-Jahres-Frist) — ein anderes Formular und andere Regeln.
+      Refundex konzentriert sich bewusst auf Kapitalerträge nach §20 EStG (Anlage KAP).</p></div>
+    </details>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="kap.html">→ Zur App</a>
+      <a href="https://github.com/ahsub/refundex" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/ahsub/refundex/issues/new" target="_blank" rel="noopener">Bug melden</a>
+      <a href="mailto:ahildebrand@me.com?subject=REFUNDEX">Feedback</a>
+    </div>
+    <p>Refundex Beta · Berechnungsergebnisse ohne Gewähr · Kein Ersatz für Steuerberatung ·
+    Maßgeblich sind die offiziellen Belege Ihres Brokers.<br>
+    * Lynx: technisch baugleich (IBKR Flex Query), formale Verifikation ausstehend.</p>
+  </footer>
+
+</div>
+</body>
+</html>
