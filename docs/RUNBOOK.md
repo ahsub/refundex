@@ -1,6 +1,6 @@
 # Refundex — RUNBOOK (Bus-Factor-Dokument)
 
-**Version:** 1.1
+**Version:** 1.2
 **Stand:** 03.07.2026
 **Ablage:** `ahsub/refundex/docs/RUNBOOK.md`
 **Zweck:** Dieses Dokument versetzt eine technikaffine dritte Person in die Lage, Refundex zu verstehen, zu betreiben und im Notfall wiederherzustellen — ohne den Inhaber fragen zu können. Es adressiert Schwäche W1 (Bus-Faktor 1) aus `docs/STRATEGIE.md`.
@@ -67,6 +67,8 @@ Browserbasierter deutscher Steuerassistent für Kunden IBKR-basierter Broker (Ca
 
 1. **Quellcode nach GitHub** (Versionshistorie, Zusammenarbeit mit Claude): Push über GitHub Contents API (`PUT /repos/ahsub/refundex/contents/{pfad}`), Muster SHA-first (bestehende Datei: erst GET für SHA, dann PUT mit SHA). Auth: klassischer PAT mit `repo`-Scope, **7 Tage Laufzeit, nach jeder Session löschen**.
 2. **Publikation über Cloudflare Pages** (macht die App live): Deployment-Zip mit allen Anwendungsdateien in korrekter Struktur (Root-HTMLs + `modules/`-Ordner; NICHT `engine/`, NICHT `docs/`) im Cloudflare-Dashboard unter Workers & Pages als Direct Upload hochladen. Claude baut das Zip am Sessionende (`refundex-deploy-vNNN.zip`); der Upload selbst erfolgt durch den Inhaber im Dashboard. **Merksatz: GitHub-Commit ≠ live — erst der Pages-Upload publiziert.**
+
+**Pages-Projekt:** `refundex-app` → erreichbar unter `refundex-app.pages.dev` (kostenlose CF-Subdomain inkl. HTTPS; Muster identisch zu UIQ: Projekt `underlyingiq-app` → underlyingiq-app.pages.dev + Custom Domain underlyingiq.com). Eine Custom Domain (Kandidat: refundex.de, ggf. refundex.com) ist optional und für die Beta nicht erforderlich — Entscheidung offen, siehe ROADMAP 3.5 (Monetarisierung/Außenauftritt). UIQ liegt getrennt in `ahsub/axel-scanner` (dort index.html + help.html) mit eigenem Pages-Projekt.
 
 **Versionierung:** kap.html trägt die Version im `<title>` (aktuell v139) — bei jeder Änderung hochzählen. Strategiedokumente tragen eigene Versionen mit Fortschreibungshistorie am Dokumentende.
 
@@ -141,3 +143,4 @@ Der wichtigste wiederkehrende Betriebsprozess (Roadmap-Item 1.6). Reihenfolge ei
 |---|---|---|
 | 1.0 | 03.07.2026 | Erstfassung: Systemlandkarte, Deploy-Wege, Steuerjahr-Update-Checkliste (= Roadmap-Item 1.6), Störungs-Runbook, Disaster Recovery; 3 Inhaber-Platzhalter offen |
 | 1.1 | 03.07.2026 | KORREKTUR §3: Hosting läuft über Cloudflare Pages (Direct Upload als Zip), nicht GitHub Pages; Zwei-Vorgänge-Prinzip (GitHub = Quellcode, CF Pages = Publikation) dokumentiert; Deployment-Zip-Inhalt definiert |
+| 1.2 | 03.07.2026 | Pages-Projekt `refundex-app` → refundex-app.pages.dev dokumentiert (Muster UIQ); Custom Domain optional, Kandidat refundex.de — Entscheidung offen; Abgrenzung zu UIQ (axel-scanner, help.html) präzisiert |
