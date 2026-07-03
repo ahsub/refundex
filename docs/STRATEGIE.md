@@ -1,6 +1,6 @@
 # Refundex — Strategiedokument
 
-**Version:** 1.0
+**Version:** 1.1
 **Stand:** 03.07.2026
 **Ablage:** `ahsub/refundex/docs/STRATEGIE.md`
 **Fortschreibung:** Claude versioniert dieses Dokument (v1.1, v1.2 …) bei jeder strategischen Weichenstellung und pusht es mit ins Repo — analog zu `ahsub/ko-aggregator/docs/STRATEGIE.md` (UnderlyingIQ).
@@ -9,20 +9,26 @@
 
 ## 1. Leitbild
 
-**Refundex ist der Daten-zu-Formular-Übersetzer für deutsche IBKR/CapTrader-Anleger.**
+**Refundex holt deutschen Privatanlegern ihr Geld zurück — auf zwei Säulen.**
 
-Ausländische Broker führen keine deutsche Abgeltungsteuer ab. Wer dort handelt, muss die Anlage KAP selbst befüllen — aus Rohdaten, die IBKR in einem Format liefert, das kein deutsches Steuerformular kennt. Refundex schließt genau diese Lücke:
+**Säule 1 — Anlage KAP (IBKR-basierte Broker):** Ausländische Broker führen keine deutsche Abgeltungsteuer ab. Wer dort handelt, muss die Anlage KAP selbst befüllen — aus Rohdaten, die IBKR in einem Format liefert, das kein deutsches Steuerformular kennt. Refundex schließt diese Lücke:
 
 > **Flex Query rein → geprüfte, zeilengenaue KAP-Werte raus.**
 
-Die Wertschöpfungskette in vier Stufen (analog zum UIQ-Strategie-Router):
+**Säule 2 — Ausländische Quellensteuer-Rückholung (broker-neutral):** Auf Auslandsdividenden wird oft mehr Quellensteuer einbehalten, als in Deutschland anrechenbar ist (z. B. CH 35 % einbehalten, 15 % anrechenbar). Der Überschuss ist im Quellenland rückforderbar — die meisten Anleger lassen ihn verfallen. Refundex macht das Rückholpotenzial sichtbar und den Weg dorthin gangbar:
 
-| Stufe | Refundex | UIQ-Pendant |
-|---|---|---|
-| 1 | **Datenextraktion** (Flex Query CSV, deterministischer Parser) | Regime-Erkennung |
-| 2 | **Steuerliche Klassifikation** (Töpfe, §20 Abs. 6, §18 InvStG) | Strategie-Routing |
-| 3 | **Berechnung** (FIFO, Verlustverrechnung, Vorabpauschale, Projektions-Schicht) | Underlying-Auswahl |
-| 4 | **Formular-Output** (zeilengenaue KAP-Werte, Checkliste, DOCX/Report) | Instrumenten-Vorschlag |
+> **Ertragsdaten rein → Rückholpotenzial je Land, Frist und Verfahrensweg raus.**
+
+Säule 2 löst den Produktnamen ein — und sie ist bewusst **nicht auf IBKR beschränkt**: Über ein broker-neutrales Datenmodell (§2, Grundgesetz 6) erreicht sie perspektivisch jeden deutschen Anleger mit Auslandsdividenden, unabhängig von der Depotbank.
+
+Beide Säulen folgen derselben Wertschöpfungskette in vier Stufen (analog zum UIQ-Strategie-Router):
+
+| Stufe | Säule 1 (KAP) | Säule 2 (QSt-Rückholung) | UIQ-Pendant |
+|---|---|---|---|
+| 1 | **Datenextraktion** (Flex Query, deterministischer Parser) | **Daten-Adapter** (Flex Query / manuelle Erfassung / später PDF) | Regime-Erkennung |
+| 2 | **Steuerliche Klassifikation** (Töpfe, §20 Abs. 6, §18 InvStG) | **Länder-Klassifikation** (Quellenland, DBA-Anrechnungssatz, Frist) | Strategie-Routing |
+| 3 | **Berechnung** (FIFO, Verlustverrechnung, Vorabpauschale, Projektion) | **Rückholpotenzial** (einbehalten − anrechenbar = Überschuss) | Underlying-Auswahl |
+| 4 | **Formular-Output** (zeilengenaue KAP-Werte, Checkliste, Report) | **Verfahrens-Output** (Cockpit, Verfahrenslink, später Formular-Vorbefüllung) | Instrumenten-Vorschlag |
 
 Was Refundex bewusst **nicht** ist: keine Steuerberatung, keine ELSTER-Direktschnittstelle, keine Steueroptimierungs-Empfehlung. Refundex ist ein **Rechenwerk mit Belegkette** — jeder ausgewiesene Wert ist auf eine IBKR-Datenzeile oder eine dokumentierte Rechtsquelle (BMF-Schreiben, Gesetzesnorm) rückführbar.
 
@@ -63,6 +69,7 @@ Refundex und UnderlyingIQ sind **zwei Module einer gemeinsamen Investment-Suite*
 3. **80/20-Vorbehalt für jedes neue Feature.** Ein Feature kommt nur, wenn 20 % Aufwand ≥ 80 % des Nutzerwerts liefern. Randfälle werden dokumentiert und an den Steuerberater verwiesen statt implementiert.
 4. **No-Hallucination-Gebot auf allen Ebenen.** Steuerliche Werte entstehen nur deterministisch (Parser + Engine). KI darf erklären und formulieren, aber niemals rechnen, schätzen oder Rechtsquellen erfinden. Jeder Basiszins, jede Quote, jeder Paragraph mit dokumentierter Quelle (z. B. BMF 13.01.2026, GZ IV C 1 - S 1980/00230/012/001).
 5. **Compliance by Design im Anwenderbereich** (Detail in §4).
+6. **Broker-Neutralität über Datenmodell (Säule 2).** Die Quellensteuer-Logik setzt niemals direkt auf einem Broker-Format auf, sondern auf einem **Normalisierten Ertragsdatenmodell** (je Ertrag: ISIN, Quellenland, Datum, Brutto, einbehaltene QSt, Währung). Davor sitzen austauschbare Adapter: (1) Flex Query (IBKR/CapTrader/Lynx, automatisch), (2) manuelle Erfassung (jede Depotbank, ab Tag 1), (3) perspektivisch PDF-Extraktion — letztere ausschließlich im Strict-Extraction-Muster mit Fundstellen-Zitat und zeilenweiser Nutzer-Bestätigung (Review-Gate, Muster GuidelineIQ): KI schlägt vor, Mensch verifiziert, Engine rechnet. Niemals stille Übernahme.
 
 ---
 
@@ -98,6 +105,7 @@ Refundex und UnderlyingIQ sind **zwei Module einer gemeinsamen Investment-Suite*
 | O3 | **Kein direkter Wettbewerber in der Nische** — generische Steuersoftware kann Flex Queries nicht lesen; Steuerberater sind teuer und IBKR-fremd | Zeitfenster nutzen |
 | O4 | **Suite-Cross-Selling** — UIQ-Nutzer sind qualifizierte Refundex-Interessenten und umgekehrt (identische Zielgruppe: aktive Selbstentscheider) | Phase 3 |
 | O5 | **§23-Erweiterung** — Edelmetalle/Alt-Krypto (Anlage SO) als natürliche, klar abgrenzbare Erweiterung | Bereits als Next-Session-Item identifiziert |
+| O6 | **Broker-neutrale Zielgruppe über Säule 2** — mit manuellem Erfassungs-Adapter adressiert das QSt-Cockpit jeden deutschen Anleger mit Auslandsdividenden bei beliebiger Bank; deutlich breiter als die IBKR-Nische der Säule 1 | Strategische Verbreiterung ohne Verwässerung des Kerns |
 
 ### Risiken (extern)
 
@@ -141,3 +149,4 @@ Analog zum UIQ-Filter (STRATEGIE.md §6 dort), angepasst auf Refundex. Ein Featu
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 03.07.2026 | Erstfassung: Leitbild, Suite-Positionierung, SWOT, Compliance-Rahmen (StBerG-Abgrenzung), Entscheidungsfilter |
+| 1.1 | 03.07.2026 | Leitbild auf zwei Säulen verbreitert (KAP + QSt-Rückholung); Grundgesetz 6 Broker-Neutralität über Normalisiertes Ertragsdatenmodell mit Adapter-Architektur inkl. Extraction-Review-Gate; SWOT-Chance O6 (broker-neutrale Zielgruppe) |
