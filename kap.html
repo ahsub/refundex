@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Refundex — KAP-Assistent v138</title>
+<title>Refundex — KAP-Assistent v139</title>
 <style>
   :root {
     --bg:#0f1117; --bg2:#181c27; --bg3:#1e2333; --border:#2a3050;
@@ -240,29 +240,41 @@
   <input type="file" id="file-pdf"  accept=".pdf" onchange="loadPWCpdf(event)" style="display:none">
 
   <!-- BETA DISCLAIMER -->
-  <div id="beta-banner" style="margin-bottom:1rem;padding:0.65rem 1rem;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:8px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:0.6rem;color:#a0a0c8">
-      <span style="font-size:14px">🧪</span>
-      <span>
-        <strong style="color:#c0c0f0">Beta-Version</strong> ·
-        Werte vor Abgabe der Steuererklärung gegen die offizielle
-        <strong style="color:#c0c0f0">CapTrader-Jahressteuerbescheinigung</strong> abgleichen ·
-        Kein Ersatz für Steuerberatung · Angaben ohne Gewähr
-      </span>
+  <div id="beta-banner" style="margin-bottom:1rem;padding:0.65rem 1rem;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:8px;font-size:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:0.6rem;color:#a0a0c8">
+        <span style="font-size:14px">🧪</span>
+        <span>
+          <strong style="color:#c0c0f0">Beta-Version</strong> für IBKR-basierte Broker (CapTrader, Lynx*) ·
+          Berechnungsergebnisse <strong style="color:#c0c0f0">ohne Gewähr</strong> — vor Abgabe zwingend gegen die offizielle
+          <strong style="color:#c0c0f0">Jahressteuerbescheinigung Ihres Brokers</strong> abgleichen ·
+          Refundex ist ein Rechenwerk und <strong style="color:#c0c0f0">ersetzt keine Steuerberatung</strong>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;white-space:nowrap">
+        <a href="mailto:ahildebrand@me.com?subject=REFUNDEX"
+           style="font-size:11px;color:#4f8ef7;text-decoration:none;padding:0.25rem 0.6rem;border:1px solid #3a3a6e;border-radius:5px">
+          ✉️ Feedback
+        </a>
+        <a href="https://github.com/ahsub/refundex/issues/new"
+           target="_blank"
+           style="font-size:11px;color:#4f8ef7;text-decoration:none;padding:0.25rem 0.6rem;border:1px solid #3a3a6e;border-radius:5px">
+          🐛 Bug melden
+        </a>
+        <button onclick="document.getElementById('beta-banner').style.display='none'"
+                style="background:none;border:none;color:#7a85a0;cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:0.75rem;white-space:nowrap">
-      <a href="mailto:ahildebrand@me.com?subject=REFUNDEX"
-         style="font-size:11px;color:#4f8ef7;text-decoration:none;padding:0.25rem 0.6rem;border:1px solid #3a3a6e;border-radius:5px">
-        ✉️ Feedback
-      </a>
-      <a href="https://github.com/ahsub/refundex/issues/new"
-         target="_blank"
-         style="font-size:11px;color:#4f8ef7;text-decoration:none;padding:0.25rem 0.6rem;border:1px solid #3a3a6e;border-radius:5px">
-        🐛 Bug melden
-      </a>
-      <button onclick="document.getElementById('beta-banner').style.display='none'"
-              style="background:none;border:none;color:#7a85a0;cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
-    </div>
+    <details style="margin-top:0.5rem;color:#8a8ab0">
+      <summary style="cursor:pointer;font-size:11px;color:#7a85a0">Vollständiger Haftungshinweis &amp; Grenzen der Anwendung</summary>
+      <div style="margin-top:0.5rem;font-size:11px;line-height:1.6;padding-left:0.25rem">
+        <strong style="color:#a0a0c8">1. Keine Gewähr für Richtigkeit:</strong> Refundex berechnet Richtwerte aus den von Ihnen hochgeladenen Broker-Daten nach allgemeinen, dokumentierten Regeln. Trotz umfangreicher Tests kann die Richtigkeit und Vollständigkeit der Ergebnisse nicht garantiert werden. Maßgeblich sind ausschließlich die offiziellen Belege Ihres Brokers. Jede Verwendung erfolgt auf eigenes Risiko.<br><br>
+        <strong style="color:#a0a0c8">2. Keine Steuerberatung:</strong> Refundex ist eine Berechnungs- und Übertragungshilfe, keine Hilfeleistung in Steuersachen im Sinne des StBerG. Es werden keine individuellen Empfehlungen gegeben. Bei komplexen Sachverhalten, Unsicherheiten oder hohen Beträgen ziehen Sie eine Steuerberaterin / einen Steuerberater hinzu.<br><br>
+        <strong style="color:#a0a0c8">3. Rechtsstand &amp; Basiszins:</strong> Steuerrecht ändert sich. Berechnungen (insb. ETF-Vorabpauschale) beruhen auf dem jeweils einprogrammierten Rechtsstand und den amtlichen BMF-Basiszinssätzen (2025: 2,53 % · 2026: 3,20 %). Prüfen Sie vor Abgabe, ob für Ihr Steuerjahr aktuellere Werte oder Rechtsänderungen gelten.<br><br>
+        <strong style="color:#a0a0c8">4. Nicht abgedeckt:</strong> Kryptowährungen, physische Edelmetalle (§23 EStG / Anlage SO), betriebliche Kapitalerträge, strukturierte Produkte in Sonderfällen sowie Depots außerhalb der IBKR-Infrastruktur. Diese Sachverhalte müssen separat erklärt werden.<br><br>
+        <span style="color:#7a85a0">* Lynx nutzt dieselbe IBKR-Flex-Query wie CapTrader — technisch baugleich, Verifikation ausstehend. <strong style="color:#a0a0c8">Lynx-Nutzer gesucht:</strong> Eine anonymisierte Flex Query genügt zur Verifikation → <a href="mailto:ahildebrand@me.com?subject=REFUNDEX%20Lynx-Verifikation" style="color:#4f8ef7">✉️ melden</a>.</span>
+      </div>
+    </details>
   </div>
 
   <!-- KONTO INFO BANNER -->
@@ -419,9 +431,9 @@
 
       <div class="hinweis info">
         <span>ℹ️</span>
-        <span>Alle Werte basieren auf dem CapTrader-Jahresauszug — keine KI-generierten Zahlen.
+        <span>Alle Werte basieren auf den hochgeladenen Broker-Daten (IBKR Flex Query) — keine KI-generierten Zahlen.
         USD-Beträge wurden mit EZB-Jahresdurchschnittskurs umgerechnet (Schätzung, ~).
-        Vor Eintrag in die Steuererklärung gegen die offizielle CapTrader-Steuerbescheinigung abgleichen.</span>
+        Berechnungsergebnisse ohne Gewähr — vor Eintrag in die Steuererklärung zwingend gegen die offizielle Jahressteuerbescheinigung Ihres Brokers (CapTrader, Lynx) abgleichen. Maßgeblich sind allein die offiziellen Belege.</span>
       </div>
 
       <div class="kap-form" id="kap-form-output"></div>
@@ -447,7 +459,8 @@
     <div id="etf-load-banner" style="display:none;margin-bottom:0.75rem;padding:0.6rem 1rem;background:var(--bg3);border:1px solid var(--accent);border-radius:8px;font-size:12px;color:var(--muted)"></div>
     <div class="hinweis info" style="margin-bottom:0.75rem">
       <span>ℹ️</span>
-      <span>Kurs 1.1. und 31.12. aus dem Depotauszug oder fondsweb.de. Ausschüttungen werden automatisch aus der Flex Query befüllt wenn die ISIN bekannt ist.</span>
+      <span>Kurs 1.1. und 31.12. aus dem Depotauszug oder fondsweb.de. Ausschüttungen werden automatisch aus der Flex Query befüllt wenn die ISIN bekannt ist.
+      <br><span style="color:var(--muted);font-size:11px">⚠️ Basiszins lt. BMF-Schreiben (2025: 2,53 % · 2026: 3,20 %) — der Satz wird jährlich neu festgelegt. Prüfen Sie vor Abgabe, ob für Ihr Steuerjahr der aktuelle amtliche Wert hinterlegt ist (Details im Haftungshinweis oben).</span></span>
     </div>
     <div id="etf-list"></div>
     <div id="etf-total" style="display:none" class="etf-total">
@@ -463,7 +476,7 @@
   <div id="empty-state" style="text-align:center;padding:3rem;color:var(--muted)">
     <div style="font-size:3rem;margin-bottom:1rem">📋</div>
     <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:0.5rem">Jahresauszug hochladen</div>
-    <div>CapTrader Kontoauszug-CSV für das Steuerjahr hochladen um die Anlage KAP Werte zu berechnen</div>
+    <div>Flex-Query-CSV Ihres IBKR-basierten Brokers (CapTrader, Lynx) für das Steuerjahr hochladen um die Anlage KAP Werte zu berechnen</div>
   </div>
 
 </main>
