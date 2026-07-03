@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 1.0
+**Version:** 1.1
 **Stand:** 03.07.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -35,6 +35,7 @@
 | 1.5 | **`docs/RUNBOOK.md`** — Bus-Factor-Dokument analog UIQ: Systemlandkarte, Repo-/Deploy-Wege, Steuerjahr-Update-Prozess, Disaster Recovery | Ein technikaffiner Dritter kann das System betreiben | W1-Gegenmaßnahme |
 | 1.6 | **Steuerjahr-Update-Checkliste** — jährlicher Prozess: Basiszins (BMF-Schreiben Januar), Sparer-Pauschbetrag, Rechtsänderungs-Review §20/§18/§23, Testlauf gegen Vorjahres-Referenzdaten | Checkliste in RUNBOOK.md, erstmals durchlaufen für Steuerjahr 2026 | W4-Gegenmaßnahme |
 | 1.7 | **Beta-Testrunde** — Versand an 3–5 IBKR/CapTrader-Nutzer (Investmentclub), Feedback-Zyklus, Abgleich gegen deren Steuerbescheinigungen | ≥ 3 Fremd-Depots erfolgreich abgeglichen | Validierung jenseits des Eigen-Depots |
+| 1.8 | **Lynx-Verbreiterung** *(vorgezogen aus Phase 3.3)* — Lynx ist wie CapTrader ein IBKR-Introducing-Broker mit identischer Flex Query. Aufgaben: Lynx-Testdepot beschaffen (idealerweise via 1.7/Investmentclub), Kontonamen-/Kontotyp-Erkennung verifizieren, Wording in App + guide.html auf „IBKR-basierte Broker (CapTrader, Lynx, BANX …)" verbreitern | Ein Lynx-Flex-Query-Lauf gegen Steuerbescheinigung verifiziert; Wording live | 80/20 exzellent: Zielgruppen-Verdreifachung zum Preis eines Wording-Fixes |
 
 **Deployment-Politik:** Items 1.1–1.3 dürfen als Batch sofort deployen (Beta läuft bereits öffentlich → Disclaimer-Lücke ist ein kritischer Fall im Sinne des Arbeitsprotokolls).
 
@@ -51,8 +52,10 @@
 | 2.3 | **Gemeinsame Suite-Module extrahieren** — was UIQ und Refundex teilen (Markdown-Renderer des Hilfe-Systems, DOCX-Export-Helfer, Format-/Zahlutilities) wandert nach `ko-modules` bzw. ein neues `suite-core` | Ein Bugfix wirkt in beiden Apps | Suite-Synergie S5 |
 | 2.4 | **Parser-Härtung** — Flex-Query-Format-Sanity-Checks mit Versions-Fingerprint; bei Formatabweichung harte Fehlermeldung statt stiller Fehlwerte | Manipulierte/geänderte CSV führt nie zu plausibel aussehenden Falschwerten | R3, No-Hallucination |
 | 2.5 | **Suite-Dach dokumentieren** — kurzes `SUITE.md` (Ablageort: ko-aggregator oder eigenes Meta-Repo): Module, Schnittstellen, gemeinsame Grundgesetze; verlinkt aus beiden STRATEGIE.md | Ein Dokument beschreibt die Klammer | Governance |
+| 2.6 | **Normalisiertes Ertragsdatenmodell + Adapter 1/2** *(Fundament Säule 2)* — broker-neutrales Datenmodell (ISIN, Quellenland, Datum, Brutto, einbehaltene QSt, Währung) als JSON-Kontrakt; Adapter 1: Mapping aus vorhandenen Flex-Cash-Daten; Adapter 2: manuelles Erfassungsformular für aggregierte Werte aus Ertragsaufstellungen beliebiger Depotbanken | Identische Cockpit-Ausgabe, egal ob Daten aus Flex Query oder Handeingabe stammen | Grundgesetz 6; macht Säule 2 ab Tag 1 broker-neutral |
+| 2.7 | **Quellensteuer-Cockpit (Säule 2, Stufe A)** — neue Sektion: je Land gezahlte Dividenden, einbehaltene QSt, in DE anrechenbar (Z. 41), Überschuss = Rückholpotenzial, Verjährungsfrist, Verfahrenslink; dazu Hilfe-Module je Top-Land (CH, DK, F, E, I) inkl. ehrlicher Dokumentation der Nachweis-Hürden (Tax Voucher, Sammelverwahrung) | Nutzer sieht sein Rückholpotenzial je Land schwarz auf weiß; DBA-Sätze quellenbelegt (BMF-DBA-Übersicht) | Reines Rechenwerk mit Belegkette — kein Verfahrensrisiko, kein Recherche-Gate nötig |
 
-**Reihenfolge-Logik:** 2.1 vor 2.2 — erst die Wertequelle vereinheitlichen, dann die Fassade modularisieren. Sonst wird Doppel-Logik mitmigriert.
+**Reihenfolge-Logik:** 2.1 vor 2.2 — erst die Wertequelle vereinheitlichen, dann die Fassade modularisieren. Sonst wird Doppel-Logik mitmigriert. 2.6 vor 2.7 — erst das Datenmodell, dann das Cockpit darauf.
 
 ---
 
@@ -64,7 +67,10 @@
 |---|---|---|
 | 3.1 | **§23-Berechnung (Anlage SO)** — Edelmetalle, Alt-Krypto, Devisengewinne konsolidiert | Mittlerer Aufwand, klar abgrenzbar; Devisen-Grundlage existiert bereits |
 | 3.2 | **Steuerjahr 2026-Release** — Basiszins 3,20 % ist integriert; Pflichtdurchlauf der Update-Checkliste (1.6) | Geringer Aufwand, jährlicher Pflichttermin Q1 2027 |
-| 3.3 | **Multi-Broker-Prüfung** — Lynx (baugleich IBKR: trivial), andere Broker nur bei nachgewiesener Nachfrage | Lynx ja; alles andere: erst Nachfrage, dann Code |
+| 3.3 | **Multi-Broker-Prüfung Säule 1** — Lynx nach Phase 1.8 vorgezogen; weitere KAP-Broker (Degiro & Co. = echte Parser-Neubauten) nur bei nachgewiesener Nachfrage | Erst Nachfrage, dann Code |
+| 3.7 | **Formular-Vorbefüllung QSt (Säule 2, Stufe B) — hinter Recherche-Gate.** Start: Schweiz (Formular 85; 35 % Abzug, 20 Punkte rückholbar), danach ggf. DK. **Gate-Bedingungen (alle vier vor Bau-Entscheidung):** (a) Desk-Research ESTV-Wegleitung: verlangte Belege, Akzeptanz elektronischer Broker-Abrechnungen, Onlineportal-Verfahren — übernimmt Claude in einer Websuche-Session mit Quellenmemo; (b) CapTrader-Support-Anfrage: Tax Voucher/Einzelnachweise für ESTV — Form und Kosten (Textbaustein liegt vor); (c) Investmentclub-Umfrage: praktische Rückforderungs-Erfahrungen (Bank, Land, verlangte Nachweise); (d) Eigenfall als Testballon (CH- oder DK-Position, z. B. NVO) real durchgeführt | Gate bestanden → Bau-Entscheidung; Gate gescheitert → Cockpit bleibt bei Verfahrenslink + Doku | Deterministische PDF-Befüllung aus Datenmodell; StBerG: mechanische Ausfüllhilfe nach allgemeinen Regeln, gleiche Disclaimer wie KAP |
+| 3.8 | **PDF-Dump-Adapter (Säule 2, Adapter 3) — nur mit Extraction-Review-Gate.** Freitext-Extraktion aus Bankabrechnungen beliebiger Institute im Strict-Extraction-Muster (GuidelineIQ): KI extrahiert mit Fundstellen-Zitat, Nutzer bestätigt jede Zeile gegen das PDF, erst dann übernimmt die Engine. Stille Übernahme ist ausgeschlossen | Kein Wert erreicht die Engine ohne explizite Nutzer-Bestätigung je Zeile | No-Hallucination-kritischstes Item der gesamten Roadmap; nur bauen, wenn Adapter 2 nachweislich als zu mühsam empfunden wird |
+| 3.9 | **QSt-Tracking (Säule 2, Stufe C)** — Status eingereicht/erstattet, Frist-Erinnerung, localStorage | Nice-to-have, bewusst letzte Priorität |
 | 3.4 | **Suite-Cross-Verlinkung** — dezenter Verweis UIQ ↔ Refundex (identische Zielgruppe) | Minimaler Aufwand; Formulierung StBerG-/BaFin-sauber halten |
 | 3.5 | **Monetarisierungs-Entscheidung** — frei / Spende / Freemium; erst nach Beta-Feedback (1.7) entscheiden | Entscheidung, kein Code; Impressums-/AGB-Fragen dann klären |
 | 3.6 | **i18n-Vorbereitung** | ⚠️ Anders als bei UIQ vorerst **nein**: deutsches Steuerrecht ist das Produkt, EN-Version hätte kaum Zielgruppe. Nur String-Zentralisierung (2.2) als Option offen halten |
@@ -78,7 +84,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 1. **ELSTER-Direktschnittstelle (ERiC)** — Zertifizierungs- und Haftungsaufwand ohne Verhältnis zum Nutzen; der manuelle Übertrag per Checkliste ist der 80/20-Weg.
 2. **Steueroptimierungs-Empfehlungen** (Tax-Loss-Harvesting-Vorschläge o. Ä.) — StBerG-Grenze, Filter-Frage 4 dauerhaft negativ.
 3. **Server-seitige Depotdaten-Verarbeitung** — widerspricht Kernversprechen Datensouveränität (S4).
-4. **KI-berechnete Steuerwerte** — No-Hallucination-Gebot; KI bleibt auf Erklären/Formulieren beschränkt.
+4. **KI-berechnete Steuerwerte** — No-Hallucination-Gebot; KI bleibt auf Erklären/Formulieren beschränkt. Einzige, eng umzäunte Ausnahme: PDF-**Extraktion** (nicht Berechnung) im Strict-Extraction-Muster mit zeilenweiser Nutzer-Bestätigung (Item 3.8) — stille KI-Übernahme in die Engine bleibt dauerhaft Nicht-Ziel.
 5. **Vollständigkeit aller Exoten** (strukturierte Produkte, Wertlos-Ausbuchungs-Sonderfälle jenseits der Engine-Abdeckung) — dokumentierte Grenze + Steuerberater-Verweis statt Feature.
 
 ---
@@ -88,3 +94,4 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 03.07.2026 | Erstfassung: Ist-Stand, Phasen 1–3, Nicht-Ziele |
+| 1.1 | 03.07.2026 | Lynx von 3.3 nach 1.8 vorgezogen; Säule 2 aufgenommen: 2.6 Ertragsdatenmodell + Adapter 1/2, 2.7 QSt-Cockpit, 3.7 Formular-Vorbefüllung CH/DK hinter Recherche-Gate (4 Bedingungen), 3.8 PDF-Adapter nur mit Extraction-Review-Gate, 3.9 Tracking; Nicht-Ziel 4 präzisiert |
