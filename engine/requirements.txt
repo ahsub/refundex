@@ -1,8 +1,11 @@
 # Refundex Engine — Abhängigkeiten
-# Alle Module sind Python-Stdlib (3.8+) — keine externen Pakete nötig
-# xml.etree.ElementTree — in Python enthalten
-# collections, dataclasses, datetime, json — in Python enthalten
-# 
-# Optional für zukünftige Erweiterungen:
-# requests>=2.28    # für Yahoo Finance Kursabfragen (kapmassnm.py)
-# pytest>=7.0       # für Unit-Tests
+
+# Kern (Python-Stdlib, keine Installation nötig):
+# xml.etree.ElementTree, collections, dataclasses, datetime, json
+
+# Für flex_client.py (automatisierter Flex Web Service Pull):
+requests>=2.28.0
+python-dotenv>=1.0.0
+
+# Für Unit-Tests:
+pytest>=7.0
