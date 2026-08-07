@@ -95,8 +95,15 @@ def _is_still_generating(xml_text: str) -> bool:
 
 
 def _is_flex_data(xml_text: str) -> bool:
-    """Prüft ob die Antwort ein echtes FlexQueryResponse-Dokument ist."""
-    return "<FlexQueryResponse" in xml_text or "<FlexStatement" in xml_text
+    """Prüft ob die Antwort ein echtes FlexQueryResponse-Dokument ist.
+
+    WICHTIG: '<FlexStatementResponse>' (Fehlerantwort, Code 1019 etc.) enthält
+    '<FlexStatement' als Substring → explizit ausschließen.
+    Echtes Flex-XML beginnt mit '<FlexQueryResponse' oder '<FlexStatements'.
+    """
+    if "<FlexStatementResponse" in xml_text:
+        return False   # Fehlerantwort von IBKR, kein echtes Flex-XML
+    return "<FlexQueryResponse" in xml_text or "<FlexStatements" in xml_text
 
 
 # ── Hauptfunktion ─────────────────────────────────────────────────────────────
