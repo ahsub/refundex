@@ -140,7 +140,14 @@ def main():
         try:
             df = yf.download(ticker, start=START_DATE, end=END_DATE,
                             auto_adjust=True, progress=False)
-            raw[name] = df['Close']
+            # yfinance >= 0.2.x gibt MultiIndex-Columns zurück → flatten
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            close = df['Close']
+            # Sicherstellen dass es eine Series ist (nicht DataFrame)
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            raw[name] = close
             print(f"✅ {len(df)} Tage")
         except Exception as e:
             print(f"❌ {e}")
