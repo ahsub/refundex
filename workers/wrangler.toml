@@ -1,0 +1,12 @@
+name = "ko-flex-proxy"
+main = "ko-flex-proxy.js"
+compatibility_date = "2026-08-07"
+workers_dev = true
+
+# Route (optional, wenn Custom Domain gewünscht):
+# [[routes]]
+# pattern = "ko-flex-proxy.ahildebrand.workers.dev/*"
+
+# Secrets (via wrangler secret put):
+#   ALLOWED_ORIGIN → z.B. "https://refundex.pages.dev"
+#   (optional — fehlt → alle Origins erlaubt)

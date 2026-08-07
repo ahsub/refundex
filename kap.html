@@ -21732,7 +21732,7 @@ async function onFileFlex(event) {
 
   try {
     if (!window.koFlex) {
-      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1296b1e/modules/ko-flex.js');
+      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@7b26775a/modules/ko-flex.js');
       window.koFlex = mod;
     }
 
@@ -21955,7 +21955,7 @@ function loadFlexYearFile(targetYear) {
 
     try {
       if (!window.koFlex) {
-        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1296b1e/modules/ko-flex.js');
+        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@7b26775a/modules/ko-flex.js');
         window.koFlex = mod;
       }
 
@@ -23318,7 +23318,7 @@ var _koJournal = null;
 
 async function _loadKoJournal() {
   if (_koJournal) return _koJournal;
-  const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1d6de733/modules/ko-journal.js');
+  const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@7b26775a/modules/ko-journal.js');
   _koJournal = mod;
   return mod;
 }
@@ -23427,10 +23427,202 @@ async function journalDelete(id) {
   await renderJournal();
 }
 
+// ── JOURNAL DETAIL-VIEW (setup/rule/learning) ─────────────────────────────
+
 function journalOpenDetail(id) {
-  // Phase 2: Detail-Ansicht mit manuellen Feldern (setup/rule/learning)
-  // Für jetzt: einfache Alert-Anzeige
-  console.log('[Journal] Detail für', id, '— Detail-View in Phase 2');
+  _loadKoJournal().then(J => {
+    const entries = J.loadJournal();
+    const e = entries.find(x => x.id === id);
+    if (!e) return;
+
+    // Modal aufbauen
+    let modal = document.getElementById('journal-detail-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'journal-detail-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;padding:1rem';
+      document.body.appendChild(modal);
+    }
+
+    const isOpt = e.assetCategory === 'OPT';
+    const pnlColor = e.pnlNetEur >= 0 ? '#4ade80' : '#f87171';
+    const pnlStr = (e.pnlNetEur >= 0 ? '+' : '') + (e.pnlNetEur || 0).toFixed(2) + ' €';
+
+    modal.innerHTML = `
+    <div style="background:var(--bg1);border-radius:10px;border:1px solid var(--border);width:100%;max-width:680px;max-height:90vh;overflow-y:auto">
+
+      <!-- Header -->
+      <div style="background:var(--bg2);padding:1rem 1.25rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0">
+        <div>
+          <span style="font-weight:700;font-size:15px">${e.symbol}</span>
+          <span style="color:var(--muted);font-size:12px;margin-left:0.5rem">${e.description || ''}</span>
+          ${isOpt && e.option ? `<br><span style="font-size:11px;color:var(--muted)">${e.option.putCall} ${e.option.strike} ${(e.option.expiry||'').slice(0,10)} · ${e.option.strategy||''}</span>` : ''}
+        </div>
+        <button onclick="document.getElementById('journal-detail-modal').style.display='none'"
+          style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">×</button>
+      </div>
+
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:1.25rem">
+
+        <!-- P&L Übersicht -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem">
+          ${_jdStat('P&L netto', pnlStr, pnlColor)}
+          ${_jdStat('Close', e.closeDate || '—')}
+          ${_jdStat('Menge', Math.abs(e.quantity || 0))}
+          ${_jdStat('Rendite', e.returnPct != null ? (e.returnPct>=0?'+':'')+e.returnPct.toFixed(1)+'%' : '—', pnlColor)}
+        </div>
+
+        <!-- Setup -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)">🎯 Setup</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Setup-Typ</label>
+              <select id="jd-setup-type" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+                <option value="">— auswählen —</option>
+                ${['VCP','BASE','Breakout','Pullback','MeanRev','CSP','CC','SPREAD','NAKED','Earnings'].map(s =>
+                  `<option value="${s}"${e.setup?.type===s?' selected':''}>${s}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Regime (Entry)</label>
+              <select id="jd-setup-regime" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+                <option value="">— auswählen —</option>
+                ${['BULL_QUIET','BULL_FRAGILE','POST_PANIC_REVERSION','STRESS_UNSTABLE'].map(r =>
+                  `<option value="${r}"${e.setup?.regime===r?' selected':''}>${r}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">RS-Rank Entry (0–100)</label>
+              <input id="jd-setup-rs" type="number" min="0" max="100" value="${e.setup?.rsRankEntry??''}"
+                style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Regime-Konfidenz (0–1)</label>
+              <input id="jd-setup-conf" type="number" min="0" max="1" step="0.01" value="${e.setup?.regimeConfidence??''}"
+                style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Entry-Begründung</label>
+              <textarea id="jd-setup-entry" rows="2" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box;resize:vertical">${e.setup?.entryReason||''}</textarea>
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Exit-Begründung</label>
+              <textarea id="jd-setup-exit" rows="2" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box;resize:vertical">${e.setup?.exitReason||''}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Regelkonformität -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)">✅ Regelkonformität</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem">
+            ${_jdToggle('jd-rule-plan', 'Plan eingehalten?', e.rule?.planCompliant)}
+            ${_jdToggle('jd-rule-stop', 'Stop respektiert?', e.rule?.stopRespected)}
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Positionsgröße</label>
+              <select id="jd-rule-size" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+                <option value="">—</option>
+                ${['OK','ZU_GROSS','ZU_KLEIN'].map(s =>
+                  `<option value="${s}"${e.rule?.positionSize===s?' selected':''}>${s}</option>`).join('')}
+              </select>
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Abweichung vom Plan</label>
+              <input id="jd-rule-dev" type="text" value="${e.rule?.deviation||''}" placeholder="Was wich ab?"
+                style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+            </div>
+          </div>
+        </div>
+
+        <!-- Lernen -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)">💡 Lernen</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem">
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Was hat funktioniert?</label>
+              <textarea id="jd-learn-worked" rows="2" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box;resize:vertical">${e.learning?.whatWorked||''}</textarea>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Was hat nicht funktioniert?</label>
+              <textarea id="jd-learn-failed" rows="2" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box;resize:vertical">${e.learning?.whatFailed||''}</textarea>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Nächstes Mal</label>
+              <textarea id="jd-learn-next" rows="2" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box;resize:vertical">${e.learning?.nextTime||''}</textarea>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Tags (kommagetrennt)</label>
+              <input id="jd-learn-tags" type="text" value="${(e.learning?.tags||[]).join(', ')}" placeholder="z.B. vcp, momentum, regelkonform"
+                style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+            </div>
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex;gap:0.75rem;justify-content:flex-end">
+          <button onclick="document.getElementById('journal-detail-modal').style.display='none'"
+            style="font-size:12px;padding:7px 16px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer">Abbrechen</button>
+          <button onclick="journalSaveDetail('${id}')"
+            style="font-size:12px;padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">💾 Speichern</button>
+        </div>
+
+      </div>
+    </div>`;
+
+    modal.style.display = 'flex';
+  });
+}
+
+function _jdStat(label, value, color) {
+  return `<div style="background:var(--bg3);border-radius:6px;padding:0.6rem 0.75rem">
+    <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${label}</div>
+    <div style="font-size:14px;font-weight:600${color ? ';color:'+color : ''}">${value}</div>
+  </div>`;
+}
+
+function _jdToggle(id, label, value) {
+  return `<div>
+    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">${label}</label>
+    <select id="${id}" style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <option value="">—</option>
+      <option value="true"${value===true?' selected':''}>✅ Ja</option>
+      <option value="false"${value===false?' selected':''}>❌ Nein</option>
+    </select>
+  </div>`;
+}
+
+async function journalSaveDetail(id) {
+  const J = await _loadKoJournal();
+  const toBool = v => v === 'true' ? true : v === 'false' ? false : null;
+
+  const updates = {
+    setup: {
+      type:             document.getElementById('jd-setup-type').value || null,
+      regime:           document.getElementById('jd-setup-regime').value || null,
+      rsRankEntry:      parseFloat(document.getElementById('jd-setup-rs').value) || null,
+      regimeConfidence: parseFloat(document.getElementById('jd-setup-conf').value) || null,
+      entryReason:      document.getElementById('jd-setup-entry').value,
+      exitReason:       document.getElementById('jd-setup-exit').value,
+    },
+    rule: {
+      planCompliant: toBool(document.getElementById('jd-rule-plan').value),
+      stopRespected: toBool(document.getElementById('jd-rule-stop').value),
+      positionSize:  document.getElementById('jd-rule-size').value || null,
+      deviation:     document.getElementById('jd-rule-dev').value,
+    },
+    learning: {
+      whatWorked: document.getElementById('jd-learn-worked').value,
+      whatFailed: document.getElementById('jd-learn-failed').value,
+      nextTime:   document.getElementById('jd-learn-next').value,
+      tags:       document.getElementById('jd-learn-tags').value
+                    .split(',').map(t => t.trim()).filter(Boolean),
+    },
+  };
+
+  J.updateEntry(id, updates);
+  document.getElementById('journal-detail-modal').style.display = 'none';
+  await renderJournal();
 }
 
 // Flex-Ergebnis für Journal merken (wird von handleFlexUpload gesetzt)
