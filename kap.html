@@ -172,6 +172,7 @@
   </div>
   <div style="display:flex;gap:1rem;align-items:center">
     <button onclick="openHelp()" class="nav-link" style="background:none;border:none;cursor:pointer;padding:0;font-size:12px;color:var(--accent)">❓ Hilfe</button>
+    <button onclick="openJournal()" class="nav-link" style="background:none;border:none;cursor:pointer;padding:0;font-size:12px;color:var(--accent)">📓 Journal</button>
     <a href="formfiller.html" class="nav-link">FormFiller</a>
     <a href="index.html" class="nav-link">← Dashboard</a>
   </div>
@@ -482,6 +483,76 @@
     <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:0.5rem">Jahresauszug hochladen</div>
     <div>Flex-Query-CSV Ihres IBKR-basierten Brokers (CapTrader, Lynx) für das Steuerjahr hochladen um die Anlage KAP Werte zu berechnen</div>
   </div>
+
+
+<!-- JOURNAL MODAL -->
+<div id="journal-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);overflow-y:auto">
+  <div style="max-width:1100px;margin:2rem auto;background:var(--bg1);border-radius:10px;border:1px solid var(--border);overflow:hidden">
+
+    <!-- Header -->
+    <div style="background:var(--bg2);padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
+      <div>
+        <span style="font-size:16px;font-weight:700;color:var(--text)">📓 Trade-Journal</span>
+        <span id="journal-count" style="font-size:11px;color:var(--muted);margin-left:0.75rem"></span>
+      </div>
+      <div style="display:flex;gap:0.75rem;align-items:center">
+        <button onclick="journalImportFromCurrentFlex()" style="font-size:11px;padding:5px 12px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer">⬇ Aus aktuellem Flex importieren</button>
+        <button onclick="journalExportJSON()" style="font-size:11px;padding:5px 12px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer">💾 JSON-Export</button>
+        <button onclick="closeJournal()" style="font-size:18px;background:none;border:none;cursor:pointer;color:var(--muted);line-height:1">×</button>
+      </div>
+    </div>
+
+    <!-- Statistik-Leiste -->
+    <div id="journal-stats" style="display:none;background:var(--bg3);padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);display:flex;gap:2rem;flex-wrap:wrap"></div>
+
+    <!-- Filter-Leiste -->
+    <div style="padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+      <select id="journal-filter-year" onchange="renderJournal()" style="font-size:12px;padding:4px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <option value="">Alle Jahre</option>
+      </select>
+      <select id="journal-filter-asset" onchange="renderJournal()" style="font-size:12px;padding:4px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <option value="">Alle Assets</option>
+        <option value="STK">Aktien</option>
+        <option value="OPT">Optionen</option>
+      </select>
+      <select id="journal-filter-result" onchange="renderJournal()" style="font-size:12px;padding:4px 8px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <option value="">Gewinn + Verlust</option>
+        <option value="win">Nur Gewinner</option>
+        <option value="loss">Nur Verlierer</option>
+      </select>
+      <span id="journal-filter-count" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+
+    <!-- Tabelle -->
+    <div style="overflow-x:auto;max-height:60vh">
+      <table id="journal-table" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--bg3);position:sticky;top:0">
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Symbol</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Art</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Close</th>
+            <th style="padding:8px 12px;text-align:right;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">P&L EUR</th>
+            <th style="padding:8px 12px;text-align:right;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Rit. %</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Setup</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Klassifizierung</th>
+            <th style="padding:8px 12px;border-bottom:1px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody id="journal-tbody">
+          <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--muted)">Noch keine Einträge — Flex-Datei importieren</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Leer-Zustand -->
+    <div id="journal-empty" style="display:none;text-align:center;padding:3rem;color:var(--muted)">
+      <div style="font-size:2.5rem;margin-bottom:1rem">📓</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:0.5rem">Journal ist leer</div>
+      <div style="font-size:12px">Flex-Datei hochladen und dann „Aus aktuellem Flex importieren" klicken.</div>
+    </div>
+
+  </div>
+</div>
 
 </main>
 
@@ -21672,6 +21743,7 @@ async function onFileFlex(event) {
     for (const file of files) {
       const text   = await file.text();
       const result = window.koFlex.parseFlexFile(text);
+      window._lastFlexResult = result;  // Journal-Integration (ROADMAP 2.9)
       if (!result || result.format === 'unknown') continue;
 
       // Konto-Info (aus erstem Ergebnis das diese hat)
@@ -23240,5 +23312,133 @@ function importEngineJSON(event) {
     } catch(err) { alert('Fehler: '+err.message); }
   };
   reader.readAsText(file);
-}</script></body>
+}
+// ── TRADE-JOURNAL (ko-journal.js v1.0.0, ROADMAP 2.9) ─────────────────────
+var _koJournal = null;
+
+async function _loadKoJournal() {
+  if (_koJournal) return _koJournal;
+  const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1d6de733/modules/ko-journal.js');
+  _koJournal = mod;
+  return mod;
+}
+
+async function openJournal() {
+  const modal = document.getElementById('journal-modal');
+  modal.style.display = 'block';
+  await renderJournal();
+}
+
+function closeJournal() {
+  document.getElementById('journal-modal').style.display = 'none';
+}
+
+async function renderJournal() {
+  const J = await _loadKoJournal();
+  const all = J.loadJournal();
+
+  // Filter-Dropdown Jahre befüllen
+  const yearSel = document.getElementById('journal-filter-year');
+  const years = [...new Set(all.map(e => e.closeDate ? e.closeDate.slice(0,4) : '').filter(Boolean))].sort().reverse();
+  const curYear = yearSel.value;
+  yearSel.innerHTML = '<option value="">Alle Jahre</option>' +
+    years.map(y => `<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
+
+  // Filter anwenden
+  let entries = all;
+  const fYear   = document.getElementById('journal-filter-year').value;
+  const fAsset  = document.getElementById('journal-filter-asset').value;
+  const fResult = document.getElementById('journal-filter-result').value;
+  if (fYear)   entries = entries.filter(e => e.closeDate?.startsWith(fYear));
+  if (fAsset)  entries = entries.filter(e => e.assetCategory === fAsset);
+  if (fResult === 'win')  entries = entries.filter(e => e.pnlNetEur > 0);
+  if (fResult === 'loss') entries = entries.filter(e => e.pnlNetEur < 0);
+
+  // Count
+  document.getElementById('journal-count').textContent = `${all.length} Einträge gesamt`;
+  document.getElementById('journal-filter-count').textContent = `${entries.length} gefiltert`;
+
+  // Statistik
+  if (entries.length > 0) {
+    const stats = J.calcJournalStats(entries);
+    const sEl = document.getElementById('journal-stats');
+    sEl.style.display = 'flex';
+    const pnlColor = stats.pnlNetEur >= 0 ? 'var(--green)' : 'var(--red)';
+    sEl.innerHTML = `
+      <div><span style="color:var(--muted);font-size:11px">P&L netto</span><br><strong style="color:${pnlColor};font-size:14px">${stats.pnlNetEur >= 0 ? '+' : ''}${stats.pnlNetEur.toFixed(2)} €</strong></div>
+      <div><span style="color:var(--muted);font-size:11px">Trades</span><br><strong>${stats.tradesTotal}</strong></div>
+      <div><span style="color:var(--muted);font-size:11px">Win-Rate</span><br><strong>${(stats.winRate*100).toFixed(0)}%</strong></div>
+      <div><span style="color:var(--muted);font-size:11px">Ø Gewinner</span><br><strong style="color:var(--green)">+${stats.avgWinEur.toFixed(2)} €</strong></div>
+      <div><span style="color:var(--muted);font-size:11px">Ø Verlierer</span><br><strong style="color:var(--red)">${stats.avgLossEur.toFixed(2)} €</strong></div>
+      ${stats.profitFactor ? `<div><span style="color:var(--muted);font-size:11px">Profit Factor</span><br><strong>${stats.profitFactor}</strong></div>` : ''}
+      <div><span style="color:var(--muted);font-size:11px">Erwartungswert</span><br><strong>${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)} €</strong></div>
+    `;
+  }
+
+  // Tabelle
+  const tbody = document.getElementById('journal-tbody');
+  if (entries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--muted)">${all.length > 0 ? 'Keine Einträge für diesen Filter' : 'Noch keine Einträge'}</td></tr>`;
+    return;
+  }
+
+  // Sortierung: neueste zuerst
+  const sorted = [...entries].sort((a,b) => (b.closeDate||'').localeCompare(a.closeDate||''));
+
+  tbody.innerHTML = sorted.map(e => {
+    const pnlColor = e.pnlNetEur > 0 ? '#4ade80' : e.pnlNetEur < 0 ? '#f87171' : 'var(--text)';
+    const pnlStr   = (e.pnlNetEur >= 0 ? '+' : '') + e.pnlNetEur.toFixed(2) + ' €';
+    const retStr   = e.returnPct != null ? (e.returnPct >= 0 ? '+' : '') + e.returnPct.toFixed(1) + '%' : '—';
+    const setup    = e.setup?.type || '<span style="color:var(--muted)">—</span>';
+    const optInfo  = e.option ? `<br><span style="color:var(--muted);font-size:10px">${e.option.putCall||''} ${e.option.strike||''} ${e.option.expiry?.slice(0,10)||''}</span>` : '';
+    return `<tr style="border-bottom:1px solid var(--bg3);cursor:pointer" onclick="journalOpenDetail('${e.id}')">
+      <td style="padding:7px 12px;font-weight:600">${e.symbol}${optInfo}</td>
+      <td style="padding:7px 12px;color:var(--muted)">${e.assetCategory}</td>
+      <td style="padding:7px 12px">${e.closeDate||'—'}</td>
+      <td style="padding:7px 12px;text-align:right;font-weight:600;color:${pnlColor}">${pnlStr}</td>
+      <td style="padding:7px 12px;text-align:right;color:${pnlColor}">${retStr}</td>
+      <td style="padding:7px 12px">${setup}</td>
+      <td style="padding:7px 12px;color:var(--muted);font-size:11px">${e.classification||'—'}</td>
+      <td style="padding:7px 12px;text-align:right"><button onclick="event.stopPropagation();journalDelete('${e.id}')" style="font-size:10px;padding:2px 6px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function journalImportFromCurrentFlex() {
+  if (!window._lastFlexResult) {
+    alert('Bitte zuerst eine Flex-Datei hochladen.');
+    return;
+  }
+  const J = await _loadKoJournal();
+  const r = J.importFromFlex(window._lastFlexResult);
+  alert(`Journal: ${r.added} neue Einträge importiert, ${r.skipped} bereits vorhanden. Gesamt: ${r.total}`);
+  await renderJournal();
+}
+
+async function journalExportJSON() {
+  const J = await _loadKoJournal();
+  J.exportJSON();
+}
+
+async function journalDelete(id) {
+  if (!confirm('Eintrag löschen?')) return;
+  const J = await _loadKoJournal();
+  J.deleteEntry(id);
+  await renderJournal();
+}
+
+function journalOpenDetail(id) {
+  // Phase 2: Detail-Ansicht mit manuellen Feldern (setup/rule/learning)
+  // Für jetzt: einfache Alert-Anzeige
+  console.log('[Journal] Detail für', id, '— Detail-View in Phase 2');
+}
+
+// Flex-Ergebnis für Journal merken (wird von handleFlexUpload gesetzt)
+// Eingehängt in die bestehende Upload-Pipeline
+(function() {
+  const orig = window.handleFlexResult || null;
+  // _lastFlexResult wird im Upload-Handler gesetzt
+})();
+
+</script></body>
 </html>
