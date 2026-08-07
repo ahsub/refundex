@@ -1,7 +1,7 @@
 # Refundex — Datenmodell Trade-Journal
 
-**Version:** 1.0
-**Stand:** 06.08.2026
+**Version:** 1.1
+**Stand:** 07.08.2026
 **Ablage:** `ahsub/refundex/docs/DATENMODELL_JOURNAL.md`
 **Abhängigkeit:** ROADMAP.md § 2.8 (XML-Migration) und § 2.9 (Trade-Journal-Modul)
 
@@ -37,63 +37,89 @@ zukunftssichere Primärformat:
 ### 2.2 Relevante Flex-XML-Sektionen für das Journal
 
 ```xml
-<FlexQueryResponse queryName="..." type="AF">
+<FlexQueryResponse queryName="Steuerauswertung" type="AF">
   <FlexStatements count="1">
-    <FlexStatement accountId="..." fromDate="..." toDate="...">
+    <FlexStatement accountId="U12074449" fromDate="2026-01-01" toDate="2026-08-05">
 
       <!-- Trades: ein Eintrag pro Fill -->
+      <!-- Teilfills: mehrere <Trade>-Einträge mit gleicher ibOrderID → über ibOrderID aggregieren -->
       <Trades>
         <Trade
-          accountId="U1234567"
+          accountId="U12074449"
           symbol="AAPL"
           description="APPLE INC"
-          assetCategory="STK"           <!-- STK / OPT / FUT -->
+          assetCategory="STK"             <!-- STK | OPT | CASH(FX, ignorieren) -->
           currency="USD"
-          tradeDate="20260801"
-          settleDate="20260803"
-          transactionType="ExchTrade"
-          buySell="BUY"                 <!-- BUY / SELL -->
+          tradeDate="2026-08-01"
+          buySell="BUY"                   <!-- BUY | SELL -->
           quantity="100"
           tradePrice="185.50"
-          tradeMoney="18550.00"
           proceeds="-18550.00"
           ibCommission="-1.00"
-          ibCommissionCurrency="USD"
           netCash="-18551.00"
-          fxRateToBase="1.0"            <!-- Kurs USD→EUR zum Trade-Datum -->
-          openCloseIndicator="O"        <!-- O=Open, C=Close, C;O=Teilschluss -->
-          fifoPnlRealized="0"
-          mtmPnl="0"
+          fxRateToBase="1.0"              <!-- Kurs USD→EUR zum Trade-Datum -->
+          openCloseIndicator="O"          <!-- O=Open, C=Close -->
+          fifoPnlRealized="0"             <!-- bei C-Trades: realisierter P&L -->
+          ibOrderID="987654321"           <!-- Aggregations-Key für Teilfills -->
           tradeID="123456789"
-          ibOrderID="987654321"
+          notes=""                        <!-- Ep=Verfall, A=Assignment, P=Combo, MLG=ManualLeg -->
         />
       </Trades>
 
-      <!-- Closed Lots: zusammengeführte FIFO-Paare (Open + Close) -->
-      <ClosedLots>
-        <ClosedLot
-          symbol="AAPL"
-          assetCategory="STK"
-          currency="USD"
-          openDateTime="20260801;093000"
-          closeDateTime="20260815;143000"
-          quantity="100"
-          openPrice="185.50"
-          closePrice="192.30"
-          openMoney="18550.00"
-          closeMoney="19230.00"
-          fifoPnlRealized="680.00"      <!-- Kern-P&L-Feld -->
-          mtmPnl="0"
-          fxRateToBase="1.08"           <!-- Kurs zum Close-Datum -->
-          tradeID="123456799"
-          openOrderID="987654321"
+      <!-- OptionEAE: Assignment/Expiry/Exercise — primäre Quelle für diese Events -->
+      <!-- Liefert PAARE: OPT-Zeile (die Option) + STK-Zeile (die entstehende Aktienposition) -->
+      <OptionEAE>
+        <OptionEAE
+          symbol="CLSK  260116P00014000"
+          assetCategory="OPT"
+          transactionType="Assignment"    <!-- Assignment | Expiration | Exercise -->
+          putCall="P"
+          strike="14"
+          expiry="2026-01-16"
+          quantity="2"
+          realizedPnl="0"
+          costBasis="0"
+          fxRateToBase="0.862"
+          tradeID="1283382148"
         />
-      </ClosedLots>
+        <!-- Korrespondierende STK-Zeile (assetCategory="STK", transactionType="Buy") -->
+        <OptionEAE
+          symbol="CLSK"
+          assetCategory="STK"
+          transactionType="Buy"
+          quantity="200"
+          tradePrice="14"
+          costBasis="2800"
+          fxRateToBase="0.862"
+          tradeID="1283382150"
+        />
+      </OptionEAE>
 
-      <!-- Optionen: gleiches Schema, assetCategory="OPT" -->
-      <!-- zusätzliche Felder bei OPT: -->
-      <!--   expiry="20260919", strike="190", putCall="C"/"P",
-             multiplier="100", underlyingSymbol="AAPL" -->
+      <!-- CashTransactions: Dividenden + Quellensteuer -->
+      <!-- levelOfDetail="SUMMARY" = BaseCurrency (EUR) → nur diese verwenden -->
+      <CashTransactions>
+        <CashTransaction
+          symbol="O"
+          activityCode="DIV"             <!-- DIV=Dividende, FRTAX=Quellensteuer, OFEE=ADR-Fee -->
+          amount="104.35"                <!-- Bruttodividende in EUR -->
+          currency="EUR"
+          fxRateToBase="1.0"
+          date="2026-04-08"
+          levelOfDetail="SUMMARY"
+        />
+        <CashTransaction
+          symbol="O"
+          activityCode="FRTAX"           <!-- Einbehaltene Quellensteuer (negativ) -->
+          amount="-28.17"
+          currency="EUR"
+          fxRateToBase="1.0"
+          date="2026-04-08"
+          levelOfDetail="SUMMARY"
+        />
+      </CashTransactions>
+
+      <!-- NICHT vorhanden: ClosedLots — CapTrader liefert diese Sektion nicht! -->
+      <!-- P&L kommt aus Close-Trades (openCloseIndicator='C', fifoPnlRealized) -->
 
     </FlexStatement>
   </FlexStatements>
@@ -282,6 +308,8 @@ F3 sollte per CapTrader-Support-Ticket oder IBKR-Changelog verifiziert werden.
 
 ---
 
-*Refundex Datenmodell Trade-Journal v1.0 — 06.08.2026*
+*Refundex Datenmodell Trade-Journal v1.1 — 07.08.2026*  
+*Korrekturen: ClosedLots (nicht verfügbar) → Trades+OptionEAE+CashTransactions als echte Datenbasis*  
+*Parser implementiert: `parseActivityXML()` in `modules/ko-flex.js` v1.0*
 *Architektur-Entscheidung: Journal in Refundex (nicht UIQ)*
 *Nächster Schritt: 2.8 XML-Adapter implementieren, dann F1/F2 gegen echtes CapTrader-XML verifizieren*

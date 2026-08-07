@@ -390,7 +390,7 @@ export function parseFlexFile(text) {
     case 'ki_flex_cash_csv':    return parseKiFlexCashCSV(text);
     case 'ki_flex_csv':         return parseKiFlexCSV(text);
     case 'activity_flex_csv':   return parseActivityFlexCSV(text);
-    case 'activity_xml':        return { format, error: 'Activity XML Parser — coming soon' };
+    case 'activity_xml':        return parseActivityXML(text);
     case 'activity_csv':        return { format, error: 'Activity CSV Parser — coming soon' };
     case 'transaction_history': return parseTransactionHistory(text);
     default: throw new Error('Unbekanntes Dateiformat. Bitte Flex Query CSV oder XML hochladen.');
@@ -803,6 +803,359 @@ function buildActivitySummary(trades, positions, fxRateMap) {
     premiumBruttoEur:     round2(premBrutto),
     rueckkaufEur:         round2(rueckkauf),
     premiumNettoEur:      round2(premBrutto - rueckkauf),
+  };
+}
+
+
+// ── ACTIVITY XML PARSER ──────────────────────────────────────────────────────
+//
+// Parst den CapTrader Flex Query XML Export (format="XML" in der Query-Konfiguration).
+// Implementiert: ROADMAP 2.8 (XML-Migration), 07.08.2026
+//
+// Datenbasis: Echte CapTrader-Exports 2023–2026 (4 Files, analysiert 07.08.2026).
+//
+// Sektionen (alle 4 Jahre konsistent):
+//   Trades        → Fills mit fifoPnlRealized bei Close-Trades
+//   OptionEAE     → Assignment/Expiry/Exercise-Paare (OPT + STK)
+//   CashTransactions → Dividenden (DIV) + Quellensteuer (FRTAX)
+//   OpenPositions → aktueller Depotstand
+//   StmtFunds     → Kapitalflussrechnung (Backup für Dividenden)
+//
+// Wichtige Erkenntnisse aus der XML-Analyse:
+//   - KEINE ClosedLots-Sektion (CapTrader liefert diese nicht)
+//   - P&L steckt im Close-Trade (openCloseIndicator='C', fifoPnlRealized)
+//   - Teilfills: mehrere Trade-Einträge pro ibOrderID → über ibOrderID aggregieren
+//   - OPT notes-Codes: Ep=Verfall, A=Assignment, P=Combo, MLG=ManualLeg
+//   - Doppelzeilen in StmtFunds: nur BaseCurrency-Zeilen verwenden
+//
+// Output-Schema: identisch zu parseActivityFlexCSV() für nahtlose Integration.
+
+/**
+ * @param {string} xmlText — vollständiger XML-String vom Flex Web Service
+ * @returns {ActivityXMLResult}
+ */
+export function parseActivityXML(xmlText) {
+  // ── 1. XML parsen ──────────────────────────────────────────────
+  let doc;
+  try {
+    const parser = new DOMParser();
+    doc = parser.parseFromString(xmlText, 'application/xml');
+    const parseErr = doc.querySelector('parsererror');
+    if (parseErr) throw new Error('XML Parse-Fehler: ' + parseErr.textContent.slice(0, 200));
+  } catch (e) {
+    return { format: 'activity_xml', error: 'XML konnte nicht geparst werden: ' + e.message };
+  }
+
+  // ── 2. FlexStatement Meta-Daten ───────────────────────────────
+  const stmt = doc.querySelector('FlexStatement');
+  if (!stmt) return { format: 'activity_xml', error: 'Kein FlexStatement gefunden' };
+
+  const accountId = stmt.getAttribute('accountId') || '';
+  const fromDate  = stmt.getAttribute('fromDate')  || '';
+  const toDate    = stmt.getAttribute('toDate')    || '';
+  const queryName = doc.querySelector('FlexQueryResponse')?.getAttribute('queryName') || '';
+
+  // ── 3. Trades parsen ──────────────────────────────────────────
+  // Alle STK/OPT Trades (CASH = FX-Trades, werden ignoriert)
+  const tradeEls = [...doc.querySelectorAll('Trades > Trade')].filter(el =>
+    el.getAttribute('assetCategory') === 'STK' ||
+    el.getAttribute('assetCategory') === 'OPT'
+  );
+
+  // Teilfill-Aggregation über ibOrderID
+  // Mehrere Trade-Einträge mit gleicher ibOrderID = Teilfills einer Order
+  const orderMap = new Map();
+  for (const el of tradeEls) {
+    const orderId = el.getAttribute('ibOrderID') || el.getAttribute('tradeID') || '';
+    if (!orderMap.has(orderId)) orderMap.set(orderId, []);
+    orderMap.get(orderId).push(el);
+  }
+
+  const trades = [];
+  for (const [, fills] of orderMap) {
+    const trade = _xmlAggregateOrder(fills);
+    if (trade) trades.push(trade);
+  }
+
+  // ── 4. OptionEAE parsen (Assignment/Expiry/Exercise) ──────────
+  // OptionEAE liefert Paare: OPT-Zeile (die Option) + STK-Zeile (die Aktie)
+  // Das ist die primäre Quelle für vollständige Assignment-Dokumentation
+  const eaeEls = [...doc.querySelectorAll('OptionEAE > OptionEAE')];
+  const eaeTrades = eaeEls
+    .filter(el => el.getAttribute('assetCategory') === 'OPT' ||
+                  el.getAttribute('assetCategory') === 'STK')
+    .map(el => _xmlConvertEAE(el))
+    .filter(Boolean);
+
+  // ── 5. CashTransactions parsen (Dividenden + Quellensteuer) ───
+  // Nur BaseCurrency-Zeilen (currency = Basiswährung des Kontos, i.d.R. EUR)
+  // Doppelzeilen: einmal USD (currency), einmal EUR (BaseCurrency) → nur EUR
+  const cashEls = [...doc.querySelectorAll('CashTransactions > CashTransaction')];
+  const dividends = cashEls
+    .filter(el => {
+      const code = el.getAttribute('activityCode') || '';
+      const level = el.getAttribute('levelOfDetail') || '';
+      // DIV = Dividende, FRTAX = Foreign Tax (Quellensteuer)
+      // OFEE = ADR-Fee (inkl. für Vollständigkeit)
+      return (code === 'DIV' || code === 'FRTAX' || code === 'OFEE') &&
+             level === 'SUMMARY';  // BaseCurrency-Zusammenfassung
+    })
+    .map(el => _xmlConvertCashTransaction(el))
+    .filter(Boolean);
+
+  // ── 6. OpenPositions parsen ───────────────────────────────────
+  const posEls = [...doc.querySelectorAll('OpenPositions > OpenPosition')];
+  const positions = posEls
+    .filter(el => el.getAttribute('assetCategory') === 'STK' ||
+                  el.getAttribute('assetCategory') === 'OPT')
+    .map(el => ({
+      symbol:        el.getAttribute('symbol')        || '',
+      description:   el.getAttribute('description')   || '',
+      assetCategory: el.getAttribute('assetCategory') || '',
+      currency:      el.getAttribute('currency')      || '',
+      quantity:      parseFloat(el.getAttribute('position') || '0'),
+      costBasisPrice: parseFloat(el.getAttribute('costBasisPrice') || '0'),
+      costBasisMoney: parseFloat(el.getAttribute('costBasisMoney') || '0'),
+      marketValue:   parseFloat(el.getAttribute('positionValue')  || '0'),
+      unrealizedPnl: parseFloat(el.getAttribute('unrealizedPnl')  || '0'),
+      fxRateToBase:  parseFloat(el.getAttribute('fxRateToBase')   || '1'),
+      // Optionen-spezifisch
+      strike:        parseFloat(el.getAttribute('strike')     || '0') || null,
+      expiry:        el.getAttribute('expiry')    || '',
+      putCall:       el.getAttribute('putCall')   || '',
+      multiplier:    parseFloat(el.getAttribute('multiplier') || '1'),
+    }));
+
+  // ── 7. Summary berechnen ──────────────────────────────────────
+  const allTrades = [...trades, ...eaeTrades];
+  const summary = buildActivitySummary(allTrades, positions, {});
+
+  return {
+    format:       'activity_xml',
+    accountId,
+    queryName,
+    fromDate,
+    toDate,
+    trades:       allTrades,
+    eaeTrades,          // Separat für Journal/Options-Dokumentation
+    dividends,          // Dividenden + QSt für Säule 2
+    positions,
+    fxRateMap:    {},   // XML hat keine separate RATE-Sektion (Wechselkurse je Trade)
+    fifoLots:     {},   // ClosedLots nicht in CapTrader-XML → FIFO via Trade-Paare
+    summary,
+    // Metadaten für Validierung (SWOT W3-Analogie: Transparenz)
+    meta: {
+      tradesTotal:   tradeEls.length,
+      ordersAgg:     orderMap.size,
+      eaeTotal:      eaeEls.length,
+      cashTotal:     cashEls.length,
+      dividendCount: dividends.filter(d => d.activityCode === 'DIV').length,
+      frtaxCount:    dividends.filter(d => d.activityCode === 'FRTAX').length,
+      parser:        'parseActivityXML_v1.0',
+      parsedAt:      new Date().toISOString(),
+    },
+  };
+}
+
+// ── XML Hilfsfunktionen ───────────────────────────────────────────────────────
+
+/**
+ * Aggregiert mehrere Fills (gleiche ibOrderID) zu einem Trade.
+ * Summen: qty, proceeds, commission, fifoPnl.
+ * Gewichteter Durchschnitt: price.
+ */
+function _xmlAggregateOrder(fills) {
+  if (!fills || fills.length === 0) return null;
+  const first = fills[0];
+
+  // Basis-Felder vom ersten Fill
+  const assetCat  = first.getAttribute('assetCategory') || '';
+  const buySell   = first.getAttribute('buySell') || '';
+  const oci       = first.getAttribute('openCloseIndicator') || '';
+  const notes     = (first.getAttribute('notes') || '').split(';').map(n => n.trim()).filter(Boolean);
+  const putCall   = first.getAttribute('putCall') || '';
+
+  // Aggregierte Felder
+  let totalQty     = 0;
+  let totalProceeds = 0;
+  let totalComm    = 0;
+  let totalFifoPnl = 0;
+  let weightedPrice = 0;
+  let totalQtyAbs  = 0;
+  let fxRate       = parseFloat(first.getAttribute('fxRateToBase') || '1') || 1;
+
+  for (const fill of fills) {
+    const qty      = parseFloat(fill.getAttribute('quantity')     || '0');
+    const price    = parseFloat(fill.getAttribute('tradePrice')   || '0');
+    const proceeds = parseFloat(fill.getAttribute('proceeds')     || '0');
+    const comm     = parseFloat(fill.getAttribute('ibCommission') || '0');
+    const fifoPnl  = parseFloat(fill.getAttribute('fifoPnlRealized') || '0');
+
+    totalQty      += qty;
+    totalProceeds += proceeds;
+    totalComm     += comm;
+    totalFifoPnl  += fifoPnl;
+    weightedPrice += Math.abs(qty) * price;
+    totalQtyAbs   += Math.abs(qty);
+
+    // fxRate vom letzten Fill (aktuellster)
+    fxRate = parseFloat(fill.getAttribute('fxRateToBase') || '1') || 1;
+  }
+
+  const avgPrice = totalQtyAbs > 0 ? weightedPrice / totalQtyAbs : 0;
+
+  // Klassifizierung (analog convertToFifoTrade)
+  let classification = '';
+  if (assetCat === 'STK') {
+    if (buySell === 'BUY'  && oci === 'O') classification = 'stock_buy';
+    else if (buySell === 'SELL' && oci === 'C') classification = 'stock_sell';
+    else if (buySell === 'SELL' && oci === 'O') classification = 'short_sell_open';
+    else if (buySell === 'BUY'  && oci === 'C') classification = 'short_sell_cover';
+    else if (notes.includes('A') && buySell === 'BUY')  classification = 'put_assignment';
+    else if (notes.includes('A') && buySell === 'SELL') classification = 'call_assignment';
+  } else {
+    // OPT
+    if (buySell === 'SELL' && oci === 'O') classification = putCall === 'P' ? 'short_put' : 'short_call';
+    else if (buySell === 'BUY' && oci === 'O') classification = putCall === 'P' ? 'long_put' : 'long_call';
+    else if (oci === 'C' && notes.includes('Ep')) classification = 'option_expired';   // Ep = Verfall wertlos
+    else if (oci === 'C' && notes.includes('A'))  classification = 'option_assigned';  // A = Assignment
+    else if (oci === 'C' && notes.includes('P'))  classification = notes.includes('MLG')
+      ? 'manual_leg_close' : 'combo_close';                                             // P/MLG = Combo/ManualLeg
+    else if (oci === 'C') classification = buySell === 'BUY' ? 'short_option_close' : 'long_option_close';
+  }
+
+  const assetClass = assetCat === 'STK' ? 'Aktien' : 'Aktien- und Indexoptionen';
+
+  return {
+    // Standard-Felder (ko-fifo.js kompatibel — identisch zu convertToFifoTrade)
+    assetClass,
+    currency:    first.getAttribute('currency')          || 'USD',
+    symbol:      first.getAttribute('symbol')            || '',
+    underlying:  first.getAttribute('underlyingSymbol')  || first.getAttribute('symbol') || '',
+    description: first.getAttribute('description')       || '',
+    dateTime:    (first.getAttribute('dateTime') || '').replace(';', ' '),
+    date:        (first.getAttribute('tradeDate') || '').slice(0, 10),
+    qty:         buySell === 'BUY' ? Math.abs(totalQty) : -Math.abs(totalQty),
+    price:       round2(avgPrice),
+    proceeds:    round2(totalProceeds),
+    commFee:     round2(totalComm),
+    codes:       notes,
+    // Flex-spezifisch
+    buySell,
+    openCloseIndicator: oci,
+    classification,
+    putCall,
+    strike:      parseFloat(first.getAttribute('strike') || '0') || null,
+    expiry:      first.getAttribute('expiry')      || '',
+    multiplier:  parseFloat(first.getAttribute('multiplier') || '1'),
+    isin:        first.getAttribute('isin')        || '',
+    settleDate:  first.getAttribute('settleDate')  || '',
+    // IBKR FIFO-Daten
+    fxRateToBase:  fxRate,
+    costBasisUsd:  0,  // nicht in XML-Trades vorhanden (nur in OpenPositions)
+    costBasisEur:  0,
+    proceedsEur:   round2(totalProceeds * fxRate),
+    fifoPnlUsd:    round2(totalFifoPnl),
+    fifoPnlEur:    round2(totalFifoPnl * fxRate),
+    // XML-spezifisch (kein CSV-Äquivalent)
+    ibOrderID:   first.getAttribute('ibOrderID')   || '',
+    tradeID:     first.getAttribute('tradeID')     || '',
+    fillCount:   fills.length,   // Anzahl Teilfills
+  };
+}
+
+/**
+ * Konvertiert ein OptionEAE-Element zu einem Trade-Objekt.
+ * OptionEAE = Exercise, Assignment, Expiry — primäre Quelle für diese Events.
+ * Liefert Paare: OPT-Zeile + STK-Zeile (bei Assignment).
+ */
+function _xmlConvertEAE(el) {
+  const assetCat   = el.getAttribute('assetCategory') || '';
+  const txType     = el.getAttribute('transactionType') || '';
+  const qty        = parseFloat(el.getAttribute('quantity') || '0');
+  const fxRate     = parseFloat(el.getAttribute('fxRateToBase') || '1') || 1;
+  const realizedPnl = parseFloat(el.getAttribute('realizedPnl') || '0');
+  const costBasis  = parseFloat(el.getAttribute('costBasis') || '0');
+
+  // Klassifizierung aus transactionType
+  let classification = '';
+  if (txType === 'Assignment' && assetCat === 'OPT') classification = 'option_assigned';
+  else if (txType === 'Assignment' && assetCat === 'STK') {
+    const putCall = el.getAttribute('putCall') || '';
+    classification = putCall === 'P' ? 'put_assignment' : 'call_assignment';
+  }
+  else if (txType === 'Expiration') classification = 'option_expired';
+  else if (txType === 'Exercise')   classification = 'option_exercised';
+  else if (txType === 'Buy')        classification = 'stock_buy';
+  else if (txType === 'Sell')       classification = 'stock_sell';
+
+  const assetClass = assetCat === 'OPT' ? 'Aktien- und Indexoptionen' : 'Aktien';
+
+  return {
+    assetClass,
+    currency:    el.getAttribute('currency')         || 'USD',
+    symbol:      el.getAttribute('symbol')           || '',
+    underlying:  el.getAttribute('underlyingSymbol') || el.getAttribute('symbol') || '',
+    description: el.getAttribute('description')      || '',
+    dateTime:    el.getAttribute('date') ? el.getAttribute('date') + ' 00:00:00' : '',
+    date:        el.getAttribute('date') || '',
+    qty:         txType === 'Sell' ? -Math.abs(qty) : Math.abs(qty),
+    price:       parseFloat(el.getAttribute('tradePrice') || '0'),
+    proceeds:    parseFloat(el.getAttribute('proceeds') || '0'),
+    commFee:     parseFloat(el.getAttribute('commisionsAndTax') || '0'),
+    codes:       [txType],
+    buySell:     txType === 'Sell' ? 'SELL' : 'BUY',
+    openCloseIndicator: 'C',  // EAE = immer Close-Event
+    classification,
+    putCall:     el.getAttribute('putCall')    || '',
+    strike:      parseFloat(el.getAttribute('strike') || '0') || null,
+    expiry:      el.getAttribute('expiry')     || '',
+    multiplier:  parseFloat(el.getAttribute('multiplier') || '1'),
+    isin:        el.getAttribute('isin')       || '',
+    settleDate:  '',
+    fxRateToBase:  fxRate,
+    costBasisUsd:  costBasis,
+    costBasisEur:  round2(Math.abs(costBasis) * fxRate),
+    proceedsEur:   round2(parseFloat(el.getAttribute('proceeds') || '0') * fxRate),
+    fifoPnlUsd:    round2(realizedPnl),
+    fifoPnlEur:    round2(realizedPnl * fxRate),
+    // EAE-spezifisch
+    tradeID:     el.getAttribute('tradeID') || '',
+    fillCount:   1,
+    eaeSource:   true,   // Marker: aus OptionEAE-Sektion (nicht aus Trades)
+  };
+}
+
+/**
+ * Konvertiert eine CashTransaction zu einem Dividenden/QSt-Objekt.
+ */
+function _xmlConvertCashTransaction(el) {
+  const amount   = parseFloat(el.getAttribute('amount') || '0');
+  const fxRate   = parseFloat(el.getAttribute('fxRateToBase') || '1') || 1;
+  const code     = el.getAttribute('activityCode') || '';
+  const symbol   = el.getAttribute('symbol') || '';
+  const currency = el.getAttribute('currency') || '';
+
+  // Betrag: DIV positiv (Zufluss), FRTAX negativ (Abzug)
+  const amountEur = round2(amount * fxRate);
+
+  return {
+    activityCode:  code,      // 'DIV' | 'FRTAX' | 'OFEE'
+    symbol,
+    currency,
+    amount:        round2(amount),
+    amountEur,
+    fxRateToBase:  fxRate,
+    date:          el.getAttribute('date') || el.getAttribute('reportDate') || '',
+    description:   el.getAttribute('activityDescription') || '',
+    isin:          el.getAttribute('isin') || '',
+    // Für QSt-Cockpit (Säule 2): Quellenland aus FRTAX-Beschreibung
+    // Das issuerCountryCode-Feld fehlt direkt — muss über SecuritiesInfo gejoint werden
+    // Workaround: aus symbol über bekannte Listen ableiten
+    issuerCountry: el.getAttribute('issuerCountryCode') || null,
+    isDividend:    code === 'DIV',
+    isWithholding: code === 'FRTAX',
+    isAdrFee:      code === 'OFEE',
   };
 }
 
