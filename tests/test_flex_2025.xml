@@ -1,0 +1,79 @@
+<FlexQueryResponse queryName="Steuerauswertung" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U12074449" fromDate="2025-01-01" toDate="2025-12-31" period="Annual" whenGenerated="2026-01-05;08:00:00">
+
+<Trades>
+  <!-- STK BUY — Kauf AAPL -->
+  <Trade accountId="U12074449" symbol="AAPL" description="APPLE INC"
+    assetCategory="STK" currency="USD" tradeDate="2025-03-15"
+    buySell="BUY" quantity="10" tradePrice="175.50" proceeds="-1755.00"
+    ibCommission="-1.00" netCash="-1756.00" fxRateToBase="0.915"
+    openCloseIndicator="O" fifoPnlRealized="0"
+    ibOrderID="100001" tradeID="200001" notes="" />
+
+  <!-- STK SELL — Verkauf AAPL mit Gewinn -->
+  <Trade accountId="U12074449" symbol="AAPL" description="APPLE INC"
+    assetCategory="STK" currency="USD" tradeDate="2025-09-20"
+    buySell="SELL" quantity="10" tradePrice="195.30" proceeds="1953.00"
+    ibCommission="-1.00" netCash="1952.00" fxRateToBase="0.925"
+    openCloseIndicator="C" fifoPnlRealized="197.00"
+    ibOrderID="100002" tradeID="200002" notes="" />
+
+  <!-- OPT SELL — CSP auf NVDA (Stillhalter → Topf 1) -->
+  <Trade accountId="U12074449" symbol="NVDA  251219P00500000"
+    description="NVDA 19DEC25 500 P" assetCategory="OPT"
+    currency="USD" tradeDate="2025-10-01"
+    buySell="SELL" quantity="1" tradePrice="8.50" proceeds="850.00"
+    ibCommission="-0.65" netCash="849.35" fxRateToBase="0.920"
+    openCloseIndicator="O" fifoPnlRealized="0"
+    putCall="P" strike="500" expiry="2025-12-19" multiplier="100"
+    underlyingSymbol="NVDA" ibOrderID="100003" tradeID="200003" notes="" />
+
+  <!-- OPT BUY CLOSE — CSP Rückkauf mit Gewinn -->
+  <Trade accountId="U12074449" symbol="NVDA  251219P00500000"
+    description="NVDA 19DEC25 500 P" assetCategory="OPT"
+    currency="USD" tradeDate="2025-11-15"
+    buySell="BUY" quantity="1" tradePrice="2.10" proceeds="-210.00"
+    ibCommission="-0.65" netCash="-210.65" fxRateToBase="0.918"
+    openCloseIndicator="C" fifoPnlRealized="640.00"
+    putCall="P" strike="500" expiry="2025-12-19" multiplier="100"
+    underlyingSymbol="NVDA" ibOrderID="100004" tradeID="200004" notes="" />
+</Trades>
+
+<CashTransactions>
+  <!-- Dividende AAPL -->
+  <CashTransaction accountId="U12074449" symbol="AAPL"
+    activityCode="DIV" amount="23.50" currency="EUR"
+    fxRateToBase="1.0" date="2025-08-15"
+    levelOfDetail="SUMMARY"
+    activityDescription="AAPL(US0378331005) Cash Dividend USD 0.25 per Share" />
+  <!-- US-Quellensteuer AAPL (15%) -->
+  <CashTransaction accountId="U12074449" symbol="AAPL"
+    activityCode="FRTAX" amount="-3.53" currency="EUR"
+    fxRateToBase="1.0" date="2025-08-15"
+    levelOfDetail="SUMMARY"
+    activityDescription="AAPL(US0378331005) Payment in Lieu of Dividend (Ordinary Dividend)" />
+  <!-- Dividende O (Realty Income, REIT) -->
+  <CashTransaction accountId="U12074449" symbol="O"
+    activityCode="DIV" amount="45.20" currency="EUR"
+    fxRateToBase="1.0" date="2025-09-16"
+    levelOfDetail="SUMMARY"
+    activityDescription="O(US7561091049) Cash Dividend USD 0.2635 per Share" />
+  <CashTransaction accountId="U12074449" symbol="O"
+    activityCode="FRTAX" amount="-6.78" currency="EUR"
+    fxRateToBase="1.0" date="2025-09-16"
+    levelOfDetail="SUMMARY"
+    activityDescription="O(US7561091049) US Tax" />
+</CashTransactions>
+
+<OpenPositions>
+  <OpenPosition accountId="U12074449" symbol="MSFT" description="MICROSOFT CORP"
+    assetCategory="STK" currency="USD" position="5"
+    costBasisPrice="380.00" costBasisMoney="1900.00"
+    positionValue="2125.50" unrealizedPnl="225.50"
+    fxRateToBase="0.922" />
+</OpenPositions>
+
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>
