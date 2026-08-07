@@ -329,6 +329,12 @@
       </select>
     </div>
     <span id="account-badge" class="badge badge-joint">Gemeinschaftskonto</span>
+    <button onclick="openProfileSettings()"
+      style="margin-left:auto;font-size:11px;padding:5px 12px;background:var(--bg3);
+             border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer"
+      title="Kontoinhaber und Kirchensteuer konfigurieren">
+      ⚙ Kontoprofil
+    </button>
   </div>
 
   <!-- FX STATUS -->
@@ -551,6 +557,200 @@
       <div style="font-size:12px">Flex-Datei hochladen und dann „Aus aktuellem Flex importieren" klicken.</div>
     </div>
 
+  </div>
+</div>
+
+
+<!-- KONTOPROFIL MODAL -->
+<div id="profile-modal" style="display:none;position:fixed;inset:0;z-index:300;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--bg1);border-radius:10px;border:1px solid var(--border);
+              width:100%;max-width:560px;max-height:90vh;overflow-y:auto">
+
+    <!-- Header -->
+    <div style="background:var(--bg2);padding:1rem 1.25rem;display:flex;
+                justify-content:space-between;align-items:center;
+                border-bottom:1px solid var(--border);position:sticky;top:0">
+      <span style="font-weight:700;font-size:15px">⚙ Kontoprofil &amp; Steuerdetails</span>
+      <button onclick="closeProfileSettings()"
+        style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+
+    <div style="padding:1.25rem;display:flex;flex-direction:column;gap:1.5rem">
+
+      <!-- Kontoart -->
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;
+                    padding-bottom:0.4rem;border-bottom:1px solid var(--border)">
+          🏦 Depot
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Broker</label>
+            <input id="prof-broker" type="text" value="CapTrader" placeholder="z.B. CapTrader"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Konto-ID</label>
+            <input id="prof-account-id" type="text" placeholder="z.B. U12074449"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <!-- Inhaber 1 -->
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;
+                    padding-bottom:0.4rem;border-bottom:1px solid var(--border)">
+          👤 Kontoinhaber 1
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Name</label>
+            <input id="prof-name1" type="text" placeholder="Vorname Nachname"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">
+              Kirchensteuerpflicht
+              <span title="Kirchensteuer auf Kapitalerträge: 8% (Bayern/BaWü) oder 9% (andere BL).
+Berechnung auf Anlage KAP Zeile 57. Reduziert effektiven AbgSt-Satz leicht (Schachtelformel)."
+                style="cursor:help;color:var(--accent)">ⓘ</span>
+            </label>
+            <select id="prof-kist1"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px">
+              <option value="0">Keine Kirchensteuerpflicht</option>
+              <option value="9">9% — (z.B. NRW, Hessen, Hamburg...)</option>
+              <option value="8">8% — Bayern / Baden-Württemberg</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Bundesland</label>
+            <select id="prof-bl1"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px">
+              <option value="">— auswählen —</option>
+              <option value="BW">Baden-Württemberg (8%)</option>
+              <option value="BY">Bayern (8%)</option>
+              <option value="BE">Berlin (9%)</option>
+              <option value="BB">Brandenburg (9%)</option>
+              <option value="HB">Bremen (9%)</option>
+              <option value="HH">Hamburg (9%)</option>
+              <option value="HE">Hessen (9%)</option>
+              <option value="MV">Mecklenburg-Vorpommern (9%)</option>
+              <option value="NI">Niedersachsen (9%)</option>
+              <option value="NW">Nordrhein-Westfalen (9%)</option>
+              <option value="RP">Rheinland-Pfalz (9%)</option>
+              <option value="SL">Saarland (9%)</option>
+              <option value="SN">Sachsen (9%)</option>
+              <option value="ST">Sachsen-Anhalt (9%)</option>
+              <option value="SH">Schleswig-Holstein (9%)</option>
+              <option value="TH">Thüringen (9%)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Steuer-ID (optional)</label>
+            <input id="prof-stid1" type="text" placeholder="12 Stellen"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <!-- Inhaber 2 (nur bei Gemeinschaftskonto) -->
+      <div id="prof-inhaber2-section">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;
+                    padding-bottom:0.4rem;border-bottom:1px solid var(--border)">
+          👤 Kontoinhaber 2
+          <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:0.5rem">
+            (nur bei Gemeinschaftskonto)
+          </span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Name</label>
+            <input id="prof-name2" type="text" placeholder="Vorname Nachname"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">
+              Kirchensteuerpflicht
+            </label>
+            <select id="prof-kist2"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px">
+              <option value="0">Keine Kirchensteuerpflicht</option>
+              <option value="9">9% — (z.B. NRW, Hessen, Hamburg...)</option>
+              <option value="8">8% — Bayern / Baden-Württemberg</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Bundesland</label>
+            <select id="prof-bl2"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px">
+              <option value="">— auswählen —</option>
+              <option value="BW">Baden-Württemberg (8%)</option>
+              <option value="BY">Bayern (8%)</option>
+              <option value="BE">Berlin (9%)</option>
+              <option value="BB">Brandenburg (9%)</option>
+              <option value="HB">Bremen (9%)</option>
+              <option value="HH">Hamburg (9%)</option>
+              <option value="HE">Hessen (9%)</option>
+              <option value="MV">Mecklenburg-Vorpommern (9%)</option>
+              <option value="NI">Niedersachsen (9%)</option>
+              <option value="NW">Nordrhein-Westfalen (9%)</option>
+              <option value="RP">Rheinland-Pfalz (9%)</option>
+              <option value="SL">Saarland (9%)</option>
+              <option value="SN">Sachsen (9%)</option>
+              <option value="ST">Sachsen-Anhalt (9%)</option>
+              <option value="SH">Schleswig-Holstein (9%)</option>
+              <option value="TH">Thüringen (9%)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Steuer-ID (optional)</label>
+            <input id="prof-stid2" type="text" placeholder="12 Stellen"
+              style="width:100%;font-size:12px;padding:5px 8px;background:var(--bg2);
+                     border:1px solid var(--border);color:var(--text);border-radius:4px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <!-- Kirchensteuer-Hinweis -->
+      <div style="background:var(--bg3);border-radius:6px;padding:0.75rem;font-size:11px;color:var(--muted);line-height:1.5">
+        <strong style="color:var(--text)">ℹ Kirchensteuer auf Kapitalerträge</strong><br>
+        KiSt wird auf die Abgeltungsteuer berechnet (nicht auf Kapitalerträge direkt).
+        Wegen der Abzugsfähigkeit als Sonderausgabe gilt die <em>Schachtelformel</em>:<br>
+        Effektiver AbgSt-Satz = 25% ÷ (1 + 0,25 × KiSt-Satz)<br>
+        <strong>9%:</strong> 24,45% · <strong>8%:</strong> 24,51% · <strong>ohne:</strong> 25,00%<br>
+        Die KiSt wird separat in <strong>Anlage KAP Zeile 57</strong> eingetragen.
+        Bei Gemeinschaftsdepot: 50%-Anteil je Inhaber, dann KiSt individuell.
+      </div>
+
+      <!-- Buttons -->
+      <div style="display:flex;gap:0.75rem;justify-content:flex-end">
+        <button onclick="closeProfileSettings()"
+          style="font-size:12px;padding:7px 16px;background:var(--bg3);color:var(--text);
+                 border:1px solid var(--border);border-radius:4px;cursor:pointer">
+          Abbrechen
+        </button>
+        <button onclick="saveProfileSettings()"
+          style="font-size:12px;padding:7px 16px;background:var(--accent);color:#fff;
+                 border:none;border-radius:4px;cursor:pointer;font-weight:600">
+          💾 Speichern
+        </button>
+      </div>
+
+    </div>
   </div>
 </div>
 
@@ -23633,6 +23833,188 @@ async function journalSaveDetail(id) {
 (function() {
   const orig = window.handleFlexResult || null;
   // _lastFlexResult wird im Upload-Handler gesetzt
+})();
+
+
+// ── KONTOPROFIL + KIRCHENSTEUER ──────────────────────────────────────────────
+// localStorage Key: rx_profile
+// Schema: { broker, accountId,
+//           inhaber1: { name, kist, bundesland, steuerId },
+//           inhaber2: { name, kist, bundesland, steuerId } }
+
+const PROFILE_KEY = 'rx_profile';
+
+function loadProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+  } catch(e) { return {}; }
+}
+
+function saveProfile(p) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch(e) {}
+}
+
+function openProfileSettings() {
+  const p = loadProfile();
+  const modal = document.getElementById('profile-modal');
+  modal.style.display = 'flex';
+
+  // Felder befüllen
+  _setVal('prof-broker',     p.broker     || 'CapTrader');
+  _setVal('prof-account-id', p.accountId  || '');
+  const i1 = p.inhaber1 || {};
+  _setVal('prof-name1', i1.name || '');
+  _setVal('prof-kist1', String(i1.kist || '0'));
+  _setVal('prof-bl1',   i1.bundesland || '');
+  _setVal('prof-stid1', i1.steuerId   || '');
+  const i2 = p.inhaber2 || {};
+  _setVal('prof-name2', i2.name || '');
+  _setVal('prof-kist2', String(i2.kist || '0'));
+  _setVal('prof-bl2',   i2.bundesland || '');
+  _setVal('prof-stid2', i2.steuerId   || '');
+
+  // Inhaber-2-Sektion nur bei Gemeinschaftskonto
+  const isJoint = (document.getElementById('account-type')?.value || 'single') === 'joint';
+  const sec2 = document.getElementById('prof-inhaber2-section');
+  if (sec2) sec2.style.display = isJoint ? '' : 'none';
+
+  // Bundesland → KiSt-Satz automatisch vorbelegen
+  ['1','2'].forEach(n => {
+    const bl = document.getElementById(`prof-bl${n}`);
+    const ks = document.getElementById(`prof-kist${n}`);
+    if (bl && ks) {
+      bl.addEventListener('change', () => {
+        const v = bl.value;
+        if (v === 'BW' || v === 'BY') ks.value = '8';
+        else if (v) ks.value = '9';
+      }, { once: false });
+    }
+  });
+}
+
+function closeProfileSettings() {
+  document.getElementById('profile-modal').style.display = 'none';
+}
+
+function saveProfileSettings() {
+  const p = {
+    broker:    _getVal('prof-broker'),
+    accountId: _getVal('prof-account-id'),
+    inhaber1: {
+      name:        _getVal('prof-name1'),
+      kist:        parseFloat(_getVal('prof-kist1')) || 0,
+      bundesland:  _getVal('prof-bl1'),
+      steuerId:    _getVal('prof-stid1'),
+    },
+    inhaber2: {
+      name:        _getVal('prof-name2'),
+      kist:        parseFloat(_getVal('prof-kist2')) || 0,
+      bundesland:  _getVal('prof-bl2'),
+      steuerId:    _getVal('prof-stid2'),
+    },
+  };
+  saveProfile(p);
+  closeProfileSettings();
+
+  // Neu berechnen mit aktualisierten KiSt-Sätzen
+  if (typeof recalculate === 'function') recalculate();
+
+  // Badge aktualisieren
+  _updateProfileBadge(p);
+}
+
+function _setVal(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === 'SELECT') el.value = val;
+  else el.value = val;
+}
+function _getVal(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+function _updateProfileBadge(p) {
+  // Kleiner Hinweis wenn KiSt konfiguriert
+  const btn = document.querySelector('button[onclick="openProfileSettings()"]');
+  if (!btn) return;
+  const k1 = (p.inhaber1 || {}).kist || 0;
+  const k2 = (p.inhaber2 || {}).kist || 0;
+  if (k1 > 0 || k2 > 0) {
+    btn.style.borderColor = 'var(--accent)';
+    btn.title = `KiSt: ${k1 ? k1+'% (I1)' : ''}${k1&&k2?' + ':''}${k2 ? k2+'% (I2)' : ''} — konfiguriert`;
+  }
+}
+
+// ── Kirchensteuer-Berechnung ─────────────────────────────────────────────────
+
+/**
+ * Berechnet Kirchensteuer auf einen Abgeltungsteuer-Betrag.
+ * @param {number} abgst_brutto  — Abgeltungsteuer vor KiSt-Korrektur (25% × Ertrag)
+ * @param {number} kist_satz     — KiSt-Satz in % (8 oder 9), 0 = keine
+ * @returns {{ kist: number, abgst_netto: number, effektiv_satz: number }}
+ */
+function calcKirchensteuer(abgst_brutto, kist_satz) {
+  if (!kist_satz || kist_satz <= 0) {
+    return { kist: 0, abgst_netto: abgst_brutto, effektiv_satz: 25.0 };
+  }
+  // Schachtelformel: AbgSt_netto = Ertrag × 25% / (1 + 0,25 × KiSt-Satz)
+  // = AbgSt_brutto / (1 + 0,25 × kist_satz/100)
+  const faktor    = 1 + 0.25 * (kist_satz / 100);
+  const abgst_net = abgst_brutto / faktor;
+  const kist      = abgst_net * (kist_satz / 100);
+  const eff_satz  = (abgst_net / (abgst_brutto / 0.25)) * 100; // effektiver AbgSt-Satz
+  return {
+    kist:          Math.round(kist * 100) / 100,
+    abgst_netto:   Math.round(abgst_net * 100) / 100,
+    effektiv_satz: Math.round(eff_satz * 100) / 100,
+  };
+}
+
+/**
+ * Berechnet KiSt für einen Inhaber auf seinen Anteil der Kapitalerträge.
+ * Beim Gemeinschaftsdepot: 50%-Anteil zuerst, dann KiSt individuell.
+ *
+ * @param {number} gesamt_ertrag  — Gesamter steuerpflichtiger Kapitalertrag
+ * @param {number} anteil         — Anteil (1.0 = Einzelkonto, 0.5 = Gemeinschaft)
+ * @param {number} kist_satz      — KiSt-Satz in % des Inhabers
+ * @returns {{ ertrag_anteil, abgst, kist, abgst_netto, effektiv_satz }}
+ */
+function calcKiStFuerInhaber(gesamt_ertrag, anteil, kist_satz) {
+  const ertrag   = gesamt_ertrag * anteil;
+  const abgst    = ertrag * 0.25;
+  const kistCalc = calcKirchensteuer(abgst, kist_satz);
+  return {
+    ertrag_anteil: Math.round(ertrag * 100) / 100,
+    abgst_brutto:  Math.round(abgst * 100) / 100,
+    abgst_netto:   kistCalc.abgst_netto,
+    kist:          kistCalc.kist,
+    effektiv_satz: kistCalc.effektiv_satz,
+  };
+}
+
+/**
+ * Gibt KiSt-Zusammenfassung für das Ergebnis-Panel zurück.
+ * Wird nach recalculate() aufgerufen wenn Ergebnisse vorliegen.
+ * @param {number} gesamt_ertrag — steuerpflichtiger Gesamtertrag
+ */
+function getKiStSummary(gesamt_ertrag) {
+  const p       = loadProfile();
+  const isJoint = (document.getElementById('account-type')?.value || 'single') === 'joint';
+  const anteil  = isJoint ? 0.5 : 1.0;
+
+  const i1 = calcKiStFuerInhaber(gesamt_ertrag, anteil, (p.inhaber1 || {}).kist || 0);
+  const i2 = isJoint
+    ? calcKiStFuerInhaber(gesamt_ertrag, anteil, (p.inhaber2 || {}).kist || 0)
+    : null;
+
+  return { i1, i2, isJoint, profile: p };
+}
+
+// Badge beim Laden aktualisieren
+(function() {
+  const p = loadProfile();
+  if (p.inhaber1 || p.inhaber2) _updateProfileBadge(p);
 })();
 
 </script></body>
