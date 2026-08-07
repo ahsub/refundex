@@ -725,6 +725,41 @@ Berechnung auf Anlage KAP Zeile 57. Reduziert effektiven AbgSt-Satz leicht (Scha
         </div>
       </div>
 
+
+      <!-- ETF-Positionen (Vorabpauschale) -->
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.08em;color:var(--muted);margin-bottom:0.6rem;
+                    padding-bottom:0.4rem;border-bottom:1px solid var(--border);
+                    display:flex;justify-content:space-between;align-items:center">
+          <span>📊 ETF-Positionen <span style="font-size:10px;font-weight:400">(Vorabpauschale §18 InvStG)</span></span>
+          <button onclick="addEtfRow()"
+            style="font-size:11px;padding:3px 10px;background:var(--accent);color:#fff;
+                   border:none;border-radius:4px;cursor:pointer">+ ETF</button>
+        </div>
+
+        <div id="etf-rows" style="display:flex;flex-direction:column;gap:0.5rem">
+          <!-- dynamisch befüllt -->
+        </div>
+
+        <div id="etf-empty" style="font-size:11px;color:var(--muted);padding:0.5rem 0">
+          Noch keine ETF-Positionen. "+ ETF" klicken um eine hinzuzufügen.
+        </div>
+
+        <!-- Vorabpauschale Ergebnis -->
+        <div id="vap-result" style="display:none;margin-top:0.75rem;background:var(--bg3);
+             border-radius:6px;padding:0.75rem;font-size:11px">
+          <strong style="color:var(--text)">Vorabpauschale Ergebnis</strong>
+          <div id="vap-result-body" style="margin-top:0.4rem;color:var(--muted)"></div>
+        </div>
+
+        <div style="font-size:10px;color:var(--muted);margin-top:0.5rem;line-height:1.5">
+          ⚠ IBKR/CapTrader führen Vorabpauschale <strong>nicht</strong> automatisch ab →
+          manuell in <strong>Anlage KAP-INV</strong> erklären.
+          Fälligkeit: erster Werktag des Folgejahres.
+        </div>
+      </div>
+
       <!-- Kirchensteuer-Hinweis -->
       <div style="background:var(--bg3);border-radius:6px;padding:0.75rem;font-size:11px;color:var(--muted);line-height:1.5">
         <strong style="color:var(--text)">ℹ Kirchensteuer auf Kapitalerträge</strong><br>
@@ -24016,6 +24051,227 @@ function getKiStSummary(gesamt_ertrag) {
   const p = loadProfile();
   if (p.inhaber1 || p.inhaber2) _updateProfileBadge(p);
 })();
+
+
+// ── ETF-POSITIONEN + VORABPAUSCHALE ──────────────────────────────────────────
+
+const BASISZINS = {
+  2019:0.0052, 2020:0, 2021:0, 2022:0,
+  2023:0.0255, 2024:0.0229, 2025:0.0253, 2026:0.0320
+};
+
+const FONDSTYPEN = {
+  'aktien':         { label: 'Aktienfonds (≥51% Aktien)',    tfs: 0.30, kap: 'KAP-INV Z.9'  },
+  'misch':          { label: 'Mischfonds (≥25% Aktien)',      tfs: 0.15, kap: 'KAP-INV Z.12' },
+  'immobilien_de':  { label: 'Immobilienfonds Inland',        tfs: 0.60, kap: 'KAP-INV Z.15' },
+  'immobilien_aus': { label: 'Immobilienfonds Ausland',       tfs: 0.80, kap: 'KAP-INV Z.18' },
+  'anleihen':       { label: 'Anleihenfonds (keine TFS)',     tfs: 0.00, kap: 'KAP-INV Z.6'  },
+  'sonstige':       { label: 'Sonstige (keine TFS)',          tfs: 0.00, kap: 'KAP-INV Z.6'  },
+};
+
+let _etfRows = [];  // [{id, isin, name, fondstyp, anteile, kurs01, kurs31, ausschuettung, thesaurierend}]
+let _etfIdCnt = 0;
+
+function _etfFromProfile() {
+  const p = loadProfile();
+  _etfRows = (p.etfPositionen || []).map(e => ({...e}));
+  _etfIdCnt = _etfRows.reduce((m,e) => Math.max(m, e.id||0), 0);
+}
+
+function _etfToProfile() {
+  const p = loadProfile();
+  p.etfPositionen = _etfRows;
+  saveProfile(p);
+}
+
+function addEtfRow(prefill) {
+  _etfIdCnt++;
+  const row = prefill || {
+    id: _etfIdCnt, isin:'', name:'', fondstyp:'aktien',
+    anteile:'', kurs01:'', kurs31:'', ausschuettung:'0', thesaurierend:true,
+  };
+  if (!prefill) { row.id = _etfIdCnt; _etfRows.push(row); }
+  renderEtfRows();
+}
+
+function removeEtfRow(id) {
+  _etfRows = _etfRows.filter(r => r.id !== id);
+  renderEtfRows();
+  calcVorabpauschale();
+}
+
+function renderEtfRows() {
+  const container = document.getElementById('etf-rows');
+  const empty     = document.getElementById('etf-empty');
+  if (!container) return;
+
+  if (_etfRows.length === 0) {
+    container.innerHTML = '';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  const fondsOpts = Object.entries(FONDSTYPEN)
+    .map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('');
+
+  container.innerHTML = _etfRows.map(r => `
+    <div style="background:var(--bg3);border-radius:6px;padding:0.6rem;
+                display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;
+                position:relative" data-etf-id="${r.id}">
+      <button onclick="removeEtfRow(${r.id})"
+        style="position:absolute;top:4px;right:6px;background:none;border:none;
+               cursor:pointer;color:var(--muted);font-size:14px">×</button>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">ISIN</label>
+        <input oninput="updateEtfField(${r.id},'isin',this.value)"
+          value="${r.isin}" placeholder="IE00B4L5Y983"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Name</label>
+        <input oninput="updateEtfField(${r.id},'name',this.value)"
+          value="${r.name}" placeholder="z.B. iShares Core MSCI World"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px;box-sizing:border-box">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;color:var(--muted)">Fondstyp</label>
+        <select onchange="updateEtfField(${r.id},'fondstyp',this.value);calcVorabpauschale()"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px">
+          ${Object.entries(FONDSTYPEN).map(([k,v]) =>
+            `<option value="${k}"${r.fondstyp===k?' selected':''}>${v.label}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Anteile am 01.01.</label>
+        <input type="number" oninput="updateEtfField(${r.id},'anteile',this.value);calcVorabpauschale()"
+          value="${r.anteile}" placeholder="100"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Kurs 01.01. (€)</label>
+        <input type="number" step="0.01" oninput="updateEtfField(${r.id},'kurs01',this.value);calcVorabpauschale()"
+          value="${r.kurs01}" placeholder="80.00"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Kurs 31.12. (€)</label>
+        <input type="number" step="0.01" oninput="updateEtfField(${r.id},'kurs31',this.value);calcVorabpauschale()"
+          value="${r.kurs31}" placeholder="88.00"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">
+          Ausschüttung gesamt (€)
+          <span title="0 bei Thesaurierern" style="cursor:help;color:var(--accent)">ⓘ</span>
+        </label>
+        <input type="number" step="0.01" oninput="updateEtfField(${r.id},'ausschuettung',this.value);calcVorabpauschale()"
+          value="${r.ausschuettung||0}" placeholder="0"
+          style="width:100%;font-size:11px;padding:3px 6px;background:var(--bg2);
+                 border:1px solid var(--border);color:var(--text);border-radius:3px;box-sizing:border-box">
+      </div>
+      <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+        <label style="font-size:11px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:0.4rem">
+          <input type="checkbox" onchange="updateEtfField(${r.id},'thesaurierend',this.checked);calcVorabpauschale()"
+            ${r.thesaurierend ? 'checked' : ''}
+            style="width:14px;height:14px">
+          Thesaurierend
+        </label>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateEtfField(id, field, value) {
+  const row = _etfRows.find(r => r.id === id);
+  if (!row) return;
+  if (field === 'thesaurierend') row[field] = !!value;
+  else row[field] = value;
+}
+
+function calcVorabpauschale() {
+  const year = parseInt(document.getElementById('tax-year')?.value || '2025');
+  const bz   = BASISZINS[year] || 0;
+  const resultEl = document.getElementById('vap-result');
+  const bodyEl   = document.getElementById('vap-result-body');
+  if (!resultEl || !bodyEl) return;
+
+  if (_etfRows.length === 0) { resultEl.style.display = 'none'; return; }
+
+  let totalBrutto = 0, totalNetto = 0;
+  const lines = [];
+
+  for (const r of _etfRows) {
+    const anteile = parseFloat(r.anteile) || 0;
+    const k01     = parseFloat(r.kurs01)  || 0;
+    const k31     = parseFloat(r.kurs31)  || 0;
+    const aussch  = r.thesaurierend ? 0 : (parseFloat(r.ausschuettung) || 0);
+    const ft      = FONDSTYPEN[r.fondstyp] || FONDSTYPEN['sonstige'];
+
+    if (!anteile || !k01) continue;
+
+    // Basisertrag
+    const basisErtragPA  = k01 * bz * 0.70;
+    const basisErtragGes = basisErtragPA * anteile;
+    // Wertzuwachsbegrenzung
+    const wertzuwachs    = Math.max(0, k31 - k01) * anteile;
+    const basisBegr      = Math.min(basisErtragGes, wertzuwachs);
+    // Vorabpauschale
+    const vap    = Math.max(0, basisBegr - aussch);
+    const netto  = +(vap * (1 - ft.tfs)).toFixed(2);
+
+    totalBrutto += vap;
+    totalNetto  += netto;
+
+    const name = r.name || r.isin || `ETF ${r.id}`;
+    const warn = bz <= 0 ? ' ⚠ Basiszins 0' :
+                 wertzuwachs < basisErtragGes ? ' (begrenzt)' : '';
+    lines.push(
+      `<div style="display:flex;justify-content:space-between;margin-top:3px">
+        <span>${name} (TFS ${ft.tfs*100}%)</span>
+        <span><strong>${netto.toFixed(2)} €</strong> steuerpflichtig${warn}
+              <span style="color:var(--muted);font-size:10px"> → ${ft.kap}</span></span>
+      </div>`
+    );
+  }
+
+  if (lines.length === 0) { resultEl.style.display = 'none'; return; }
+
+  resultEl.style.display = '';
+  bodyEl.innerHTML = lines.join('') +
+    `<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;
+                 display:flex;justify-content:space-between">
+      <strong>Gesamt steuerpflichtig</strong>
+      <strong style="color:var(--accent)">${totalNetto.toFixed(2)} €</strong>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:3px">
+      Basiszins ${year}: ${(bz*100).toFixed(2)}% · Fälligkeit: erster Werktag ${year+1}
+    </div>`;
+}
+
+// openProfileSettings erweitern: ETF-Zeilen laden
+const _origOpen = window.openProfileSettings;
+window.openProfileSettings = function() {
+  _etfFromProfile();
+  if (typeof _origOpen === 'function') _origOpen();
+  else openProfileSettings._orig && openProfileSettings._orig();
+  renderEtfRows();
+  calcVorabpauschale();
+};
+
+// saveProfileSettings erweitern: ETF-Daten speichern
+const _origSave = window.saveProfileSettings;
+window.saveProfileSettings = function() {
+  // ETF-Felder aus DOM zurücklesen (onInput hat schon geupdated)
+  _etfToProfile();
+  if (typeof _origSave === 'function') _origSave();
+};
 
 </script></body>
 </html>
