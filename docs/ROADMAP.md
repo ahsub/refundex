@@ -1,7 +1,7 @@
 # Refundex — Roadmap
 
-**Version:** 1.8
-**Stand:** 06.08.2026
+**Version:** 1.9
+**Stand:** 08.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
 
@@ -61,6 +61,9 @@
 | 2.10 | ✅ **`flex_client.py` — Automatisierter Flex Web Service Pull (Python)** — Zwei-Schritt-API: (1) `SendRequest?t=TOKEN&q=QUERY_ID&v=3` → `ReferenceCode`; (2) `GetStatement?t=TOKEN&q=ReferenceCode&v=3` → XML. Token + QueryID aus `.env` (`IB_FLEX_TOKEN`, `IB_FLEX_QUERY_ID`), nie im Code. Retry-Logik (IBKR generiert Report asynchron, typisch 10–30s Wartezeit), XML-Fehlerresponse-Erkennung. Rückgabe: validiertes XML-String-Objekt, direkt an `parseActivityXML()` übergebar. Verwendung: `build_report.py` ruft `flex_client.py` auf statt CSV-Upload — vollautomatische Steuerberechnung ohne manuellen Download. Ablage: `engine/flex_client.py`. Credentials: `.env` + `.gitignore` (nie committen). | Liefert identisches XML wie manueller Download; verifiziert gegen CapTrader Flex Web Service | Datensouveränität, R3, Grundgesetz 1 |
 | 2.11 | ✅ **`ko-flex-proxy` Cloudflare Worker — Browser-seitiger Flex Pull (CORS-Bridge)** — IBKR setzt keine CORS-Header → direkter Fetch aus `kap.html` schlägt fehl. Lösung: minimaler CF Worker als transparenter Proxy. Architektur: Browser sendet `{token, queryId}` → Worker ruft IBKR SendRequest + GetStatement auf → gibt XML zurück. Token verlässt Browser nur in Richtung eigener Worker-Infrastruktur. Worker-Route: `ko-flex-proxy.ahildebrand.workers.dev`. Token im Browser-`localStorage` (analog ko-sync-Token), kein Server-Logging. `kap.html` erhält „Direkt von CapTrader laden"-Button als Alternative zum Upload. Abhängigkeit: 2.8 (XML-Parser) muss stehen. | Browser-Pull liefert identisches XML wie Upload; Token nie im Klartext geloggt | Datensouveränität, UX: Upload-Schritt entfällt |
 
+| 2.13 | **FIFO-Positions-Tracker (Jahresabgrenzung)** — Matching von SELL+BUY-Paaren über Jahresgrenzen hinweg. Eine Option die am 15.11.2024 verkauft und am 03.01.2025 zurückgekauft wird, darf NICHT im 2024-Report auftauchen (offene Position). Implementierung: `ko-fifo-options.js` — Stack-basiertes FIFO analog zu `aktien_fifo.py`, aber für Options-Legs. Ausgabe: `{closedPositions[], openPositions[]}` je Steuerjahr. **Voraussetzung für Z.21/Z.24-Korrektheit.** | Geschlossene Positionen korrekt abgegrenzt, Gegenprüfung mit PWC 2024 ± 5 EUR | Kern-Rechenwerk, Belegkette-relevant |
+| 2.14 | **Buchungs-Datums-Filter (Jahresüberschreiter)** — WHT-Stornos und Dividenden-Reversals die als Korrekturbuchung im Folgejahr erscheinen, werden dem Ursprungsjahr zugeordnet oder explizit ausgeschlossen. Erkennungsmuster: negative WHT-Buchung ohne zugehörige Dividende im gleichen Jahr, `description` enthält "REVERSAL" oder "CORRECTION". | Quellensteuer-Summe ± 5 EUR gegen PWC | Filter-Regel |
+| 2.15 | **Gains/Losses-Auftrennung für Z.21/Z.24** — Nicht nur Netto-P&L sondern getrennte Gewinntöpfe (Z.21: income from trading in derivatives) und Verlusttöpfe (Z.24: losses, mit 20k-Cap §20 Abs.6). Basis: abgeschlossene Positionen aus 2.13. Verluste mit `isRestrictedLoss`-Flag wenn Disposal-Proceeds = 0 (wertlose Option = §20 Abs.6 Satz 2). | Z.21 und Z.24 getrennt ausgewiesen, 20k-Cap korrekt angewendet | Steuerrechtlich kritisch (20k-Cap) |
 | 2.12 | **OptionsCoach + OptionsDoktor — KI Options-Coaching** *(SUITE.md Backlog №37)* — Eigenständiges Coaching-Modul auf Basis der Flex-XML-Datenbasis. Zwei Modi: (1) OptionsCoach (prospektiv): Regime-Check, Earnings-Gate, IV-Rank, Delta-Wahl vor Trade-Eröffnung. (2) OptionsDoktor (retrospektiv/laufend): Diagnose abgeschlossener Positionen ("was lief schief?"), Handlungsoptionen bei laufenden Positionen (Rollen/Rückkauf/Hedge), Lernmuster-Engine über 50+ Trades. Datenfluss: Flex-XML → Position-Aggregation (Roll = ein Ereignis) → UIQ-Kontext (Regime/IV-Rank zum Entry) → Claude Strict-Extraction-Analyse → Diagnose + Lernpunkt. Alleinstellungsmerkmal: einzige Kombination aus echten Trade-Daten + Marktbedingungen zum Entry + steuerlicher Einordnung + KI-Coaching im DACH-Raum. Abhängigkeit: 2.9 (ko-journal.js ✅), UIQ IV-Rank (ab 11.08.2026 ✅). **Trigger: nach 01.10.2026** (Track Record reif, Datenbasis vollständig). | Lernmuster-Engine erkennt systematische Fehler über ≥20 Positionen | Grundgesetz 1 (No-Hallucination: nur Fakten aus Flex-XML + UIQ-Daten), 80/20: höchster edukativer Mehrwert |
 
 **Reihenfolge-Logik:** 2.1 vor 2.2. 2.6 vor 2.7. **2.8 vor 2.9** ✅. **2.10+2.11 parallel zu 2.8** ✅. **2.9 vor 2.12** — Journal ist Datenbasis des Coaches.
@@ -110,5 +113,58 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.5 | 06.08.2026 | Phase 2: 2.8 XML-Migration (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
+| 1.9 | 08.08.2026 | Validierungsbefund 08.08.2026 dokumentiert (D1 Jahresabgrenzung, D2 Split, D3 Korrekturbuchungen); ROADMAP 2.13–2.15 ergänzt |
 | 1.8 | 08.08.2026 | 2.8–2.11 als ✅ markiert; 1.3 Feedback-Kanal als ✅ markiert (ahildebrand@me.com + GitHub Issues bereits aktiv) | 2.12 OptionsCoach + OptionsDoktor (SUITE.md №37): KI-Coaching auf Basis Flex-XML + UIQ-Kontext, Lernmuster-Engine, Trigger 01.10.2026 | `flex_client.py` (automatisierter Python-Pull via Flex Web Service, `.env`-Credentials) + 2.11 `ko-flex-proxy` CF Worker (CORS-Bridge für Browser-Pull); Reihenfolge-Logik 2.10+2.11 parallel zu 2.8 ergänzt | (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.4 | 03.07.2026 | 1.2 ✅ guide.html erstellt (Belegketten-Hero, Flex-Query-Setup, 5-Schritte-Bedienung, 4-Punkte-Haftungsblock, FAQ inkl. Lynx + QSt-Ausblick); kap.html v140 mit Leitfaden-Link im Banner |
+
+---
+
+## Validierungsbefund 08.08.2026 — XML-Parser vs. PWC German Tax Report
+
+**Quelle:** Vergleich 2024_Complete.xml gegen U12074449_2024_PWC_DE_2.pdf (Ground Truth)
+
+### Drei strukturelle Diskrepanzen identifiziert
+
+**D1 — Jahresabgrenzung (gravierendste):**
+Der XML-Parser erfasst alle netCash-Flows des Kalenderjahres.
+PWC meldet nur **abgeschlossene Positionen** (FIFO-gematchte SELL+BUY-Paare
+die beide im selben Steuerjahr liegen).
+Positionen die am 31.12. noch offen sind → kommen NICHT in den PWC-Report,
+tauchen aber vollständig im XML auf.
+
+Beispiel 2024: XML Optionen-Netto 8.689 EUR vs. PWC Gains 6.094 - Losses 1.749 = 4.344 EUR.
+Die 4.345 EUR Differenz erklärt sich durch Positionen die 2025 geschlossen wurden
+(z.B. NVO 21MAR25 95P, AMSC 21FEB25 26P, AMSC 21FEB25 32C, VST 17JAN25 160C).
+
+**D2 — Gemeinschaftskonto-Split:**
+PWC erstellt getrennte Reports pro Inhaber (Axel / Christa F. Hildebrand) mit
+je 50% der gemeinsamen Kapitalerträge. Der XML-Parser liefert 100% (Gesamtkonto).
+Refundex muss den 50%-Anteil NACH der Berechnung anwenden (Projektions-Schicht
+`projiziereErgebnis()` tut das bereits — aber nur für Z.18/Z.19, nicht für Z.21/Z.24).
+
+**D3 — Jahresübergreifende Korrekturbuchungen:**
+Das 2024-XML enthält WHT-Stornobuchungen aus 2023/2025 (z.B. O-Dividenden
+mit dateTime aus 2024 aber settlement aus 2023). PWC schneidet hart am 01.01./31.12.
+ab. XML-Parser muss diese identifizieren und ausschließen.
+
+### Auswirkung auf die aktuelle Engine
+
+| Posten | XML-Parser 2024 | PWC 2024 (je Inhaber) | Faktor |
+|---|---|---|---|
+| Opt-Gewinne (Z.21) | 8.689 EUR netto | 6.094 EUR | D1 |
+| Opt-Verluste (Z.24) | (in Netto enthalten) | 1.749 EUR | D1 |
+| Dividenden (Z.7+Z.19) | 2.046 EUR | 860 EUR (50%) | D2+D3 |
+| Quellensteuer (Z.41) | 246 EUR | 59 EUR (50%) | D2+D3 |
+| Aktiengewinne (Z.20) | ✅ korrekt | 4.099 EUR | — |
+
+### Lösungsarchitektur (→ ROADMAP 2.13–2.15)
+
+**Stufe 1 (2.13) — FIFO-Positions-Tracker:** Matching von SELL+BUY-Paaren
+über Jahresgrenzen. Liefert abgeschlossene Positionen mit Jahresabgrenzung.
+
+**Stufe 2 (2.14) — Buchungs-Datums-Filter:** Korrekturbuchungen erkennen
+(negative WHT im Folgejahr, Revenue-Storno), aus dem Abrechnungsjahr ausschließen.
+
+**Stufe 3 (2.15) — Gains/Losses-Auftrennung:** Nicht nur Netto-P&L, sondern
+getrennte Gewinne (Z.21) und Verluste (Z.24) für die 20k-Cap-Logik.
+
