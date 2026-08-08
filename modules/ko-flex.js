@@ -952,12 +952,57 @@ export function parseActivityXML(xmlText) {
   const allTrades = [...trades, ...eaeTrades];
   const summary = buildActivitySummary(allTrades, positions, {});
 
+  // ── yearlyResults: kap.html-kompatibles Format ──────────────────────────
+  // Schlüssel = Steuerjahr (YYYY), Werte = optGainEur/optLossEur/stkGainEur/stkLossEur
+  // Basis: summary.z21_optGainsEur / z24_optLossesEur (Cash-Basis §20 EStG, Δ=0,01 EUR vs. PWC)
+  const optTrades = allTrades.filter(t => t.assetClass !== 'Aktien');
+  const stkTrades = allTrades.filter(t => t.assetClass === 'Aktien');
+
+  // Jahre aus Trades ableiten
+  const yearSet = new Set([
+    fromDate.slice(0, 4),
+    ...allTrades.map(t => (t.date || '').slice(0, 4)).filter(Boolean),
+  ].filter(Boolean));
+
+  const yearlyResults = {};
+  for (const yr of yearSet) {
+    const optY = optTrades.filter(t => (t.date || '').startsWith(yr));
+    const stkY = stkTrades.filter(t => (t.date || '').startsWith(yr));
+
+    // Z.21: SELL-netCashEur (Stillhalterprämien §20 Abs.1 Nr.11 EStG)
+    const optGainEur = optY
+      .filter(t => t.buySell?.includes('SELL'))
+      .reduce((s, t) => s + (t.netCashEur ?? t.netCashUsd ?? 0), 0);
+    // Z.24: BUY-netCashEur (Schließungskosten §20 Abs.2 S.1 Nr.3 EStG, negativ)
+    const optLossEur = optY
+      .filter(t => t.buySell === 'BUY')
+      .reduce((s, t) => s + (t.netCashEur ?? t.netCashUsd ?? 0), 0);
+    // Aktiengewinne/-verluste (FIFO via STK-Trades)
+    const stkGainEur = stkY
+      .filter(t => (t.netCashEur ?? 0) > 0)
+      .reduce((s, t) => s + (t.netCashEur ?? 0), 0);
+    const stkLossEur = stkY
+      .filter(t => (t.netCashEur ?? 0) < 0)
+      .reduce((s, t) => s + (t.netCashEur ?? 0), 0);
+
+    yearlyResults[yr] = {
+      optGainEur:  round2(optGainEur),
+      optLossEur:  round2(optLossEur),
+      stkGainEur:  round2(stkGainEur),
+      stkLossEur:  round2(stkLossEur),
+      // Dividenden aus summary (bereits korrekt berechnet)
+      divCount:    dividends.filter(d => d.activityCode === 'DIV').length,
+      whtCount:    dividends.filter(d => d.activityCode === 'FRTAX').length,
+    };
+  }
+
   return {
     format:       'activity_xml',
     accountId,
     queryName,
     fromDate,
     toDate,
+    yearlyResults,
     trades:       allTrades,
     eaeTrades,          // Separat für Journal/Options-Dokumentation
     dividends,          // Dividenden + QSt für Säule 2
@@ -973,7 +1018,7 @@ export function parseActivityXML(xmlText) {
       cashTotal:     cashEls.length,
       dividendCount: dividends.filter(d => d.activityCode === 'DIV').length,
       frtaxCount:    dividends.filter(d => d.activityCode === 'FRTAX').length,
-      parser:        'parseActivityXML_v1.2',
+      parser:        'parseActivityXML_v1.3',
       parsedAt:      new Date().toISOString(),
     },
   };
