@@ -21975,7 +21975,7 @@ async function onFileFlex(event) {
 
   try {
     if (!window.koFlex) {
-      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@7b26775a/modules/ko-flex.js');
+      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c6ebbc9b/modules/ko-flex.js');
       window.koFlex = mod;
     }
 
@@ -22057,6 +22057,10 @@ async function onFileFlex(event) {
     rawData.optionen.gain = yr.optGainEur   || 0;
     rawData.optionen.loss = Math.abs(yr.optLossEur  || 0);
     rawData.flexDataEUR   = true;
+
+    // Modus-A-Badge (Dual-Mode-Strategie 08.08.2026)
+    { const el = document.getElementById('flex-mode-badge');
+      if (el) { el.innerHTML = '📊 <strong>Cash-Flow-Ansicht</strong> — Z.21/Z.24 nach §20 EStG Cash-Basis (Δ&nbsp;0,01&nbsp;EUR vs.&nbsp;PWC&nbsp;2024). Für Steuererklärung bitte PWC German Tax Report als Referenz nutzen.'; el.style.display='block'; } }
 
     // Cash Transactions
     if (isCash) {
@@ -22198,7 +22202,7 @@ function loadFlexYearFile(targetYear) {
 
     try {
       if (!window.koFlex) {
-        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@7b26775a/modules/ko-flex.js');
+        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c6ebbc9b/modules/ko-flex.js');
         window.koFlex = mod;
       }
 
