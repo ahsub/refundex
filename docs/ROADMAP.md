@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 1.9
+**Version:** 2.0
 **Stand:** 08.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -113,6 +113,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.5 | 06.08.2026 | Phase 2: 2.8 XML-Migration (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
+| 2.0 | 08.08.2026 | Dual-Mode-Strategie: Modus A (Cash-Flow/Ergänzung) + Modus B (Eigenberechnung mit Gate-Kriterien) |
 | 1.9 | 08.08.2026 | Validierungsbefund 08.08.2026 dokumentiert (D1 Jahresabgrenzung, D2 Split, D3 Korrekturbuchungen); ROADMAP 2.13–2.15 ergänzt |
 | 1.8 | 08.08.2026 | 2.8–2.11 als ✅ markiert; 1.3 Feedback-Kanal als ✅ markiert (ahildebrand@me.com + GitHub Issues bereits aktiv) | 2.12 OptionsCoach + OptionsDoktor (SUITE.md №37): KI-Coaching auf Basis Flex-XML + UIQ-Kontext, Lernmuster-Engine, Trigger 01.10.2026 | `flex_client.py` (automatisierter Python-Pull via Flex Web Service, `.env`-Credentials) + 2.11 `ko-flex-proxy` CF Worker (CORS-Bridge für Browser-Pull); Reihenfolge-Logik 2.10+2.11 parallel zu 2.8 ergänzt | (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.4 | 03.07.2026 | 1.2 ✅ guide.html erstellt (Belegketten-Hero, Flex-Query-Setup, 5-Schritte-Bedienung, 4-Punkte-Haftungsblock, FAQ inkl. Lynx + QSt-Ausblick); kap.html v140 mit Leitfaden-Link im Banner |
@@ -167,4 +168,53 @@ ab. XML-Parser muss diese identifizieren und ausschließen.
 
 **Stufe 3 (2.15) — Gains/Losses-Auftrennung:** Nicht nur Netto-P&L, sondern
 getrennte Gewinne (Z.21) und Verluste (Z.24) für die 20k-Cap-Logik.
+
+## Architekturentscheidung 08.08.2026 — Dual-Mode-Strategie
+
+**Kontext:** Validierungsbefund 08.08.2026 zeigt drei strukturelle Diskrepanzen
+zwischen XML-Parser und PWC German Tax Report (D1 Jahresabgrenzung,
+D2 Gemeinschaftskonto-Split, D3 Korrekturbuchungen).
+
+**Entscheidung (Axel, 08.08.2026):** Beide Modi parallel entwickeln.
+
+### Modus A — Ergänzungs-Modus (sofort nutzbar, immer verfügbar)
+
+XML-Parser liefert **Rohdaten und Plausibilitätsprüfung** neben dem PWC-Report.
+PWC bleibt Goldstandard für die Steuererklärung.
+
+Nutzen: Schnelle Jahresübersicht, Plausibilitätsprüfung PWC, Journal-Befüllung,
+QSt-Cockpit, OptionsDoktor-Datenbasis. Keine FIFO-Jahresabgrenzung nötig —
+explizit als "laufende Cash-Flows" deklariert.
+
+**UI-Signal:** Badge "📊 Cash-Flow-Ansicht — für Steuererklärung PWC-Report verwenden"
+
+### Modus B — Eigenberechnungs-Modus (Entwicklungsziel, schrittweise)
+
+Refundex berechnet Z.21/Z.24 eigenständig auf PWC-Niveau.
+Freischaltung erst wenn Gegenprüfung ≤ 5 EUR Abweichung über 3 Steuerjahre.
+
+**Gate-Kriterien für Modus-B-Aktivierung:**
+
+| Kriterium | Schwelle | Status |
+|---|---|---|
+| D1 FIFO-Jahresabgrenzung (2.13) | implementiert + getestet | ⏳ offen |
+| D2 Split korrekt auf Z.21/Z.24 | implementiert | ⏳ offen |
+| D3 Korrekturbuchungen gefiltert (2.14) | implementiert | ⏳ offen |
+| Gegenprüfung 2023 | ≤ 5 EUR Abweichung | ⏳ offen |
+| Gegenprüfung 2024 | ≤ 5 EUR Abweichung | ⏳ offen |
+| Gegenprüfung 2025 | ≤ 5 EUR Abweichung (nach PWC-Eingang) | ⏳ offen |
+
+**Disclaimer Modus B (StBerG-konform):**
+"Refundex-Eigenberechnung — nicht geprüft durch Steuerberater.
+Vergleich mit CapTrader-Steuerbescheinigung empfohlen."
+
+### Implementierungsreihenfolge
+
+```
+Phase A (sofort): Modus A explizit deklarieren + UI-Badge
+Phase B (2.13):   ko-fifo-options.js — FIFO-Tracker über Jahresgrenzen
+Phase C (2.14):   Buchungs-Datums-Filter — WHT-Korrekturen erkennen
+Phase D (2.15):   Gains/Losses-Auftrennung Z.21/Z.24
+Phase E:          Gegenprüfung 3 Jahre → Modus-B-Gate
+```
 
