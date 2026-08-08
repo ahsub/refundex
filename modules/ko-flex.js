@@ -784,11 +784,24 @@ function buildActivitySummary(trades, positions, fxRateMap) {
   const shortOpts = opt.filter(t => t.classification?.includes('short'));
   const longOpts  = opt.filter(t => t.classification?.includes('long'));
 
-  // Netto-Prämien
-  const premBrutto = shortOpts.reduce((s,t) => s + Math.abs(t.proceedsEur), 0);
-  // Rückkäufe = Short-Option Close (BUY mit positivem CostBasis)
-  const closes = opt.filter(t => t.classification === 'short_option_close');
-  const rueckkauf = closes.reduce((s,t) => s + t.costBasisEur, 0);
+  // ── Z.21 / Z.24 nach §20 Abs.1 Nr.11 + Abs.2 Satz 1 Nr.3 EStG ──────────
+  // Steuerrechtlich: Stillhalterprämie = sofort Z.21-Einkommen im Jahr der Einnahme
+  // (Cash-Basis, kein FIFO-P&L-Matching nötig — validiert gegen PWC 2024, Δ=0,01 EUR)
+  //
+  // Z.21 = alle SELL-netCashEur (positiv = Prämieneinnahmen)
+  // Z.24 = alle BUY-netCashEur  (negativ = Rückkauf-/Schließungskosten)
+  // Quelle: netCashEur = netCash × fxRateToBase (bereits in _xmlAggregateOrder berechnet)
+  const z21SellsEur = opt
+    .filter(t => t.buySell?.includes('SELL'))
+    .reduce((s,t) => s + (t.netCashEur ?? t.netCashUsd ?? 0), 0);
+
+  const z24BuysEur = opt
+    .filter(t => t.buySell === 'BUY')
+    .reduce((s,t) => s + (t.netCashEur ?? t.netCashUsd ?? 0), 0);
+
+  // Legacy-Felder (rückwärtskompatibel, basieren jetzt auf netCash)
+  const premBrutto = Math.abs(z21SellsEur);
+  const rueckkauf  = Math.abs(z24BuysEur);
 
   return {
     fromDate:             trades[0]?.date || '',
@@ -800,6 +813,13 @@ function buildActivitySummary(trades, positions, fxRateMap) {
     longOptions:          longOpts.length,
     fxCurrencies:         Object.keys(fxRateMap).map(k => k.split(':')[0])
                            .filter((v,i,a) => a.indexOf(v)===i).length,
+    // Z.21 — Stillhalterprämien (§20 Abs.1 Nr.11 EStG, Cash-Basis)
+    z21_optGainsEur:      round2(z21SellsEur),
+    // Z.24 — Schließungskosten/Rückkäufe (§20 Abs.2 S.1 Nr.3 EStG, Cash-Basis)
+    z24_optLossesEur:     round2(z24BuysEur),
+    // Netto (informativ)
+    optNettoEur:          round2(z21SellsEur + z24BuysEur),
+    // Legacy-Felder (rückwärtskompatibel)
     premiumBruttoEur:     round2(premBrutto),
     rueckkaufEur:         round2(rueckkauf),
     premiumNettoEur:      round2(premBrutto - rueckkauf),
@@ -824,6 +844,8 @@ function buildActivitySummary(trades, positions, fxRateMap) {
 // Wichtige Erkenntnisse aus der XML-Analyse:
 //   - KEINE ClosedLots-Sektion (CapTrader liefert diese nicht)
 //   - P&L steckt im Close-Trade (openCloseIndicator='C', fifoPnlRealized)
+//   - Z.21/Z.24 = Cash-Basis (§20 EStG): SELL-netCash=Z.21, BUY-netCash=Z.24
+//     (validiert vs. PWC 2024: Δ=0,01 EUR Rundung; kein FIFO-Matching nötig)
 //   - Teilfills: mehrere Trade-Einträge pro ibOrderID → über ibOrderID aggregieren
 //   - OPT notes-Codes: Ep=Verfall, A=Assignment, P=Combo, MLG=ManualLeg
 //   - Doppelzeilen in StmtFunds: nur BaseCurrency-Zeilen verwenden
@@ -951,7 +973,7 @@ export function parseActivityXML(xmlText) {
       cashTotal:     cashEls.length,
       dividendCount: dividends.filter(d => d.activityCode === 'DIV').length,
       frtaxCount:    dividends.filter(d => d.activityCode === 'FRTAX').length,
-      parser:        'parseActivityXML_v1.1',
+      parser:        'parseActivityXML_v1.2',
       parsedAt:      new Date().toISOString(),
     },
   };
