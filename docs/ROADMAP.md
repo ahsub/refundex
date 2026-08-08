@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 2.0
+**Version:** 2.1
 **Stand:** 08.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -113,6 +113,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.5 | 06.08.2026 | Phase 2: 2.8 XML-Migration (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
+| 2.1 | 08.08.2026 | Vollständige Diskrepanz-Analyse ergänzt: D1a Assignment-Prämien, D1b REIT/Teilfills; Fazit: vollständig aus XML lösbar |
 | 2.0 | 08.08.2026 | Dual-Mode-Strategie: Modus A (Cash-Flow/Ergänzung) + Modus B (Eigenberechnung mit Gate-Kriterien) |
 | 1.9 | 08.08.2026 | Validierungsbefund 08.08.2026 dokumentiert (D1 Jahresabgrenzung, D2 Split, D3 Korrekturbuchungen); ROADMAP 2.13–2.15 ergänzt |
 | 1.8 | 08.08.2026 | 2.8–2.11 als ✅ markiert; 1.3 Feedback-Kanal als ✅ markiert (ahildebrand@me.com + GitHub Issues bereits aktiv) | 2.12 OptionsCoach + OptionsDoktor (SUITE.md №37): KI-Coaching auf Basis Flex-XML + UIQ-Kontext, Lernmuster-Engine, Trigger 01.10.2026 | `flex_client.py` (automatisierter Python-Pull via Flex Web Service, `.env`-Credentials) + 2.11 `ko-flex-proxy` CF Worker (CORS-Bridge für Browser-Pull); Reihenfolge-Logik 2.10+2.11 parallel zu 2.8 ergänzt | (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
@@ -147,6 +148,35 @@ Refundex muss den 50%-Anteil NACH der Berechnung anwenden (Projektions-Schicht
 Das 2024-XML enthält WHT-Stornobuchungen aus 2023/2025 (z.B. O-Dividenden
 mit dateTime aus 2024 aber settlement aus 2023). PWC schneidet hart am 01.01./31.12.
 ab. XML-Parser muss diese identifizieren und ausschließen.
+
+### Vollständige Diskrepanz-Analyse (08.08.2026, Python-Test)
+
+**Algorithmus:** FIFO-Stack mit OptionEAE-Integration gegen PWC 2024:
+
+| Schließungstyp | Anzahl | Gains EUR | Losses EUR | PWC-Behandlung |
+|---|---|---|---|---|
+| Trade (BUY) | 46 | +6.649 | −1.850 | Z.21 / Z.24 ✅ |
+| Expiration (wertlos) | 1 | +129 | 0 | Z.21 ✅ |
+| Assignment (Zuteilung) | 5 | +683 | 0 | ⚠️ NICHT Z.21! |
+| **Summe** | **52** | **+7.461** | **−1.850** | |
+| **PWC** | | **+6.094** | **−1.749** | |
+| **Differenz** | | **+1.367** | **−101** | |
+
+**D1a — Assignment-Prämien (größte Einzelursache):**
+PWC-Note p.31: *"Premiums received on the grant of an option are reported separately
+to any purchase or sale that takes place as a result of the option being exercised."*
+→ Bei CSP-Assignment: die Prämie (683 EUR in 2024) reduziert die Anschaffungskosten
+der zugeteilten Aktien und erscheint in Z.20 (Aktiengewinne), NICHT in Z.21.
+→ Fix: `isAssignmentPremium`-Flag auf SELL-Legs die via Assignment geschlossen werden.
+
+**D1b — Verbleibende Differenz (684 EUR Gains, 101 EUR Losses):**
+Wahrscheinlich AMSC 250117P00031000 (doppelter FIFO-Eintrag wegen Teilfills)
+und Realty Income/O (REIT → KAP-INV Z.8, nicht Z.21).
+Erfordert weiteren Test-Zyklus nach D1a-Fix.
+
+**Zwischenfazit: Die Lösung ist vollständig aus XML-Daten umsetzbar.**
+BubbleTax macht dasselbe — kein Datenzugriff den wir nicht haben.
+Implementierungsaufwand: 3–4 Sessions für Modus-B-Gate.
 
 ### Auswirkung auf die aktuelle Engine
 
