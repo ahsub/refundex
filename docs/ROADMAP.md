@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 2.1
+**Version:** 2.2
 **Stand:** 08.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -61,7 +61,7 @@
 | 2.10 | ✅ **`flex_client.py` — Automatisierter Flex Web Service Pull (Python)** — Zwei-Schritt-API: (1) `SendRequest?t=TOKEN&q=QUERY_ID&v=3` → `ReferenceCode`; (2) `GetStatement?t=TOKEN&q=ReferenceCode&v=3` → XML. Token + QueryID aus `.env` (`IB_FLEX_TOKEN`, `IB_FLEX_QUERY_ID`), nie im Code. Retry-Logik (IBKR generiert Report asynchron, typisch 10–30s Wartezeit), XML-Fehlerresponse-Erkennung. Rückgabe: validiertes XML-String-Objekt, direkt an `parseActivityXML()` übergebar. Verwendung: `build_report.py` ruft `flex_client.py` auf statt CSV-Upload — vollautomatische Steuerberechnung ohne manuellen Download. Ablage: `engine/flex_client.py`. Credentials: `.env` + `.gitignore` (nie committen). | Liefert identisches XML wie manueller Download; verifiziert gegen CapTrader Flex Web Service | Datensouveränität, R3, Grundgesetz 1 |
 | 2.11 | ✅ **`ko-flex-proxy` Cloudflare Worker — Browser-seitiger Flex Pull (CORS-Bridge)** — IBKR setzt keine CORS-Header → direkter Fetch aus `kap.html` schlägt fehl. Lösung: minimaler CF Worker als transparenter Proxy. Architektur: Browser sendet `{token, queryId}` → Worker ruft IBKR SendRequest + GetStatement auf → gibt XML zurück. Token verlässt Browser nur in Richtung eigener Worker-Infrastruktur. Worker-Route: `ko-flex-proxy.ahildebrand.workers.dev`. Token im Browser-`localStorage` (analog ko-sync-Token), kein Server-Logging. `kap.html` erhält „Direkt von CapTrader laden"-Button als Alternative zum Upload. Abhängigkeit: 2.8 (XML-Parser) muss stehen. | Browser-Pull liefert identisches XML wie Upload; Token nie im Klartext geloggt | Datensouveränität, UX: Upload-Schritt entfällt |
 
-| 2.13 | **FIFO-Positions-Tracker (Jahresabgrenzung)** — Matching von SELL+BUY-Paaren über Jahresgrenzen hinweg. Eine Option die am 15.11.2024 verkauft und am 03.01.2025 zurückgekauft wird, darf NICHT im 2024-Report auftauchen (offene Position). Implementierung: `ko-fifo-options.js` — Stack-basiertes FIFO analog zu `aktien_fifo.py`, aber für Options-Legs. Ausgabe: `{closedPositions[], openPositions[]}` je Steuerjahr. **Voraussetzung für Z.21/Z.24-Korrektheit.** | Geschlossene Positionen korrekt abgegrenzt, Gegenprüfung mit PWC 2024 ± 5 EUR | Kern-Rechenwerk, Belegkette-relevant |
+| 2.13 | ~~**FIFO-Positions-Tracker**~~ **ENTFÄLLT** — Steuerrechtliche Klarstellung 08.08.2026: §20 Abs.1 Nr.11 EStG = Cash-Basis, kein FIFO-Matching nötig. Z.21 = SELL-netCash, Z.24 = BUY-netCash. Validiert vs. PWC 2024: Δ=0,01 EUR. Implementiert in ko-flex.js v1.2/v1.3 + kap.html. — Matching von SELL+BUY-Paaren über Jahresgrenzen hinweg. Eine Option die am 15.11.2024 verkauft und am 03.01.2025 zurückgekauft wird, darf NICHT im 2024-Report auftauchen (offene Position). Implementierung: `ko-fifo-options.js` — Stack-basiertes FIFO analog zu `aktien_fifo.py`, aber für Options-Legs. Ausgabe: `{closedPositions[], openPositions[]}` je Steuerjahr. **Voraussetzung für Z.21/Z.24-Korrektheit.** | Geschlossene Positionen korrekt abgegrenzt, Gegenprüfung mit PWC 2024 ± 5 EUR | Kern-Rechenwerk, Belegkette-relevant |
 | 2.14 | **Buchungs-Datums-Filter (Jahresüberschreiter)** — WHT-Stornos und Dividenden-Reversals die als Korrekturbuchung im Folgejahr erscheinen, werden dem Ursprungsjahr zugeordnet oder explizit ausgeschlossen. Erkennungsmuster: negative WHT-Buchung ohne zugehörige Dividende im gleichen Jahr, `description` enthält "REVERSAL" oder "CORRECTION". | Quellensteuer-Summe ± 5 EUR gegen PWC | Filter-Regel |
 | 2.15 | **Gains/Losses-Auftrennung für Z.21/Z.24** — Nicht nur Netto-P&L sondern getrennte Gewinntöpfe (Z.21: income from trading in derivatives) und Verlusttöpfe (Z.24: losses, mit 20k-Cap §20 Abs.6). Basis: abgeschlossene Positionen aus 2.13. Verluste mit `isRestrictedLoss`-Flag wenn Disposal-Proceeds = 0 (wertlose Option = §20 Abs.6 Satz 2). | Z.21 und Z.24 getrennt ausgewiesen, 20k-Cap korrekt angewendet | Steuerrechtlich kritisch (20k-Cap) |
 | 2.12 | **OptionsCoach + OptionsDoktor — KI Options-Coaching** *(SUITE.md Backlog №37)* — Eigenständiges Coaching-Modul auf Basis der Flex-XML-Datenbasis. Zwei Modi: (1) OptionsCoach (prospektiv): Regime-Check, Earnings-Gate, IV-Rank, Delta-Wahl vor Trade-Eröffnung. (2) OptionsDoktor (retrospektiv/laufend): Diagnose abgeschlossener Positionen ("was lief schief?"), Handlungsoptionen bei laufenden Positionen (Rollen/Rückkauf/Hedge), Lernmuster-Engine über 50+ Trades. Datenfluss: Flex-XML → Position-Aggregation (Roll = ein Ereignis) → UIQ-Kontext (Regime/IV-Rank zum Entry) → Claude Strict-Extraction-Analyse → Diagnose + Lernpunkt. Alleinstellungsmerkmal: einzige Kombination aus echten Trade-Daten + Marktbedingungen zum Entry + steuerlicher Einordnung + KI-Coaching im DACH-Raum. Abhängigkeit: 2.9 (ko-journal.js ✅), UIQ IV-Rank (ab 11.08.2026 ✅). **Trigger: nach 01.10.2026** (Track Record reif, Datenbasis vollständig). | Lernmuster-Engine erkennt systematische Fehler über ≥20 Positionen | Grundgesetz 1 (No-Hallucination: nur Fakten aus Flex-XML + UIQ-Daten), 80/20: höchster edukativer Mehrwert |
@@ -113,6 +113,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.5 | 06.08.2026 | Phase 2: 2.8 XML-Migration (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
+| 2.2 | 08.08.2026 | Steuerrechtliche Klarstellung: Z.21/Z.24 Cash-Basis §20 EStG (kein FIFO); ko-flex.js v1.3 + kap.html CDN+Badge; 2.13 ENTFÄLLT |
 | 2.1 | 08.08.2026 | Vollständige Diskrepanz-Analyse ergänzt: D1a Assignment-Prämien, D1b REIT/Teilfills; Fazit: vollständig aus XML lösbar |
 | 2.0 | 08.08.2026 | Dual-Mode-Strategie: Modus A (Cash-Flow/Ergänzung) + Modus B (Eigenberechnung mit Gate-Kriterien) |
 | 1.9 | 08.08.2026 | Validierungsbefund 08.08.2026 dokumentiert (D1 Jahresabgrenzung, D2 Split, D3 Korrekturbuchungen); ROADMAP 2.13–2.15 ergänzt |
@@ -173,6 +174,14 @@ der zugeteilten Aktien und erscheint in Z.20 (Aktiengewinne), NICHT in Z.21.
 Wahrscheinlich AMSC 250117P00031000 (doppelter FIFO-Eintrag wegen Teilfills)
 und Realty Income/O (REIT → KAP-INV Z.8, nicht Z.21).
 Erfordert weiteren Test-Zyklus nach D1a-Fix.
+
+**Steuerrechtliche Klarstellung (08.08.2026, nach Python-Test):**
+§20 Abs.1 Nr.11 EStG: Stillhalterprämie = sofort Z.21 im Jahr der Einnahme (Cash-Basis).
+§20 Abs.2 S.1 Nr.3 EStG: Schließungskosten = Z.24 im Jahr der Zahlung (Cash-Basis).
+→ Kein FIFO-Matching nötig. Z.21 = SELL-netCashEur, Z.24 = BUY-netCashEur.
+→ Validiert vs. PWC 2024: Δ = 0,01 EUR (Rundung).
+→ ROADMAP 2.13 (FIFO-Tracker) entfällt. 2.14/2.15 parken bis Bedarf klar.
+Implementiert: ko-flex.js v1.3 + kap.html (CDN-Hash, Modus-A-Badge).
 
 **Zwischenfazit: Die Lösung ist vollständig aus XML-Daten umsetzbar.**
 BubbleTax macht dasselbe — kein Datenzugriff den wir nicht haben.
