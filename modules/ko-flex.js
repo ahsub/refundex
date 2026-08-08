@@ -951,7 +951,7 @@ export function parseActivityXML(xmlText) {
       cashTotal:     cashEls.length,
       dividendCount: dividends.filter(d => d.activityCode === 'DIV').length,
       frtaxCount:    dividends.filter(d => d.activityCode === 'FRTAX').length,
-      parser:        'parseActivityXML_v1.0',
+      parser:        'parseActivityXML_v1.1',
       parsedAt:      new Date().toISOString(),
     },
   };
@@ -961,8 +961,10 @@ export function parseActivityXML(xmlText) {
 
 /**
  * Aggregiert mehrere Fills (gleiche ibOrderID) zu einem Trade.
- * Summen: qty, proceeds, commission, fifoPnl.
+ * Summen: qty, proceeds, commission, fifoPnl, netCash.
  * Gewichteter Durchschnitt: price.
+ * Hinweis: Bei levelOfDetail=EXECUTION ist fifoPnlRealized immer 0.
+ * Der realisierte P&L ergibt sich aus netCash-Paaren (SELL+BUY pro Symbol).
  */
 function _xmlAggregateOrder(fills) {
   if (!fills || fills.length === 0) return null;
@@ -980,6 +982,7 @@ function _xmlAggregateOrder(fills) {
   let totalProceeds = 0;
   let totalComm    = 0;
   let totalFifoPnl = 0;
+  let totalNetCash = 0;   // netCash = tatsächlicher Cashflow inkl. Kommission
   let weightedPrice = 0;
   let totalQtyAbs  = 0;
   let fxRate       = parseFloat(first.getAttribute('fxRateToBase') || '1') || 1;
@@ -990,11 +993,13 @@ function _xmlAggregateOrder(fills) {
     const proceeds = parseFloat(fill.getAttribute('proceeds')     || '0');
     const comm     = parseFloat(fill.getAttribute('ibCommission') || '0');
     const fifoPnl  = parseFloat(fill.getAttribute('fifoPnlRealized') || '0');
+    const netCash  = parseFloat(fill.getAttribute('netCash')          || '0');
 
     totalQty      += qty;
     totalProceeds += proceeds;
     totalComm     += comm;
     totalFifoPnl  += fifoPnl;
+    totalNetCash  += netCash;
     weightedPrice += Math.abs(qty) * price;
     totalQtyAbs   += Math.abs(qty);
 
@@ -1057,6 +1062,10 @@ function _xmlAggregateOrder(fills) {
     proceedsEur:   round2(totalProceeds * fxRate),
     fifoPnlUsd:    round2(totalFifoPnl),
     fifoPnlEur:    round2(totalFifoPnl * fxRate),
+    // netCash = zuverlässigerer P&L-Indikator bei levelOfDetail=EXECUTION
+    // (fifoPnlRealized ist bei EXECUTION immer 0; P&L steckt im netCash-Paar SELL+BUY)
+    netCashUsd:    round2(totalNetCash),
+    netCashEur:    round2(totalNetCash * fxRate),
     // XML-spezifisch (kein CSV-Äquivalent)
     ibOrderID:   first.getAttribute('ibOrderID')   || '',
     tradeID:     first.getAttribute('tradeID')     || '',
