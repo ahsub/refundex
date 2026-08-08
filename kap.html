@@ -453,7 +453,15 @@
     <!-- CHECKLISTE -->
     <div class="section">
       <div class="section-title">Checkliste für die Steuererklärung</div>
-      <div id="checklist-output"></div>
+      <div id="checklist-output">
+  </div>
+
+  <!-- Kirchensteuer-Ergebnis -->
+  <div id="kist-summary" style="display:none;margin-top:1rem;padding:0.7rem 0.9rem;
+       background:var(--bg3);border-radius:6px;border-left:3px solid var(--accent)">
+  </div>
+
+  <div style="display:none"</div>
     </div>
 
   </div>
@@ -22373,6 +22381,41 @@ function recalculate() {
   const kontoNr = pdfData?.kontoNr || d.kontoNr || '';
   renderKAPForm(kapWerte, year, isJoint, spouse, kontoName, kontoNr, divSource||'~', fxSource||'~', fsa);
   renderChecklist(kapWerte, isJoint, d.kontoName);
+
+  // ── Kirchensteuer-Ergebnisanzeige ──────────────────────────────────────────
+  {
+    const stpfl = round2(kapWerte.z7_div + kapWerte.z14_zinsen
+                       + Math.max(0, kapWerte.z12_optGain + (-kapWerte.z13_optLoss))
+                       + Math.max(0, kapWerte.z8_aktienGain  + (-kapWerte.z9_aktienLoss))
+                       - kapWerte.z17_fsa);
+    const kist = getKiStSummary(Math.max(0, stpfl));
+    const el   = document.getElementById('kist-summary');
+    if (el) {
+      const hasKiSt = kist.i1.kist > 0 || (kist.i2 && kist.i2.kist > 0);
+      if (!hasKiSt) {
+        el.innerHTML = '<div style="font-size:12px;color:var(--muted)">Keine Kirchensteuerpflicht konfiguriert — <a href="#" onclick="document.getElementById('profile-btn').click();return false" style="color:var(--accent)">Profil öffnen</a></div>';
+      } else {
+        const fmtKiSt = v => v > 0 ? fmt(v) : '—';
+        let html = '<div style="font-size:12px;font-weight:600;margin-bottom:0.4rem">Kirchensteuer (Anlage KAP Z. 57)</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;font-size:12px">';
+        html += `<div style="color:var(--muted)">Inhaber 1 (${(kist.profile.inhaber1||{}).name||'I1'}, ${kist.i1.kistSatz}%)</div>`;
+        html += `<div style="text-align:right;font-weight:600">${fmtKiSt(kist.i1.kist)}</div>`;
+        if (kist.i2) {
+          html += `<div style="color:var(--muted)">Inhaber 2 (${(kist.profile.inhaber2||{}).name||'I2'}, ${kist.i2.kistSatz}%)</div>`;
+          html += `<div style="text-align:right;font-weight:600">${fmtKiSt(kist.i2.kist)}</div>`;
+          const gesamt = round2(kist.i1.kist + kist.i2.kist);
+          html += `<div style="color:var(--muted);border-top:1px solid var(--border);padding-top:0.3rem">Gesamt</div>`;
+          html += `<div style="text-align:right;font-weight:700;border-top:1px solid var(--border);padding-top:0.3rem">${fmtKiSt(gesamt)}</div>`;
+        }
+        html += `<div style="color:var(--muted)">Effektiver AbgSt-Satz</div>`;
+        html += `<div style="text-align:right">${kist.i1.effSatz ? (kist.i1.effSatz*100).toFixed(3)+'%' : '25,000%'}</div>`;
+        html += '</div>';
+        html += '<div style="font-size:10px;color:var(--muted);margin-top:0.4rem">Schachtelformel §32d EStG · In ELSTER separat eintragen</div>';
+        el.innerHTML = html;
+      }
+      el.style.display = 'block';
+    }
+  }
 
   // §20 Hinweis
   const hinweis = document.getElementById('para20-hinweis');
