@@ -113,6 +113,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.5 | 06.08.2026 | Phase 2: 2.8 XML-Migration (CSV-Deprecation-Strategie, `ko-flex.js`-Stub dokumentiert, Abhängigkeit für 2.9) + 2.9 Trade-Journal-Modul (Architektur-Entscheidung: Journal in Refundex, nicht UIQ; Spezifikation `docs/DATENMODELL_JOURNAL.md` v1.0); Reihenfolge-Logik 2.8→2.9 ergänzt |
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
+| 2.3 | 09.08.2026 | Gegenprüfung alle 3 Jahre (2023/2024/2025 XML vs. PWC-PDF): 2023 ✅ (0 Trades/0 EUR), 2024 ✅ (Δ=0,01/0,00 EUR), 2025 ✅ (Δ=0,06/0,11 EUR gegen Transaktionsliste). PWC-Summary-Bug 2025 entdeckt: Line 21 fehlt komplett, Line 24 unter falscher Zeile (Line 22). Dual-Mode-Gate bereinigt: FIFO raus, Cash-Basis rein, Gegenprüfungen bestätigt. Beta-Anforderung: PDF-Upload neben XML nötig. Neuer ROADMAP-Punkt Phase F. |
 | 2.2 | 08.08.2026 | Steuerrechtliche Klarstellung: Z.21/Z.24 Cash-Basis §20 EStG (kein FIFO); ko-flex.js v1.3 + kap.html CDN+Badge; 2.13 ENTFÄLLT |
 | 2.1 | 08.08.2026 | Vollständige Diskrepanz-Analyse ergänzt: D1a Assignment-Prämien, D1b REIT/Teilfills; Fazit: vollständig aus XML lösbar |
 | 2.0 | 08.08.2026 | Dual-Mode-Strategie: Modus A (Cash-Flow/Ergänzung) + Modus B (Eigenberechnung mit Gate-Kriterien) |
@@ -197,16 +198,21 @@ Implementierungsaufwand: 3–4 Sessions für Modus-B-Gate.
 | Quellensteuer (Z.41) | 246 EUR | 59 EUR (50%) | D2+D3 |
 | Aktiengewinne (Z.20) | ✅ korrekt | 4.099 EUR | — |
 
-### Lösungsarchitektur (→ ROADMAP 2.13–2.15)
+### Lösungsarchitektur (→ ROADMAP 2.14–2.15)
 
-**Stufe 1 (2.13) — FIFO-Positions-Tracker:** Matching von SELL+BUY-Paaren
-über Jahresgrenzen. Liefert abgeschlossene Positionen mit Jahresabgrenzung.
+~~**Stufe 1 (2.13) — FIFO-Positions-Tracker:**~~ **ENTFÄLLT** — steuerrechtliche
+Klarstellung 08.08.2026: §20 Abs.1 Nr.11 EStG = Cash-Basis, kein FIFO-Matching
+nötig. Validiert gegen PWC 2024 (Δ=0,01 EUR), bestätigt über alle drei Jahre
+(Gegenprüfung 09.08.2026, Details unten).
 
 **Stufe 2 (2.14) — Buchungs-Datums-Filter:** Korrekturbuchungen erkennen
 (negative WHT im Folgejahr, Revenue-Storno), aus dem Abrechnungsjahr ausschließen.
+**Status: weiterhin offen, noch nicht implementiert.**
 
-**Stufe 3 (2.15) — Gains/Losses-Auftrennung:** Nicht nur Netto-P&L, sondern
-getrennte Gewinne (Z.21) und Verluste (Z.24) für die 20k-Cap-Logik.
+**Stufe 3 (2.15) — Gains/Losses-Auftrennung:** Im Kern durch Cash-Basis-Formel
+(Z.21 = SELL-netCash, Z.24 = BUY-netCash) bereits miterledigt — Trennung
+ergibt sich direkt aus der Formel. 20k-Cap-Logik (§20 Abs.6 Satz 5)
+muss noch als Anzeige in kap.html ergänzt werden, wenn Z.24 > 20.000 EUR.
 
 ## Architekturentscheidung 08.08.2026 — Dual-Mode-Strategie
 
@@ -219,7 +225,10 @@ D2 Gemeinschaftskonto-Split, D3 Korrekturbuchungen).
 ### Modus A — Ergänzungs-Modus (sofort nutzbar, immer verfügbar)
 
 XML-Parser liefert **Rohdaten und Plausibilitätsprüfung** neben dem PWC-Report.
-PWC bleibt Goldstandard für die Steuererklärung.
+PWC bleibt Goldstandard für die Steuererklärung — **aber:** Gegenprüfung
+09.08.2026 hat gezeigt, dass PWC selbst Darstellungsfehler enthalten kann
+(s. „PWC-Summary-Bug 2025" unten). Modus A dient damit auch als
+Qualitätskontrolle des PWC-Reports.
 
 Nutzen: Schnelle Jahresübersicht, Plausibilitätsprüfung PWC, Journal-Befüllung,
 QSt-Cockpit, OptionsDoktor-Datenbasis. Keine FIFO-Jahresabgrenzung nötig —
@@ -227,33 +236,112 @@ explizit als "laufende Cash-Flows" deklariert.
 
 **UI-Signal:** Badge "📊 Cash-Flow-Ansicht — für Steuererklärung PWC-Report verwenden"
 
+**Beta-User-Anforderung (ergänzt 09.08.2026):** Nutzer müssen **zwei Dateien**
+hochladen: (1) Flex-XML-Export und (2) PWC German Tax Report als PDF.
+Begründung: Nur so ist die Cross-Validierung beider Quellen möglich, und der
+PWC-Summary-Bug (s. u.) zeigt, dass weder XML allein noch PDF allein ausreicht.
+kap.html benötigt daher einen zweiten Upload-Button für PDF mit automatischem
+Line-21/24-Extraktor (Layout-Text-Parsing aus dem Summary-Block, Dateiformat-
+Erkennung PDF/XML getrennt). Die PDF wird nur clientseitig geparst (kein Upload
+auf Server, Datensouveränität).
+
 ### Modus B — Eigenberechnungs-Modus (Entwicklungsziel, schrittweise)
 
 Refundex berechnet Z.21/Z.24 eigenständig auf PWC-Niveau.
 Freischaltung erst wenn Gegenprüfung ≤ 5 EUR Abweichung über 3 Steuerjahre.
 
-**Gate-Kriterien für Modus-B-Aktivierung:**
+**Gate-Kriterien für Modus-B-Aktivierung (bereinigt 09.08.2026):**
 
 | Kriterium | Schwelle | Status |
 |---|---|---|
-| D1 FIFO-Jahresabgrenzung (2.13) | implementiert + getestet | ⏳ offen |
+| ~~D1 FIFO-Jahresabgrenzung (2.13)~~ | ~~implementiert + getestet~~ | ~~ENTFÄLLT~~ (Cash-Basis, kein FIFO) |
+| Cash-Basis-Formel Z.21/Z.24 | Δ ≤ 1 EUR gegen PWC | ✅ implementiert (ko-flex.js v1.3) |
 | D2 Split korrekt auf Z.21/Z.24 | implementiert | ⏳ offen |
 | D3 Korrekturbuchungen gefiltert (2.14) | implementiert | ⏳ offen |
-| Gegenprüfung 2023 | ≤ 5 EUR Abweichung | ⏳ offen |
-| Gegenprüfung 2024 | ≤ 5 EUR Abweichung | ⏳ offen |
-| Gegenprüfung 2025 | ≤ 5 EUR Abweichung (nach PWC-Eingang) | ⏳ offen |
+| Gegenprüfung 2023 | ≤ 5 EUR Abweichung | ✅ bestätigt (0 Opt-Trades, PWC = 0,00 €) |
+| Gegenprüfung 2024 | ≤ 5 EUR Abweichung | ✅ bestätigt (Z.21 Δ=0,01 €, Z.24 Δ=0,00 €) |
+| Gegenprüfung 2025 | ≤ 5 EUR Abweichung | ✅ bestätigt (Z.21 Δ=0,06 €, Z.24 Δ=0,11 €) — Achtung: PWC-Summary fehlerhaft (s. u.), Validierung gegen Transaktionsliste |
 
 **Disclaimer Modus B (StBerG-konform):**
 "Refundex-Eigenberechnung — nicht geprüft durch Steuerberater.
 Vergleich mit CapTrader-Steuerbescheinigung empfohlen."
 
-### Implementierungsreihenfolge
+### Implementierungsreihenfolge (bereinigt 09.08.2026)
 
 ```
-Phase A (sofort): Modus A explizit deklarieren + UI-Badge
-Phase B (2.13):   ko-fifo-options.js — FIFO-Tracker über Jahresgrenzen
-Phase C (2.14):   Buchungs-Datums-Filter — WHT-Korrekturen erkennen
-Phase D (2.15):   Gains/Losses-Auftrennung Z.21/Z.24
-Phase E:          Gegenprüfung 3 Jahre → Modus-B-Gate
+Phase A (sofort): Modus A explizit deklarieren + UI-Badge            ✅ erledigt
+Phase B (2.13):   ENTFÄLLT — Cash-Basis statt FIFO                   ✅ erledigt
+Phase C (2.14):   Buchungs-Datums-Filter — WHT-Korrekturen           ⏳ offen
+Phase D (2.15):   20k-Cap-Anzeige in kap.html (bei Z.24 > 20k)      ⏳ offen
+Phase E:          Gegenprüfung 3 Jahre → Modus-B-Gate                ✅ bestätigt
+Phase F (neu):    PDF-Upload + Cross-Validierung (s. Beta-Anforderung)  ⏳ offen
 ```
 
+
+## Gegenprüfung 09.08.2026 — XML Cash-Basis vs. PWC alle 3 Steuerjahre
+
+**Methodik:** Cash-Basis-Formel (Z.21 = SELL-netCash × fxRateToBase,
+Z.24 = BUY-netCash × fxRateToBase) aus ko-flex.js v1.3 angewendet auf
+`2023_Complete.xml`, `2024_Complete.xml`, `2025_Complete.xml`. Verglichen gegen
+PWC German Tax Reports (`U12074449.YYYY.PWC_DE.pdf`).
+
+Voraussetzung bestätigt: **Alle Options-Trades in allen drei Jahren sind
+ausschließlich Stillhaltergeschäfte** (SELL mit qty<0 = Short-Open,
+BUY mit qty>0 = Close/Rückkauf). Keine einzige Long-Options-Position
+(BUY+Open) in 2023–2025. Die Cash-Basis-Formel ist damit strukturell
+korrekt für den tatsächlichen Trading-Stil, nicht nur zufällig.
+
+### Ergebnisse
+
+| Jahr | Trades | XML Z.21 (je Inh.) | PWC Line 21 | Δ Z.21 | XML Z.24 (je Inh.) | PWC Line 24 | Δ Z.24 |
+|---|---|---|---|---|---|---|---|
+| 2023 | 0 | 0,00 € | 0,00 € | 0,00 € | 0,00 € | 0,00 € | 0,00 € |
+| 2024 | 109 | 6.093,84 € | 6.093,85 € | **0,01 €** | 1.749,37 € | 1.749,37 € | **0,00 €** |
+| 2025 | 284 | 21.909,53 € | ⚠️ *fehlt* | 0,06 €* | 20.272,54 € | ⚠️ *falsche Zeile* | 0,11 €* |
+
+*\*2025-Deltas gegen Transaktionsliste im PWC-PDF (nicht gegen Summary, s. Bug unten).*
+
+### PWC-Summary-Bug 2025
+
+Der PWC German Tax Report für 2025 (`U12074449.2025.PWC_DE 3.pdf`, 102 Seiten,
+51 Seiten je Inhaber) weist im Summary-Block auf Seite 1 einen **Darstellungsfehler** auf:
+
+1. **Line 21 („income from trading in derivatives") fehlt komplett** — nicht
+   als 0,00 € aufgeführt wie bei echten Nullwerten, sondern die Zeile selbst
+   wird nicht generiert. Die ~21.910 € Prämieneinnahmen (je Inhaber) sind
+   nur in der Transaktionsliste (ca. 2.300 Zeilen, „Sell to Open" / „Buy to Close")
+   weiter hinten im Dokument auffindbar.
+
+2. **Line 22 zeigt 20.273,83 €** als „losses from the disposal of non-share capital"
+   — das ist fast exakt der Rückkaufkosten-Wert (XML: 20.272,54 € je Inhaber,
+   Δ=1,29 €), gehört aber auf **Line 24** („losses from trading in derivatives"),
+   nicht auf Line 22 (die betrifft Nicht-Aktien-Kapitalanlagen, z. B. Anleihen).
+
+**Gegenprüfung:** Manuelle Summierung aller 144 „Sell to Open" + 135 „Buy to Close"
+Zeilen im Transaktionsblock des PDF ergibt:
+
+| | PDF-Transaktionsliste | XML (je Inhaber) | Δ |
+|---|---|---|---|
+| Prämien (Sell to Open) | 21.909,59 € | 21.909,53 € | 0,06 € |
+| Rückkauf (Buy to Close) | 20.272,65 € | 20.272,54 € | 0,11 € |
+
+**→ XML-Berechnung ist korrekt; der Bug liegt im PWC-Report-Generator.**
+
+**Konsequenz für Refundex:**
+- Modus A (Plausibilitätsprüfung) hat damit seinen Wert konkret bewiesen:
+  ein echter PWC-Fehler wäre ohne XML-Gegenprüfung unentdeckt geblieben.
+- **Beta-User müssen neben der Flex-XML auch den PWC German Tax Report als
+  PDF hochladen.** kap.html benötigt einen zweiten Upload-Button mit
+  automatischem Line-21/24-Extraktor (clientseitiges PDF-Text-Parsing).
+  Nur so kann die Cross-Validierung „XML gegen PDF" stattfinden, die bei
+  diesem Bug-Typ den Nutzer vor falschen Steuererklärungswerten schützt.
+  Die PDF wird nur clientseitig geparst (Datensouveränität, kein Server-Upload).
+
+### Performance-Auffälligkeit 2025
+
+Rückkauf/Prämien-Verhältnis 2025: **92,5 %** (40.545/43.819 EUR Gesamtkonto)
+vs. 2024: **28,7 %** (3.499/12.188 EUR). D. h. 2025 wurden verhältnismäßig
+deutlich mehr Positionen mit Verlust zurückgekauft — Axel-Einordnung:
+„zu viele schlechte Options-Trades, das war der Beweggrund für dieses Projekt."
+Dieser Befund ist ein konkreter Datenpunkt für die OptionsDoktor-Lernmuster-
+Engine (ROADMAP 2.12 / SUITE.md №37, Trigger 01.10.2026).
