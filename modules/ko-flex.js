@@ -912,18 +912,53 @@ export function parseActivityXML(xmlText) {
   // ── 5. CashTransactions parsen (Dividenden + Quellensteuer) ───
   // Nur BaseCurrency-Zeilen (currency = Basiswährung des Kontos, i.d.R. EUR)
   // Doppelzeilen: einmal USD (currency), einmal EUR (BaseCurrency) → nur EUR
+  //
+  // BUGFIX 09.08.2026: Filter nutzte 'activityCode', das im echten Flex-XML-
+  // Schema für CashTransaction NICHT existiert (verifiziert: 0 von 250
+  // Elementen in Axels 2023-2025-Daten haben dieses Attribut — echtes Schema
+  // nutzt stattdessen 'type' mit Werten wie "Dividends"/"Withholding Tax").
+  // Folge: `dividends` war bei echten Daten IMMER leer — betraf die gesamte
+  // Säule-2-Grundlage (QSt-Cockpit, Dividenden/WHT-Rückholung), nicht nur 2.14.
   const cashEls = [...doc.querySelectorAll('CashTransactions > CashTransaction')];
-  const dividends = cashEls
+  const TYPE_TO_CODE = {
+    'Dividends':                     'DIV',
+    'Payment In Lieu Of Dividends':  'DIV',   // Ersatzdividende (Wertpapierleihe), steuerlich wie DIV behandelt
+    'Withholding Tax':               'FRTAX',
+    'Other Fees':                    'OFEE',
+  };
+  const dividendsRaw = cashEls
     .filter(el => {
-      const code = el.getAttribute('activityCode') || '';
+      const type = el.getAttribute('type') || '';
       const level = el.getAttribute('levelOfDetail') || '';
-      // DIV = Dividende, FRTAX = Foreign Tax (Quellensteuer)
-      // OFEE = ADR-Fee (inkl. für Vollständigkeit)
-      return (code === 'DIV' || code === 'FRTAX' || code === 'OFEE') &&
-             level === 'SUMMARY';  // BaseCurrency-Zusammenfassung
+      return TYPE_TO_CODE[type] && level === 'SUMMARY';
     })
     .map(el => _xmlConvertCashTransaction(el))
     .filter(Boolean);
+
+  // ── 2.14 Buchungs-Datums-Filter (Korrekturbuchungen) ─────────────────────
+  // Erkennungsmuster: (a) description enthält REVERSAL/CORRECTION/STORNO/
+  // ADJUSTMENT, (b) WHT-Buchung ohne jegliche Dividende desselben Symbols
+  // im selben Steuerjahr (Indiz für jahresübergreifende Korrektur).
+  // Defensiv gebaut, Stand 09.08.2026: 0 Treffer in Axels 2023-2025-Daten
+  // (systematisch geprüft) — greift also aktuell bei keiner Buchung, bleibt
+  // aber als Sicherheitsnetz für künftige/andere Konten aktiv.
+  const REVERSAL_PATTERN = /REVERSAL|CORRECTION|STORNO|ADJUSTMENT/i;
+  const divSymbolYears = new Set(
+    dividendsRaw
+      .filter(d => d.activityCode === 'DIV' && d.symbol)
+      .map(d => `${d.symbol}:${(d.date || '').slice(0, 4)}`)
+  );
+  const correctionBookings = [];
+  const dividends = dividendsRaw.filter(d => {
+    const isReversalText = REVERSAL_PATTERN.test(d.description);
+    const isOrphanWht = d.activityCode === 'FRTAX' && d.symbol &&
+      !divSymbolYears.has(`${d.symbol}:${(d.date || '').slice(0, 4)}`);
+    if (isReversalText || isOrphanWht) {
+      correctionBookings.push({ ...d, reason: isReversalText ? 'text-pattern' : 'orphan-wht' });
+      return false; // aus dem regulären Steuerjahr-Ergebnis ausgeschlossen
+    }
+    return true;
+  });
 
   // ── 6. OpenPositions parsen ───────────────────────────────────
   const posEls = [...doc.querySelectorAll('OpenPositions > OpenPosition')];
@@ -1005,7 +1040,8 @@ export function parseActivityXML(xmlText) {
     yearlyResults,
     trades:       allTrades,
     eaeTrades,          // Separat für Journal/Options-Dokumentation
-    dividends,          // Dividenden + QSt für Säule 2
+    dividends,          // Dividenden + QSt für Säule 2 (bereits um Korrekturbuchungen bereinigt)
+    correctionBookings, // 2.14: ausgeschlossene Korrekturbuchungen (Transparenz/Audit-Trail)
     positions,
     fxRateMap:    {},   // XML hat keine separate RATE-Sektion (Wechselkurse je Trade)
     fifoLots:     {},   // ClosedLots nicht in CapTrader-XML → FIFO via Trade-Paare
