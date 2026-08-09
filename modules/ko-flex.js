@@ -932,7 +932,7 @@ export function parseActivityXML(xmlText) {
       const level = el.getAttribute('levelOfDetail') || '';
       return TYPE_TO_CODE[type] && level === 'SUMMARY';
     })
-    .map(el => _xmlConvertCashTransaction(el))
+    .map(el => _xmlConvertCashTransaction(el, TYPE_TO_CODE[el.getAttribute('type') || '']))
     .filter(Boolean);
 
   // ── 2.14 Buchungs-Datums-Filter (Korrekturbuchungen) ─────────────────────
@@ -1020,6 +1020,16 @@ export function parseActivityXML(xmlText) {
       .filter(t => (t.netCashEur ?? 0) < 0)
       .reduce((s, t) => s + (t.netCashEur ?? 0), 0);
 
+    // Punkt A (09.08.2026): Dividenden- und Zins-Quellensteuer getrennt.
+    // Nur divWhtEur ist für Z.41 (anrechenbare ausländische QSt) relevant —
+    // interestWhtEur ist inländische Zins-Abzugssteuer, gehört nicht dorthin.
+    const divWhtEur = dividends
+      .filter(d => d.isDividendWht && (d.date || '').startsWith(yr))
+      .reduce((s, d) => s + Math.abs(d.amountEur), 0);
+    const interestWhtEur = dividends
+      .filter(d => d.isInterestWht && (d.date || '').startsWith(yr))
+      .reduce((s, d) => s + Math.abs(d.amountEur), 0);
+
     yearlyResults[yr] = {
       optGainEur:  round2(optGainEur),
       optLossEur:  round2(optLossEur),
@@ -1028,6 +1038,8 @@ export function parseActivityXML(xmlText) {
       // Dividenden aus summary (bereits korrekt berechnet)
       divCount:    dividends.filter(d => d.activityCode === 'DIV').length,
       whtCount:    dividends.filter(d => d.activityCode === 'FRTAX').length,
+      divWhtEur:      round2(divWhtEur),       // NEU: Z.41-relevant (Punkt A)
+      interestWhtEur: round2(interestWhtEur),  // NEU: NICHT Z.41-relevant (Punkt A)
     };
   }
 
@@ -1241,25 +1253,39 @@ function _xmlConvertEAE(el) {
 /**
  * Konvertiert eine CashTransaction zu einem Dividenden/QSt-Objekt.
  */
-function _xmlConvertCashTransaction(el) {
+function _xmlConvertCashTransaction(el, mappedCode) {
   const amount   = parseFloat(el.getAttribute('amount') || '0');
   const fxRate   = parseFloat(el.getAttribute('fxRateToBase') || '1') || 1;
-  const code     = el.getAttribute('activityCode') || '';
+  // BUGFIX-NACHTRAG 09.08.2026: `mappedCode` kommt jetzt vom Aufrufer (aus
+  // TYPE_TO_CODE via 'type'-Attribut) statt hier erneut das nicht-existente
+  // `activityCode`-Attribut zu lesen — sonst wäre trotz korrigiertem äußeren
+  // Filter jedes zurückgegebene Objekt weiterhin mit code='' unbrauchbar
+  // gewesen (activityCode/isDividend/isWithholding immer falsch/leer).
+  const code     = mappedCode || '';
   const symbol   = el.getAttribute('symbol') || '';
   const currency = el.getAttribute('currency') || '';
+  const type     = el.getAttribute('type') || '';
 
   // Betrag: DIV positiv (Zufluss), FRTAX negativ (Abzug)
   const amountEur = round2(amount * fxRate);
 
+  // Punkt A (09.08.2026): Zins-Quellensteuer ("WITHHOLDING @ ... CREDIT INT")
+  // vs. Dividenden-Quellensteuer trennen — nur Letztere ist für Z.41
+  // (anrechenbare ausländische Quellensteuer, Säule 2/QSt-Cockpit) relevant.
+  // Unterscheidungsmerkmal: Dividenden-WHT hat immer ein Symbol, Zins-WHT nie
+  // (verifiziert gegen Axels 2023-2025-Daten: 100% trennscharf).
+  const isInterestWht = code === 'FRTAX' && !symbol;
+
   return {
     activityCode:  code,      // 'DIV' | 'FRTAX' | 'OFEE'
+    type,                     // Original-Typ-String, für Debug/Audit
     symbol,
     currency,
     amount:        round2(amount),
     amountEur,
     fxRateToBase:  fxRate,
-    date:          el.getAttribute('date') || el.getAttribute('reportDate') || '',
-    description:   el.getAttribute('activityDescription') || '',
+    date:          el.getAttribute('date') || el.getAttribute('reportDate') || el.getAttribute('dateTime') || '',
+    description:   el.getAttribute('activityDescription') || el.getAttribute('description') || '',
     isin:          el.getAttribute('isin') || '',
     // Für QSt-Cockpit (Säule 2): Quellenland aus FRTAX-Beschreibung
     // Das issuerCountryCode-Feld fehlt direkt — muss über SecuritiesInfo gejoint werden
@@ -1268,6 +1294,8 @@ function _xmlConvertCashTransaction(el) {
     isDividend:    code === 'DIV',
     isWithholding: code === 'FRTAX',
     isAdrFee:      code === 'OFEE',
+    isInterestWht,                              // NEU (Punkt A)
+    isDividendWht: code === 'FRTAX' && !isInterestWht,  // NEU (Punkt A) — das ist die Z.41-relevante Teilmenge
   };
 }
 
