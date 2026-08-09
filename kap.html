@@ -154,6 +154,13 @@
     .kap-row{grid-template-columns:60px 1fr 120px;}
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window['pdfjsLib']) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 </head>
 <body>
 <div id="engine-import-section" style="background:#fffbeb;border:1.5px solid #d97706;border-radius:5px;padding:12px 16px;margin:12px 0;font-size:9.5pt">
@@ -219,12 +226,18 @@
 <main class="main">
 
   <!-- UPLOAD -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;max-width:600px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;max-width:900px">
     <div class="upload-zone" onclick="document.getElementById('file-flex').click()" title="Flex Query CSV">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">📈</div>
       <div class="upload-title" style="font-size:13px">Flex Query <span style="font-size:10px;background:#0d2a1a;padding:1px 5px;border-radius:3px;color:#22c55e">.CSV</span></div>
       <div class="upload-hint">IBKR · Account Info + Trades + Cash</div>
       <div id="status-flex" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Nicht geladen</div>
+    </div>
+    <div class="upload-zone" onclick="document.getElementById('file-pdf').click()" title="PWC German Tax Report (Plausibilitätsprüfung)">
+      <div style="font-size:1.5rem;margin-bottom:0.4rem">📄</div>
+      <div class="upload-title" style="font-size:13px">PWC-Steuerreport <span style="font-size:10px;background:#3a1a4a;padding:1px 5px;border-radius:3px;color:#c084fc">.PDF</span></div>
+      <div class="upload-hint">Cross-Check gegen Flex-XML · empfohlen</div>
+      <div id="status-pdf" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional, aber empfohlen</div>
     </div>
     <div class="upload-zone" onclick="document.getElementById('file-fx').click()" title="FX-Einkünfte CSV (optional)">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">💱</div>
@@ -21686,8 +21699,18 @@ function parseFXCSV(text) {
 }
 
 // ============================================================
-// PWC PDF PARSER — Informativer Steuerbericht (Deutsch)
-// Verwendet PDF.js (Mozilla) direkt im Browser
+// PWC PDF PARSER — Informativer Steuerbericht (CapTrader/IBKR)
+// Deterministisch: PDF.js-Textextraktion + Regex, KEIN API-Key,
+// KEIN Datenversand an Dritte — läuft komplett im Browser.
+//
+// Ersetzt 09.08.2026 die vorherige Claude-API-Variante:
+// (a) sendete die volle Steuer-PDF extern, erforderte eigenen
+//     API-Key pro Beta-User; (b) fehlte die in ROADMAP.md
+//     vorgeschriebene "zeilenweise Nutzer-Bestätigung" vor
+//     Übernahme in die Engine (Nicht-Ziel 4); (c) extrahierte
+//     Line 21/24 gar nicht — genau die Zeilen mit dem am
+//     09.08.2026 gefundenen PWC-Summary-Bug (s. ROADMAP.md,
+//     Abschnitt "PWC-Summary-Bug 2025").
 // ============================================================
 function loadPWCpdf(event) {
   const file = event.target.files[0];
@@ -21701,16 +21724,9 @@ function loadPWCpdf(event) {
     try {
       statusEl.textContent = '⏳ PDF wird analysiert…';
       const data = await parsePWCpdf(e.target.result);
-      pdfData = data;
-      if (data.year) document.getElementById('tax-year').value = data.year;
-      // Depot-Nr. wird in recalculate() aus pdfData geholt
-      statusEl.textContent = `✅ ${file.name} · Exakt`;
-      statusEl.style.color = 'var(--green)';
-      // Execute-Bar nur anzeigen wenn noch kein rawData vorhanden
-      if (!rawData) {
-        const eb = document.getElementById('execute-bar'); if(eb) { eb.style.display='flex'; eb.style.alignItems='center'; eb.style.gap='12px'; }
-      }
-      recalculate();
+      statusEl.textContent = `👁 ${file.name} · Prüfung ausstehend`;
+      statusEl.style.color = 'var(--amber)';
+      showPdfConfirmDialog(data, file.name, statusEl);
     } catch(err) {
       console.error('PDF Parse Error:', err);
       statusEl.textContent = `❌ ${err.message || 'PDF-Fehler — Browser-Konsole prüfen'}`;
@@ -21720,99 +21736,216 @@ function loadPWCpdf(event) {
   reader.readAsArrayBuffer(file);
 }
 
+// ── Zeilen aus PDF.js-Textfragmenten rekonstruieren ───────────────────────
+// pdf.js liefert Textfragmente ohne Zeilenstruktur. Gruppierung per
+// gleitendem Nachbarschaftsfenster (nicht fixe Rundungs-Buckets!) — bei
+// echten PWC-PDFs getestet: fixe Buckets zerreißen gelegentlich Label und
+// Wert derselben Zeile, wenn beide knapp auf einer Bucket-Grenze liegen
+// (gefunden 09.08.2026: "Line 24"-Label und sein Wert lagen 3px auseinander,
+// rundeten in unterschiedliche Buckets → Wert fälschlich als "fehlend"
+// erkannt → unnötiger Fallback). Laufender Mittelwert der Gruppe verhindert das.
+async function extractPdfLines(pdf) {
+  const allLines = [];
+  const TOL = 2.5;
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items
+      .map(it => ({ x: it.transform[4], y: it.transform[5], str: it.str }))
+      .filter(it => it.str.trim())
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+
+    let current = [];
+    let refY = null;
+    const flush = () => {
+      if (!current.length) return;
+      current.sort((a, b) => a.x - b.x);
+      const line = current.map(f => f.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (line) allLines.push(line);
+      current = [];
+    };
+    for (const it of items) {
+      if (refY === null || Math.abs(it.y - refY) <= TOL) {
+        current.push(it);
+        refY = current.reduce((s, c) => s + c.y, 0) / current.length;
+      } else {
+        flush();
+        current = [it];
+        refY = it.y;
+      }
+    }
+    flush();
+  }
+  return allLines;
+}
+
+// ── Einzelne "Line NN ... 1.234,56" Zeile parsen ──────────────────────────
+function parseLineValue(lines, lineNo) {
+  const re = new RegExp(`^Line\\s+${lineNo}\\b(.*)$`);
+  for (const l of lines) {
+    const m = l.match(re);
+    if (!m) continue;
+    // Zeilen zu "Investment Tax Act" (§56 EStG) NICHT verwechseln mit
+    // den Summary-Zeilen 20-25 (unterschiedlicher Kontext, gleiche Nummer)
+    if (/Investment Tax Act|grandfathered/i.test(m[1])) continue;
+    const numMatch = m[1].match(/(-?[\d.,]+\.\d{2})\s*$/);
+    if (numMatch) return parseFloat(numMatch[1].replace(/,/g, ''));
+  }
+  return null; // explizit unterscheidbar von 0,00 (gefunden) vs. fehlend
+}
+
+// ── Fallback bei fehlender Line 21/24: Transaktionsliste summieren ────────
+// Nur der ERSTE "Transaction and Capital Changes"-Block wird verwendet,
+// da das PDF (Gemeinschaftskonto, 50/50-Split) zwei identische Kopien
+// enthält — sonst Doppelzählung (Gegenprüfung 09.08.2026).
+function fallbackFromTransactionList(lines) {
+  const startIdx = lines.findIndex(l => l.trim() === 'Transaction and Capital Changes');
+  if (startIdx < 0) return null;
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (lines[i].trim() === 'Transaction and Capital Changes') { endIdx = i; break; }
+  }
+  const block = lines.slice(startIdx, endIdx);
+  let sellOpen = 0, buyClose = 0, nSell = 0, nBuy = 0;
+  for (const l of block) {
+    if (!/Sell to Open|Buy to Close/.test(l)) continue;
+    const nums = [...l.matchAll(/\(?-?[\d,]+\.\d{2}\)?/g)].map(m => m[0]);
+    if (nums.length < 2) continue;
+    const raw = nums[nums.length - 2]; // vorletzte Zahl = Cost/Proceeds(EUR)
+    const neg = raw.startsWith('(');
+    const val = parseFloat(raw.replace(/[(),]/g, '').replace(/,/g, '')) * (neg ? -1 : 1);
+    if (/Sell to Open/.test(l)) { sellOpen += val; nSell++; }
+    else { buyClose += val; nBuy++; }
+  }
+  if (nSell === 0 && nBuy === 0) return null;
+  return { gains: Math.abs(sellOpen), losses: Math.abs(buyClose), nSell, nBuy };
+}
+
 async function parsePWCpdf(arrayBuffer) {
-  // PDF via Claude API analysieren - zuverlässiger als PDF.js im Browser
-  const apiKey = window._kapApiKey
-    || sessionStorage.getItem('refundex_api_key')
-    || document.getElementById('kap-api-key')?.value
-    || prompt('Anthropic API-Key für PDF-Analyse (sk-ant-...):', '');
+  if (!window.pdfjsLib) throw new Error('PDF.js nicht geladen — bitte Seite neu laden.');
 
-  if (!apiKey || !apiKey.startsWith('sk-ant-')) {
-    throw new Error('Kein gültiger API-Key. Bitte oben eingeben.');
-  }
-  window._kapApiKey = apiKey;
-  try { sessionStorage.setItem('refundex_api_key', apiKey); } catch(e) {}
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const lines = await extractPdfLines(pdf);
+  const warnings = [];
 
-  // ArrayBuffer → base64
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
-  }
-  const b64 = btoa(binary);
+  // Metadaten
+  const nameLine = lines.find(l => l.startsWith('Name '));
+  const kontoName = nameLine ? nameLine.replace(/^Name\s+/, '').trim() : '';
+  const kontoLine = lines.find(l => /^Konto-ID\s+/.test(l));
+  const kontoNr = kontoLine ? kontoLine.replace(/^Konto-ID\s+/, '').trim() : '';
+  const yearMatch = lines.join(' ').match(/(\d{4})\s*Period/) ||
+                     lines.join(' ').match(/January\s+(\d{4})\s*-\s*31\s*December\s*\1/);
+  const year = yearMatch ? yearMatch[1] : '';
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      system: `Du analysierst einen CapTrader/IBKR "German Tax Report" PDF.
-Antworte NUR mit einem JSON-Objekt, kein Text davor oder danach, keine Backticks.
+  // Summary-Zeilen 18-25
+  const val = n => parseLineValue(lines, n);
+  let line18 = val(18) ?? 0;
+  let line19 = val(19) ?? 0;
+  let line20 = val(20) ?? 0;
+  let line21 = val(21);   // kann null sein → Bug-Fall
+  let line22 = val(22) ?? 0;
+  let line23 = val(23) ?? 0;
+  let line24 = val(24);   // kann null sein → Bug-Fall
+  let line25 = val(25) ?? 0;
+  const line7 = val(7) ?? 0;
 
-REGELN:
-- Erfinde KEINE Werte. Wenn nicht gefunden: 0.
-- Alle Beträge in EUR (Spalte "Gross (EUR)" oder "(EUR)").
-- Negative Verluste als negative Zahlen.
-
-JSON-Format:
-{
-  "kontoName": "Name des Kontoinhabers exakt wie im PDF",
-  "kontoNr": "Konto-ID z.B. U1234567",
-  "year": "Steuerjahr z.B. 2025",
-  "line18": Zeile 18 German capital income (Zinsen EUR),
-  "line19": Zeile 19 Foreign capital income (Dividenden EUR),
-  "line22": Zeile 22 losses from disposal of non-share capital (positiver Wert),
-  "line23": Zeile 23 losses from sale of shares (positiver Wert),
-  "creditableWht": Creditable Tax EUR aus "Total foreign-registered assets",
-  "whtTotal": Tax Withheld EUR aus "Total foreign-registered assets",
-  "divBrutto": Gross EUR aus "Total foreign-registered assets",
-  "optGain": Summe Gains aus "Disposals of foreign non-share assets" Totals-Zeile,
-  "optLoss": Summe Losses aus "Disposals of foreign non-share assets" Totals-Zeile (negativ),
-  "zinsenEur": Gross EUR aus "Total German-registered assets"
-}`,
-      messages: [{
-        role: 'user',
-        content: [{
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: b64 }
-        }, {
-          type: 'text',
-          text: 'Extrahiere alle Steuerwerte aus diesem CapTrader German Tax Report.'
-        }]
-      }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `API Fehler ${response.status}`);
+  // ── Bug-Erkennung: Line 21/24 fehlen im Summary (PWC-Report-Fehler,
+  //    gefunden Gegenprüfung 09.08.2026, 2025er Report) ─────────────
+  let usedFallback = false;
+  if (line21 === null || line24 === null) {
+    const fb = fallbackFromTransactionList(lines);
+    if (fb) {
+      usedFallback = true;
+      if (line21 === null) {
+        line21 = fb.gains;
+        warnings.push(`Line 21 fehlte im PDF-Summary (bekannter PWC-Report-Fehler) — ` +
+          `aus Transaktionsliste rekonstruiert (${fb.nSell} "Sell to Open"-Buchungen, ${fb.gains.toFixed(2)} €).`);
+      }
+      if (line24 === null) {
+        line24 = fb.losses;
+        warnings.push(`Line 24 fehlte im PDF-Summary (bekannter PWC-Report-Fehler) — ` +
+          `aus Transaktionsliste rekonstruiert (${fb.nBuy} "Buy to Close"-Buchungen, ${fb.losses.toFixed(2)} €). ` +
+          `Hinweis: Line 22 zeigte diesen Wert evtl. unter falscher Bezeichnung an — bitte gegen PDF prüfen.`);
+      }
+    } else {
+      line21 = line21 ?? 0;
+      line24 = line24 ?? 0;
+      warnings.push('Line 21/24 fehlten im PDF-Summary und keine Transaktionsliste gefunden — ' +
+        'Werte auf 0 gesetzt. Bitte manuell im PDF prüfen.');
+    }
   }
 
-  const data = await response.json();
-  const text = data.content?.find(c => c.type === 'text')?.text || '';
+  if (!kontoName) warnings.push('Kontoinhaber-Name nicht gefunden — bitte prüfen, ob es sich um einen PWC German Tax Report handelt.');
+  if (!year) warnings.push('Steuerjahr nicht automatisch erkannt — bitte manuell eintragen.');
 
-  // JSON extrahieren - auch wenn in Backticks
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Kein JSON in API-Antwort: ' + text.slice(0, 100));
-
-  const result = JSON.parse(jsonMatch[0]);
-
-  // Defaults für fehlende Felder
-  const defaults = {
-    kontoName:'', kontoNr:'', year:'',
-    line7:0, line18:0, line19:0, line22:0, line23:0,
-    creditableWht:0, whtTotal:0, divBrutto:0,
-    optGain:0, optLoss:0, zinsenEur:0,
-    source: 'pwc_pdf_claude',
+  return {
+    kontoName, kontoNr, year,
+    line7, line18, line19, line20, line21, line22, line23, line24, line25,
+    optGain: line21,
+    optLoss: -Math.abs(line24),
+    zinsenEur: line18,
+    divBrutto: line19,
+    warnings,
+    usedFallback,
+    source: 'pwc_pdf_deterministic',
   };
-  return { ...defaults, ...result };
+}
+
+// ── Bestätigungs-Stufe vor Übernahme in die Engine ─────────────────────────
+// Pflicht laut ROADMAP.md Nicht-Ziel 4: "zeilenweise Nutzer-Bestätigung"
+// vor jeder KI-/Extraktions-gestützten Übernahme in die Berechnung.
+function showPdfConfirmDialog(data, fileName, statusEl) {
+  const rows = [
+    ['Kontoinhaber', data.kontoName || '—'],
+    ['Konto-ID', data.kontoNr || '—'],
+    ['Steuerjahr', data.year || '—'],
+    ['Line 18 (German capital income)', data.line18.toFixed(2) + ' €'],
+    ['Line 19 (Foreign capital income)', data.line19.toFixed(2) + ' €'],
+    ['Line 20 (Aktiengewinne)', data.line20.toFixed(2) + ' €'],
+    ['Line 21 (Gewinne Termingeschäfte)' + (data.usedFallback ? ' ⚠️' : ''), data.line21.toFixed(2) + ' €'],
+    ['Line 22 (Verluste sonst. Kapitalanlagen)', data.line22.toFixed(2) + ' €'],
+    ['Line 24 (Verluste Termingeschäfte)' + (data.usedFallback ? ' ⚠️' : ''), data.line24.toFixed(2) + ' €'],
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="width:min(560px,92vw);max-height:85vh;overflow-y:auto;background:var(--bg2,#1a1a2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem">
+      <h3 style="margin:0 0 0.75rem 0;font-size:15px">📄 PDF-Werte prüfen: ${fileName}</h3>
+      <p style="font-size:12px;color:var(--muted,#888);margin:0 0 1rem 0">
+        Deterministisch aus dem PDF-Text extrahiert (kein API-Aufruf, keine KI-Interpretation).
+        Bitte gegen das Original-PDF prüfen, bevor die Werte übernommen werden.
+      </p>
+      ${data.warnings.length ? `<div style="background:#3a2a10;border:1px solid #8a6a20;border-radius:6px;padding:0.6rem;margin-bottom:1rem;font-size:11.5px">
+        ${data.warnings.map(w => `⚠️ ${w}`).join('<br><br>')}
+      </div>` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:1.25rem">
+        ${rows.map(([k,v]) => `<tr><td style="padding:4px 0;color:var(--muted,#888)">${k}</td><td style="padding:4px 0;text-align:right;font-variant-numeric:tabular-nums">${v}</td></tr>`).join('')}
+      </table>
+      <div style="display:flex;gap:0.6rem;justify-content:flex-end">
+        <button id="pdf-confirm-cancel" style="padding:6px 14px;background:transparent;border:1px solid var(--border,#333);border-radius:6px;color:inherit;cursor:pointer;font-size:12.5px">Abbrechen</button>
+        <button id="pdf-confirm-ok" style="padding:6px 14px;background:var(--accent,#4a7fff);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12.5px">✅ Werte übernehmen</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#pdf-confirm-cancel').onclick = () => {
+    overlay.remove();
+    statusEl.textContent = '❌ Abgebrochen — Werte nicht übernommen';
+    statusEl.style.color = 'var(--red)';
+  };
+  overlay.querySelector('#pdf-confirm-ok').onclick = () => {
+    overlay.remove();
+    pdfData = data;
+    if (data.year) document.getElementById('tax-year').value = data.year;
+    statusEl.textContent = `✅ ${fileName} · bestätigt`;
+    statusEl.style.color = 'var(--green)';
+    if (!rawData) {
+      const eb = document.getElementById('execute-bar');
+      if (eb) { eb.style.display = 'flex'; eb.style.alignItems = 'center'; eb.style.gap = '12px'; }
+    }
+    recalculate();
+  };
 }
 
 
