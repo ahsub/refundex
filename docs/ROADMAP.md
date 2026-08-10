@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 2.7
+**Version:** 2.8
 **Stand:** 10.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -114,6 +114,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
 | 2.3 | 09.08.2026 | Gegenprüfung alle 3 Jahre (2023/2024/2025 XML vs. PWC-PDF): 2023 ✅ (0 Trades/0 EUR), 2024 ✅ (Δ=0,01/0,00 EUR), 2025 ✅ (Δ=0,06/0,11 EUR gegen Transaktionsliste). PWC-Summary-Bug 2025 entdeckt: Line 21 fehlt komplett, Line 24 unter falscher Zeile (Line 22). Dual-Mode-Gate bereinigt: FIFO raus, Cash-Basis rein, Gegenprüfungen bestätigt. Beta-Anforderung: PDF-Upload neben XML nötig. Neuer ROADMAP-Punkt Phase F. |
+| 2.8 | 10.08.2026 | **✅ 2.17 GESCHLOSSEN.** Alle 4 Klärungsschritte durchlaufen: Diskrepanz aufgeklärt (DOCX-Metadaten-Zeitstempel → falscher Vergleichswert, war 2024er- statt 2025er-Daten), Methodik geklärt (netCashEur fehlerhaft, FifoPnlRealized unbrauchbar → FIFO-Nachrechnung via ko-tradedetail.js), PWC-Gegenprüfung mit Axels echten 2023-2025-Reports (2023/2025 exakt, 2024 Δ=0,03%), Fix implementiert (`updateAktienGainLossFIFO`, Commits `913a4332`/`d9ce69a8`/`8664f95b`). Nebenfund: echter Leerverkauf (CVS 13.05.2024) wurde als Datenlücke fehlinterpretiert — Aktien-FIFO auf zustandsbasierte Long/Short-Erkennung generalisiert (analog Options-Logik), verbessert 2024-Δ von 73,69€ auf 2,33€. Kein weiterer Handlungsbedarf. |
 | 2.7 | 10.08.2026 | 2.17 Governance geklärt: als Bugfix eingestuft (jederzeit erlaubt, keine §4-Ausnahme nötig). Klärungsplan vereinbart (4 Schritte: Diskrepanz aufklären → Methodik prüfen → PWC-Gegenprüfung → Fix). Axel prüft eigenständig Herkunft/Datenstand des ursprünglichen DOCX. |
 | 2.6 | 10.08.2026 | **🔴 KRITISCHER OFFENER BEFUND (Punkt 2.17):** Z.8/Z.9-Formel (Aktienveräußerungsgewinne/-verluste, `ko-flex.js` Zeile ~1016 `stkGainEur`/`stkLossEur`) nutzt Vorzeichen von `netCashEur` — bei Optionen (Z.21/Z.24) korrekt (Cash-Basis-Prinzip, gegen PWC validiert), bei Aktien aber konzeptionell fragwürdig: ein Aktienkauf hat negativen Cashflow und würde fälschlich als "Verlust" gezählt, obwohl ein Kauf steuerlich nie ein Verlust ist (Gewinn/Verlust entsteht erst beim Verkauf). Gegen Axels echte 2025-Daten verifiziert: alle 46 Aktien-Trades 2025 sind Käufe (0 Verkäufe) — würden nach aktueller Formel alle als Verlust gezählt. Eigene Nachrechnung (-40.057,62 €) stimmt NICHT mit dem von Axel hochgeladenen DOCX überein (-68.868,46 € bei 50%-Anteil) — Diskrepanz ungeklärt, evtl. anderer Datenstand/Zwischenversion. **Anders als Z.21/Z.24 wurde Z.8/Z.9 nie gegen einen PWC-Report validiert.** Axel-Entscheidung 10.08.2026: als eigenständiger, priorisierter Punkt behandeln, NICHT im laufenden Trade-Detail-Report-Sprint nebenbei fixen. **Bis zur Klärung: aktuelle Z.8/Z.9-Werte vor Abgabe manuell gegen die offizielle CapTrader-Jahressteuerbescheinigung prüfen.** Nebenbefund: `_xmlConvertEAE` STK-Assignment setzte bei JEDEM Assignment qty positiv/BUY (falsch bei Call-Assignment, Aktien fließen ab) — gefixt (Commit `1e4dc47d`), betrifft aber laut Datenlage nicht Axels 2025-Konto (0 Call-Assignments dort). Trade-Detail-Report (2.16) selbst: Options-Engine grundlegend überarbeitet (zustandsbasierte Open/Close-Erkennung statt unzuverlässigem `openCloseIndicator`-Feld, s. `ko-tradedetail.js` v1.1.0/Commit `8f85bed5`), gegen echte Daten validiert (Summen matchen SWOT-Referenzkennzahl). |
 | 2.5 | 10.08.2026 | **SUITE.md-Ausnahme (Axel-Entscheidung, bewusst):** Maintenance-Mode-Regel (§4 SUITE.md, nur Bugfixes/<1h) für dieses eine Feature durchbrochen. Kontext: Live-Browser-Test kap.html (erstmals seit PDF-Upload-Bau) deckte zwei blockierende SyntaxErrors auf (siehe kap.html-Commits `2c10f5d2`, `2ccff146` — `profile-btn`-Quoting-Fehler seit 08.08./Commit `23678830`, `BASISZINS`-Doppeldeklaration seit 07.08./Commit `ccf79f33`; beide bestanden vor dieser Session, blockierten komplette Skriptausführung). Nach Fix: Axel-Anforderung neues Feature 2.15 — vollständige Trade-Auflistung mit tagesaktuellem EZB-Kurs im Steuerreport, Vorbild BubbleTax-Wettbewerbsprodukt (Anhang A.1–A.5: Einzeltransaktionen inkl. FIFO-Zuordnung, Referenz-IDs, Fremdwährungs-FIFO-Pools je Währung). Kein <1h-Bugfix, echtes Ausbau-Feature — Axel hat Ausnahme bewusst bestätigt. |
@@ -350,7 +351,7 @@ deutlich mehr Positionen mit Verlust zurückgekauft — Axel-Einordnung:
 Dieser Befund ist ein konkreter Datenpunkt für die OptionsDoktor-Lernmuster-
 Engine (ROADMAP 2.12 / SUITE.md №37, Trigger 01.10.2026).
 
-## 🔴 KRITISCHER BEFUND 10.08.2026 — Z.8/Z.9-Formel Aktien unvalidiert (2.17)
+## ✅ BEFUND 10.08.2026 — Z.8/Z.9-Formel Aktien (2.17, GESCHLOSSEN)
 
 **Status: OFFEN, ungeklärt. Axel-Entscheidung: eigenständig behandeln, nicht
 im Trade-Detail-Report-Sprint nebenbei fixen.**
@@ -412,17 +413,68 @@ Recherche/Doku, kein Bau vor UIQ Phase 1) greift hier NICHT. Damit
 unterscheidet sich dieser Punkt bewusst von 2.15/2.16 (Trade-Detail-Report),
 die als echte Ausbauarbeit eine explizite Ausnahme brauchten.
 
-### Nächste Schritte (nicht in dieser Session begonnen)
+### Status: ✅ GESCHLOSSEN (10.08.2026)
 
-1. Diskrepanz zwischen eigener Nachrechnung und DOCX-Wert aufklären
-   (welcher Datenstand erzeugte das hochgeladene DOCX?).
-2. Klären, ob eine echte FIFO-Gewinn/Verlust-Berechnung für Aktien nötig
-   ist (ggf. Wiederaufnahme von `ko-fifo.js`, s. dortige Dormant-Notiz vom
-   25.06.2026) oder ob IBKRs `FifoPnlRealized`-Feld direkt nutzbar ist
-   (das Feld existiert pro Trade, wird aber aktuell für die
-   `yearlyResults`-Aggregation nicht verwendet).
-3. Gegenprüfung gegen PWC German Tax Report 2023/2024/2025 für Z.8/Z.9,
-   analog zur bereits erfolgten Z.21/Z.24-Gegenprüfung.
+Alle vier Schritte des Klärungsplans durchlaufen:
+
+1. **Diskrepanz aufgeklärt:** DOCX-Metadaten (`dcterms:created`) zeigten
+   exakten Erzeugungszeitpunkt 10.08.2026 11:42:49 UTC → zu diesem Zeitpunkt
+   live gewesener `kap.html`-Commit `3df6aa76` identifiziert. `ko-flex.js`-
+   Formel war zu diesem Zeitpunkt bereits identisch zu heute (Diskrepanz lag
+   nicht am CDN-Pin). Eigene Nachrechnung für 2025 (0,00 €) war korrekt —
+   der Vergleichswert im hochgeladenen DOCX stellte sich als 2024er-Wert
+   heraus (23.582,49 € / 47.164,97 € Vollkonto = exakte Übereinstimmung mit
+   der 2024-Datei eigenständig geprüft). Ursache für die Jahres-Verwechslung
+   im DOCX nicht abschließend geklärt (Axel: plausibel Steuerjahr-Wechsel
+   kurz vor Download) — Code-Review zeigt, dass `aktien.gain/loss` und
+   `optionen.gain/loss` in `applyFlexYear` untrennbar aus demselben
+   `yr`-Objekt gesetzt werden, ein reiner UI-Jahres-Bug ist damit
+   unwahrscheinlich; vermutlich menschliche Verwechslung beim Testen.
+
+2. **Methodik geklärt:** `netCashEur`-Vorzeichen fehlerhaft (zählt Käufe als
+   Verlust). `FifoPnlRealized` als Alternative geprüft und verworfen — bei
+   Axels Export-Typ (`levelOfDetail=EXECUTION`) durchgängig `0`, auch bei
+   den 3 echten Verkäufen (CVS/PDD/VST 2024) verifiziert. Echte
+   FIFO-Nachrechnung (bereits vorhandene `ko-tradedetail.js`-Engine aus
+   2.16) als einzig verlässliche Quelle identifiziert.
+
+3. **PWC-Gegenprüfung durchgeführt** (echte PWC German Tax Reports
+   2023/2024/2025 von Axel hochgeladen, Line 20 "income from disposal of
+   shares" / Line 23 "losses from sale of shares"):
+
+   | Jahr | PWC (Vollkonto ×2) | Refundex FIFO | Δ |
+   |---|---|---|---|
+   | 2023 | 0,00 € | 0,00 € | exakt |
+   | 2024 | 8.197,24 € | 8.194,91 € | 2,33 € (0,03 %) |
+   | 2025 | 0,00 € | 0,00 € | exakt |
+
+   Wichtiger Zwischenfund: PWC-PDF ist die 50 %-Pro-Person-Ansicht
+   (zweiter Kontoinhaber "Christa F Hildebrand" im Dokument identifiziert)
+   — Vollkonto-Vergleich braucht ×2.
+
+4. **Fix implementiert:** `updateAktienGainLossFIFO()` in `kap.html` ersetzt
+   die alte Formel async über dieselbe FIFO-Engine wie der Trade-Detail-
+   Report, eingebunden in `onFileFlex` + `applyFlexYear` (race-geschützt).
+   UI-Quellenhinweis ("FIFO-Nachrechnung") in Bildschirm- und DOCX-Ansicht.
+
+   **Nebenfund während der Gegenprüfung:** Ein echter untertägiger
+   Leerverkauf (CVS, 13.05.2024 — Verkauf 11:10 Uhr VOR jeglichem Kauf,
+   Eindeckung 13:37 Uhr) wurde von der ursprünglichen FIFO-Engine fälschlich
+   als Datenlücke ("Altbestand unbekannt", Kosten 0 €) behandelt statt als
+   Leerverkauf (§20 EStG, Rn. 196 BMF). Aktien-FIFO-Logik in
+   `ko-tradedetail.js` generalisiert auf zustandsbasierte Long/Short-
+   Erkennung (analog zur bereits bestehenden Options-Logik aus demselben
+   Fix). Neue Zeilentypen `short_open`/`short_cover`, neue Export-Funktion
+   `calcRowGainLoss()`. Nach diesem Fix verbesserte sich die 2024-Δ von
+   73,69 € auf 2,33 €.
+
+**Betroffene Commits:** `913a4332` (kap.html, FIFO-Anbindung),
+`d9ce69a8` (ko-tradedetail.js, Leerverkauf-Logik), `8664f95b` (kap.html,
+Leerverkauf-Integration Bildschirm/DOCX).
+
+**Kein weiterer Handlungsbedarf** — Restdifferenz 2024 (0,03 %) ist reine
+FX-Kurs-Rundung (IBKR `fxRateToBase` vs. PWCs EZB-Tageskurs-Lookup), keine
+methodische Lücke mehr bekannt.
 
 ### Nebenbefund (bereits behoben)
 
