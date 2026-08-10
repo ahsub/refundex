@@ -1,7 +1,7 @@
 # Refundex — Roadmap
 
-**Version:** 2.2
-**Stand:** 08.08.2026
+**Version:** 2.5
+**Stand:** 10.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
 
@@ -114,6 +114,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
 | 2.3 | 09.08.2026 | Gegenprüfung alle 3 Jahre (2023/2024/2025 XML vs. PWC-PDF): 2023 ✅ (0 Trades/0 EUR), 2024 ✅ (Δ=0,01/0,00 EUR), 2025 ✅ (Δ=0,06/0,11 EUR gegen Transaktionsliste). PWC-Summary-Bug 2025 entdeckt: Line 21 fehlt komplett, Line 24 unter falscher Zeile (Line 22). Dual-Mode-Gate bereinigt: FIFO raus, Cash-Basis rein, Gegenprüfungen bestätigt. Beta-Anforderung: PDF-Upload neben XML nötig. Neuer ROADMAP-Punkt Phase F. |
+| 2.5 | 10.08.2026 | **SUITE.md-Ausnahme (Axel-Entscheidung, bewusst):** Maintenance-Mode-Regel (§4 SUITE.md, nur Bugfixes/<1h) für dieses eine Feature durchbrochen. Kontext: Live-Browser-Test kap.html (erstmals seit PDF-Upload-Bau) deckte zwei blockierende SyntaxErrors auf (siehe kap.html-Commits `2c10f5d2`, `2ccff146` — `profile-btn`-Quoting-Fehler seit 08.08./Commit `23678830`, `BASISZINS`-Doppeldeklaration seit 07.08./Commit `ccf79f33`; beide bestanden vor dieser Session, blockierten komplette Skriptausführung). Nach Fix: Axel-Anforderung neues Feature 2.15 — vollständige Trade-Auflistung mit tagesaktuellem EZB-Kurs im Steuerreport, Vorbild BubbleTax-Wettbewerbsprodukt (Anhang A.1–A.5: Einzeltransaktionen inkl. FIFO-Zuordnung, Referenz-IDs, Fremdwährungs-FIFO-Pools je Währung). Kein <1h-Bugfix, echtes Ausbau-Feature — Axel hat Ausnahme bewusst bestätigt. |
 | 2.4 | 09.08.2026 | Phase F umgesetzt: kap.html PDF-Upload deterministisch (PDF.js-Textparser statt Claude-API — kein API-Key, kein Drittanbieter-Datenfluss, Bestätigungs-Dialog vor Engine-Übernahme lt. Nicht-Ziel 4). Fallback auf Transaktionsliste bei PWC-Summary-Bug automatisiert. Getestet gegen echte 2023/2024/2025-PDFs, alle Werte exakt. **2.14 erledigt** (Buchungs-Datums-Filter, defensiv, 0 Treffer in Axels Daten) — dabei kritischerer Bug gefunden+gefixt: CashTransaction-Filter nutzte nicht-existentes `activityCode`-Attribut statt `type`, `dividends`-Array war bei echten Daten immer leer (betraf komplette Divi/WHT-Pipeline). |
 | 2.2 | 08.08.2026 | Steuerrechtliche Klarstellung: Z.21/Z.24 Cash-Basis §20 EStG (kein FIFO); ko-flex.js v1.3 + kap.html CDN+Badge; 2.13 ENTFÄLLT |
 | 2.1 | 08.08.2026 | Vollständige Diskrepanz-Analyse ergänzt: D1a Assignment-Prämien, D1b REIT/Teilfills; Fazit: vollständig aus XML lösbar |
