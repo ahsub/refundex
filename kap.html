@@ -246,7 +246,7 @@
       <div id="status-fx" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Optional</div>
     </div>
   </div>
-  <input type="file" id="file-flex" accept=".csv" multiple onchange="onFileFlex(event)" style="display:none">
+  <input type="file" id="file-flex" accept=".csv,.xml" multiple onchange="onFileFlex(event)" style="display:none">
   <input type="file" id="file-fx"   accept=".csv" onchange="loadFXCSV(event)" style="display:none">
   <!-- Legacy-Inputs (inaktiv, für Rückwärtskompatibilität der Handler) -->
   <input type="file" id="file-main" accept=".csv" onchange="onFileMain(event)" style="display:none">
@@ -22338,7 +22338,7 @@ function onTaxYearRefresh() {
 function loadFlexYearFile(targetYear) {
   const picker = document.createElement('input');
   picker.type = 'file';
-  picker.accept = '.csv';
+  picker.accept = '.csv,.xml';
   picker.multiple = true;
   picker.onchange = async function() {
     const newFiles = Array.from(this.files || []);
