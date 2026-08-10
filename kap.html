@@ -22245,7 +22245,11 @@ async function onFileFlex(event) {
       divNAV:0, whtNAV:0, zinsenGesamt:0,
       optionen:{gain:0,loss:0}, aktien:{gain:0,loss:0}, fx:{gain:0,loss:0} };
 
-    // G/V setzen (IBKR FifoPnlRealized × FXRateToBase — bereits EUR)
+    // G/V setzen — Aktien: FIFO-Nachrechnung (ROADMAP 2.17, 10.08.2026 — ersetzt
+    // vorherige netCashEur-Vorzeichen-Formel, war bei Käufen fehlerhaft als
+    // "Verlust" gezählt; FifoPnlRealized bei diesem Export-Typ durchgängig 0,
+    // unbrauchbar). Initial Platzhalter aus altem Feld, wird async überschrieben.
+    // Optionen: IBKR netCashEur × FXRateToBase — unverändert korrekt (Cash-Basis).
     rawData.aktien.gain   = yr.stkGainEur   || 0;
     rawData.aktien.loss   = Math.abs(yr.stkLossEur  || 0);
     rawData.optionen.gain = yr.optGainEur   || 0;
@@ -22350,12 +22354,13 @@ async function onFileFlex(event) {
         <span style="margin-left:0.8rem">Aktien: <strong style="color:var(--green)">€${(yr.stkGainEur||0).toFixed(2)}</strong></span>
         <span style="margin-left:0.8rem">Optionen: <strong style="color:${optSaldo>=0?'var(--green)':'var(--red)'}">€${optSaldo.toFixed(2)}</strong></span>
         ${isCash?`<span style="margin-left:0.8rem">Zinsen: <strong>€${(yr.z14_zinsen||0).toFixed(2)}</strong></span>`:''}
-        <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">IBKR FifoPnL×FX</span>
+        <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">Aktien: FIFO-Nachrechnung · Optionen: Cash-Basis</span>
         ${otherYrsBanner.length > 0 ? `<span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">· auch geladen: ${otherYrsBanner.join(', ')}</span>` : ''}
       `;
     }
 
     recalculate();
+    updateAktienGainLossFIFO(year);  // ROADMAP 2.17: überschreibt aktien.gain/loss async mit echter FIFO-Rechnung
 
   } catch(err) {
     el.textContent = '❌ ' + err.message;
@@ -22548,11 +22553,12 @@ function applyFlexYear(year) {
       <span style="margin-left:0.8rem">Aktien: <strong style="color:var(--green)">€${(yr.stkGainEur||0).toFixed(2)}</strong></span>
       <span style="margin-left:0.8rem">Optionen: <strong style="color:${optSaldo>=0?'var(--green)':'var(--red)'}">€${optSaldo.toFixed(2)}</strong></span>
       ${isCash?`<span style="margin-left:0.8rem">Zinsen: <strong>€${(yr.z14_zinsen||0).toFixed(2)}</strong></span>`:''}
-      <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">IBKR FifoPnL×FX</span>
+      <span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">Aktien: FIFO-Nachrechnung · Optionen: Cash-Basis</span>
       ${otherYrs.length > 0 ? `<span style="margin-left:0.8rem;font-size:11px;color:var(--muted)">· auch geladen: ${otherYrs.join(', ')}</span>` : ''}
     `;
   }
   recalculate();
+  updateAktienGainLossFIFO(year);  // ROADMAP 2.17: überschreibt aktien.gain/loss async mit echter FIFO-Rechnung
 }
 
 function recalculate() {
@@ -23115,6 +23121,50 @@ function renderEtfSektion(year) {
 }
 
 // ============================================================
+// AKTIEN-G/V ÜBER ECHTE FIFO-NACHRECHNUNG (ROADMAP 2.17, 10.08.2026)
+// Ersetzt die bisherige netCashEur-Vorzeichen-Formel für Z.8/Z.9 — diese war
+// bei Käufen falsch (Kauf-Cashflow wurde als "Verlust" gezählt) und die
+// naheliegende Alternative (IBKRs FifoPnlRealized) ist bei Axels Export-Typ
+// (levelOfDetail=EXECUTION) durchgängig 0, auch bei echten Verkäufen —
+// unbrauchbar. Nutzt stattdessen dieselbe FIFO-Lot-Engine wie der
+// Trade-Detail-Report (ko-tradedetail.js), die pro Verkauf den tatsächlichen
+// Erlös gegen die per FIFO zugeordneten Anschaffungskosten rechnet.
+// Verifiziert gegen Axels echte 2024-Daten (10.08.2026): alte Formel zeigte
+// 47.164,97 € Gewinn / -137.736,93 € Verlust; echte FIFO-Rechnung zeigt
+// ~13.424,44 € Gewinn / 0 € Verlust (3 echte Verkäufe: CVS/PDD/VST).
+let _aktienFifoCache = null; // {year, gain, loss, warnings}
+
+async function updateAktienGainLossFIFO(year) {
+  if (!Array.isArray(flexAllTrades) || flexAllTrades.length === 0) return;
+  try {
+    if (!window.koTradeDetail) {
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@8f85bed5/modules/ko-tradedetail.js');
+    }
+    const report = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
+    let gain = 0, loss = 0;
+    for (const sec of report.securities) {
+      for (const row of sec.rows) {
+        if (row.kind !== 'sell') continue;
+        const totalCost = row.consumedLots.reduce((s,l) => s + l.costEur, 0);
+        const gl = round2(row.proceedsEur - totalCost);
+        if (gl >= 0) gain += gl; else loss += gl;
+      }
+    }
+    _aktienFifoCache = { year: String(year), gain: round2(gain), loss: round2(loss), warnings: report.warnings };
+
+    // Nur übernehmen, wenn Jahr inzwischen nicht gewechselt wurde (Race-Schutz)
+    if (rawData && String(rawData.year) === String(year)) {
+      rawData.aktien.gain = _aktienFifoCache.gain;
+      rawData.aktien.loss = Math.abs(_aktienFifoCache.loss);
+      rawData.aktienFifoSource = true;
+      recalculate();
+    }
+  } catch (err) {
+    console.error('[AktienFIFO]', err);
+  }
+}
+
+// ============================================================
 // TRADE-DETAIL-REPORT (ROADMAP 2.16, 10.08.2026)
 // Vollständige Trade-Auflistung mit FIFO-Los-Zuordnung, Vorbild BubbleTax A.1.
 // ============================================================
@@ -23355,7 +23405,14 @@ function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG,
   setText('ov-opt',     fmt(optSaldo) + os);
   setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}${os} | Verluste: ${fmt(optL)}${os}`);
   setText('ov-aktien',  fmt(akSaldo) + (d.flexDataEUR ? '' : '~'));
-  setText('ov-aktien-sub', `Gewinne: ${fmt(akG)}${d.flexDataEUR?'':'~'} | Verluste: ${fmt(Math.abs(akL))}${d.flexDataEUR?'':'~'}`);
+  // ROADMAP 2.17: Quelle kennzeichnen — solange die async FIFO-Nachrechnung noch
+  // läuft (aktienFifoSource noch nicht gesetzt), Warnhinweis statt "FIFO" zeigen.
+  const akSourceLabel = d.aktienFifoSource ? 'FIFO-Nachrechnung'
+    : d.flexDataEUR ? '⏳ FIFO-Nachrechnung läuft…' : '';
+  const fifoWarn = _aktienFifoCache?.warnings?.length
+    ? ` · ⚠ ${_aktienFifoCache.warnings.length} Warnung(en) s. Trade-Detail-Report` : '';
+  setText('ov-aktien-sub', `Gewinne: ${fmt(akG)}${d.flexDataEUR?'':'~'} | Verluste: ${fmt(Math.abs(akL))}${d.flexDataEUR?'':'~'}` +
+    (akSourceLabel ? ` (${akSourceLabel})` : '') + fifoWarn);
   setText('ov-fx',      fmt(fxSaldo) + fs);
   setText('ov-fx-sub',  fxSaldo > 0 ? 'Anlage SO — steuerpflichtig wenn >600€' : 'Kein Gewinn');
   setColor('ov-opt',    optSaldo >= 0 ? 'green' : 'red');
@@ -23719,7 +23776,8 @@ async function buildDOCXinBrowser(data) {
           ]
         }),
         p(''),
-        p('Datenquellen: Dividenden ' + divSource + ' · FX ' + fxSource,
+        p('Datenquellen: Dividenden ' + divSource + ' · FX ' + fxSource +
+          (rawData?.aktienFifoSource ? ' · Aktien-G/V FIFO-Nachrechnung (ROADMAP 2.17)' : ' · Aktien-G/V ⚠ vorläufig, FIFO-Nachrechnung ggf. noch nicht abgeschlossen — bitte kurz warten und Download wiederholen'),
           {size:16, italic:true, color:'7F7F7F'}),
         p(''),
 
