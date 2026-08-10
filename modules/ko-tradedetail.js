@@ -17,8 +17,9 @@
  *
  * Bekannte Grenzen (Stand 10.08.2026, UNVERIFIZIERT gegen echte
  * Assignment-Fälle — bitte gegen echte Daten prüfen):
- *  - Nur Aktien (assetClass === 'Aktien'). Optionen/Optionsscheine
- *    folgen in einem späteren Ausbauschritt.
+ *  - Optionsscheine (Warrants) noch nicht abgedeckt, nur Aktien
+ *    (buildTradeDetailReport) und Aktien-/Indexoptionen
+ *    (buildOptionsDetailReport).
  *  - Setzt voraus, dass ALLE Jahre ab Depoteröffnung hochgeladen
  *    wurden (sonst ist der Startbestand des Report-Jahres unvollständig
  *    und die Los-Zuordnung entsprechend lückenhaft — wird im Report
@@ -208,6 +209,136 @@ export function buildTradeDetailReport(allTrades, year) {
 
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 function round4(n) { return Math.round((n + Number.EPSILON) * 10000) / 10000; }
+
+// ── OPTIONEN ─────────────────────────────────────────────────────
+//
+// Andere Logik als Aktien: Optionen werden über den Open/Close-Indikator
+// (nicht Kauf/Verkauf-Vorzeichen) verfolgt, da eine Short-Position
+// (Stillhalter) mit einem VERKAUF eröffnet wird. Aktien-FIFO würde das
+// als "Verkauf ohne Bestand" fehlinterpretieren.
+//
+// Modell: pro Optionssymbol ein "Positions-Stack" (analog FIFO-Lots),
+// aber mit Vorzeichen (positiv=Long-Kontrakte offen, negativ=Short-
+// Kontrakte offen). Bei Open: Lot mit Prämie/Kosten hinzufügen. Bei
+// Close/Assigned/Expired: FIFO-Abbau der Lots, Prämie/Rückkauf verrechnen.
+
+/**
+ * @param {Array} allTrades  flexAllTrades (alle Jahre, inkl. Optionen)
+ * @param {string} year
+ */
+export function buildOptionsDetailReport(allTrades, year) {
+  const warnings = [];
+  const yearStart = `${year}-01-01`;
+  const yearEnd   = `${year}-12-31`;
+
+  const optTrades = dedupeAssignmentTrades(
+    allTrades.filter(t => t.assetClass === 'Aktien- und Indexoptionen' && t.date)
+  );
+
+  const bySymbol = {};
+  for (const t of optTrades) {
+    if (!bySymbol[t.symbol]) bySymbol[t.symbol] = [];
+    bySymbol[t.symbol].push(t);
+  }
+
+  const contracts = [];
+
+  for (const [symbol, trades] of Object.entries(bySymbol)) {
+    const sorted = [...trades].sort((a, b) =>
+      (a.date + (a.dateTime || '')).localeCompare(b.date + (b.dateTime || ''))
+    );
+
+    const hasActivityInYear = sorted.some(t => t.date >= yearStart && t.date <= yearEnd);
+    if (!hasActivityInYear) continue;
+
+    // Positions-Stack: {date, qty (Vorzeichen), premiumPerUnitEur, refId}
+    // qty>0 = Long-Kontrakte offen (gekauft), qty<0 = Short-Kontrakte offen (verkauft/Stillhalter)
+    const lots = [];
+    const rows = [];
+    let synthWarningGiven = false;
+
+    for (const t of sorted) {
+      const isOpen = t.openCloseIndicator === 'O';
+      // Cashflow in EUR: proceeds ist bei SELL positiv (Prämieneinnahme), bei BUY negativ (Kaufpreis)
+      const cashEur = round2((t.proceeds || 0) * (t.fxRateToBase || 1) -
+                              Math.abs(t.commFee || 0) * (t.fxRateToBase || 1));
+
+      if (isOpen) {
+        // Vorzeichen der Kontraktzahl folgt buySell: BUY=Long(+), SELL=Short(-)
+        const contractQty = t.buySell === 'BUY' ? Math.abs(t.qty) : -Math.abs(t.qty);
+        const lot = {
+          date: t.date, qty: contractQty,
+          premiumPerUnitEur: contractQty !== 0 ? cashEur / Math.abs(contractQty) : 0,
+          totalCashEur: cashEur,
+          refId: t.tradeID || '',
+        };
+        lots.push(lot);
+        if (t.date >= yearStart && t.date <= yearEnd) {
+          rows.push({ kind: t.buySell === 'BUY' ? 'long_open' : 'short_open', trade: t, lot, cashEur });
+        }
+      } else {
+        // Close/Assigned/Expired: baut vorhandene Lots FIFO ab (Vorzeichen-unabhängig,
+        // da ein Close immer die Gegenrichtung zur offenen Position hat)
+        let qtyToClose = Math.abs(t.qty);
+        const consumedLots = [];
+
+        while (qtyToClose > 0.0000001 && lots.length > 0) {
+          const lot = lots[0];
+          const lotAbs = Math.abs(lot.qty);
+          const take = Math.min(lotAbs, qtyToClose);
+          consumedLots.push({
+            date: lot.date, qty: take,
+            openCashEur: round2(lot.premiumPerUnitEur * take),
+          });
+          const sign = lot.qty > 0 ? 1 : -1;
+          lot.qty          -= sign * take;
+          lot.totalCashEur -= lot.premiumPerUnitEur * take;
+          qtyToClose        -= take;
+          if (Math.abs(lot.qty) <= 0.0000001) lots.shift();
+        }
+
+        if (qtyToClose > 0.0000001) {
+          consumedLots.push({ date: null, qty: qtyToClose, openCashEur: 0, synthetic: true });
+          if (!synthWarningGiven) {
+            warnings.push(`${symbol}: Close/Verfall/Assignment am ${t.date} übersteigt bekannte ` +
+              `offene Kontrakte — vermutlich Eröffnung in einem NICHT hochgeladenen Jahr. ` +
+              `Zuordnung als "Altbestand unbekannt" markiert (Prämie 0 € angesetzt).`);
+            synthWarningGiven = true;
+          }
+        }
+
+        if (t.date >= yearStart && t.date <= yearEnd) {
+          const kind = t.classification === 'option_expired' ? 'expired'
+            : t.classification?.includes('assign') || t.classification === 'option_assigned' ? 'assigned'
+            : 'close';
+          rows.push({ kind, trade: t, cashEur, consumedLots });
+        }
+      }
+    }
+
+    if (rows.length === 0) continue;
+
+    const openContracts = round4(lots.reduce((s, l) => s + l.qty, 0));
+    contracts.push({
+      symbol,
+      underlying: sorted[0]?.underlying || '',
+      currency: sorted[0]?.currency || '',
+      putCall: sorted[0]?.putCall || '',
+      strike: sorted[0]?.strike ?? null,
+      expiry: sorted[0]?.expiry || '',
+      rows,
+      offenAmJahresende: openContracts,
+    });
+  }
+
+  contracts.sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+  return {
+    contracts,
+    warnings,
+    meta: { year, contractCount: contracts.length, moduleVersion: '1.0.0' },
+  };
+}
 
 export const TRADEDETAIL_MODULE_META = {
   version: '1.0.0',
