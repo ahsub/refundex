@@ -24294,7 +24294,7 @@ function getKiStSummary(gesamt_ertrag) {
 
 // ── ETF-POSITIONEN + VORABPAUSCHALE ──────────────────────────────────────────
 
-const BASISZINS = {
+const BASISZINS_PROFIL = {
   2019:0.0052, 2020:0, 2021:0, 2022:0,
   2023:0.0255, 2024:0.0229, 2025:0.0253, 2026:0.0320
 };
@@ -24436,7 +24436,7 @@ function updateEtfField(id, field, value) {
 
 function calcVorabpauschale() {
   const year = parseInt(document.getElementById('tax-year')?.value || '2025');
-  const bz   = BASISZINS[year] || 0;
+  const bz   = BASISZINS_PROFIL[year] || 0;
   const resultEl = document.getElementById('vap-result');
   const bodyEl   = document.getElementById('vap-result-body');
   if (!resultEl || !bodyEl) return;
