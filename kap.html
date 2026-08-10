@@ -23132,7 +23132,7 @@ async function renderTradeDetailSektion(year) {
 
   try {
     if (!window.koTradeDetail) {
-      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@07d3c474/modules/ko-tradedetail.js');
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@8f85bed5/modules/ko-tradedetail.js');
     }
     const report = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
     const optReport = window.koTradeDetail.buildOptionsDetailReport(flexAllTrades, String(year));
@@ -23835,7 +23835,7 @@ async function buildTradeDetailDocxSection(ctx) {
 
   try {
     if (!window.koTradeDetail) {
-      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@07d3c474/modules/ko-tradedetail.js');
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@8f85bed5/modules/ko-tradedetail.js');
     }
   } catch (e) {
     return [p('(Trade-Detail-Anhang konnte nicht geladen werden: ' + e.message + ')', {italic:true, color:'CC6600'})];
