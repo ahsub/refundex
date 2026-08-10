@@ -23138,15 +23138,14 @@ async function updateAktienGainLossFIFO(year) {
   if (!Array.isArray(flexAllTrades) || flexAllTrades.length === 0) return;
   try {
     if (!window.koTradeDetail) {
-      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@8f85bed5/modules/ko-tradedetail.js');
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@d9ce69a8/modules/ko-tradedetail.js');
     }
     const report = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
     let gain = 0, loss = 0;
     for (const sec of report.securities) {
       for (const row of sec.rows) {
-        if (row.kind !== 'sell') continue;
-        const totalCost = row.consumedLots.reduce((s,l) => s + l.costEur, 0);
-        const gl = round2(row.proceedsEur - totalCost);
+        if (row.kind !== 'sell' && row.kind !== 'short_cover') continue;
+        const gl = window.koTradeDetail.calcRowGainLoss(row);
         if (gl >= 0) gain += gl; else loss += gl;
       }
     }
@@ -23182,7 +23181,7 @@ async function renderTradeDetailSektion(year) {
 
   try {
     if (!window.koTradeDetail) {
-      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@8f85bed5/modules/ko-tradedetail.js');
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@d9ce69a8/modules/ko-tradedetail.js');
     }
     const report = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
     const optReport = window.koTradeDetail.buildOptionsDetailReport(flexAllTrades, String(year));
@@ -23256,28 +23255,31 @@ function renderStockRows(report) {
       const feeWhrg   = round2(Math.abs(r.trade.commFee || 0));
       const netWhrg   = round2(grossWhrg - feeWhrg);
       const idSub = r.trade.tradeID ? `<div style="font-size:10px;color:var(--muted)">ID: ${escapeHtml(r.trade.tradeID)}</div>` : '';
-      if (r.kind === 'buy') {
+      if (r.kind === 'buy' || r.kind === 'short_open') {
+        const label = r.kind === 'buy'
+          ? 'Anschaffung' + (r.trade.classification !== 'stock_buy' ? ' (' + escapeHtml(r.trade.classification) + ')' : '')
+          : 'Leerverkauf (Eröffnung)';
         return `<tr>
           <td>${escapeHtml(r.trade.date)}</td>
-          <td>Anschaffung${r.trade.classification !== 'stock_buy' ? ' (' + escapeHtml(r.trade.classification) + ')' : ''}${idSub}</td>
-          <td style="text-align:right">+${fmtQty(r.trade.qty)}</td>
+          <td>${label}${idSub}</td>
+          <td style="text-align:right">${r.kind==='buy'?'+':''}${fmtQty(r.trade.qty)}</td>
           <td style="text-align:right">${fmtPrice(r.trade.price)}</td>
           <td style="text-align:right">${fmtPrice(grossWhrg)}</td>
           <td style="text-align:right">${fmtPrice(feeWhrg)}</td>
           <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
-          <td style="text-align:right">${fmt(r.eurCost)}</td>
+          <td style="text-align:right">${fmt(Math.abs(r.eurCost))}</td>
         </tr>`;
       } else {
+        const isCover = r.kind === 'short_cover';
         const lotRefs = r.consumedLots.map(l =>
           l.synthetic
             ? `<div style="font-size:11px;color:var(--amber)">↳ Altbestand unbekannt (${fmtQty(l.qty)} Stück, Kosten 0 € — s. Warnung oben)</div>`
-            : `<div style="font-size:11px;color:var(--muted)">↳ Zuordnung zu Anschaffung am ${escapeHtml(l.date)}: ${fmtQty(l.qty)} Stück, ${fmt(l.costEur)}</div>`
+            : `<div style="font-size:11px;color:var(--muted)">↳ Zuordnung zu ${isCover?'Leerverkauf-Eröffnung':'Anschaffung'} am ${escapeHtml(l.date)}: ${fmtQty(l.qty)} Stück, ${fmt(l.costEur)}</div>`
         ).join('');
-        const totalCost = r.consumedLots.reduce((s,l) => s + l.costEur, 0);
-        const gainLoss = round2(r.proceedsEur - totalCost);
+        const gainLoss = window.koTradeDetail.calcRowGainLoss(r);
         return `<tr>
           <td>${escapeHtml(r.trade.date)}</td>
-          <td>Veräußerung${idSub}${lotRefs}</td>
+          <td>${isCover?'Leerverkauf (Eindeckung)':'Veräußerung'}${idSub}${lotRefs}</td>
           <td style="text-align:right">${fmtQty(r.trade.qty)}</td>
           <td style="text-align:right">${fmtPrice(r.trade.price)}</td>
           <td style="text-align:right">${fmtPrice(grossWhrg)}</td>
@@ -23893,7 +23895,7 @@ async function buildTradeDetailDocxSection(ctx) {
 
   try {
     if (!window.koTradeDetail) {
-      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@8f85bed5/modules/ko-tradedetail.js');
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@d9ce69a8/modules/ko-tradedetail.js');
     }
   } catch (e) {
     return [p('(Trade-Detail-Anhang konnte nicht geladen werden: ' + e.message + ')', {italic:true, color:'CC6600'})];
@@ -23950,20 +23952,21 @@ async function buildTradeDetailDocxSection(ctx) {
       for (const r of sec.rows) {
         const grossWhrg = round2(Math.abs(r.trade.proceeds || 0));
         const feeWhrg   = round2(Math.abs(r.trade.commFee || 0));
-        if (r.kind === 'buy') {
-          rows.push(dataRow([r.trade.date, withId('Anschaffung', r.trade), '+' + fmtQty(r.trade.qty),
+        if (r.kind === 'buy' || r.kind === 'short_open') {
+          const label = r.kind === 'buy' ? 'Anschaffung' : 'Leerverkauf (Eröffnung)';
+          rows.push(dataRow([r.trade.date, withId(label, r.trade), (r.kind==='buy'?'+':'') + fmtQty(r.trade.qty),
             fmtP(r.trade.price), fmtP(grossWhrg), fmtP(feeWhrg),
-            (r.trade.fxRateToBase||1).toFixed(4), fmt(r.eurCost)]));
+            (r.trade.fxRateToBase||1).toFixed(4), fmt(Math.abs(r.eurCost))]));
         } else {
-          const totalCost = r.consumedLots.reduce((s,l) => s + l.costEur, 0);
-          const gainLoss = round2(r.proceedsEur - totalCost);
-          rows.push(dataRow([r.trade.date, withId('Veräußerung', r.trade), fmtQty(r.trade.qty),
+          const isCover = r.kind === 'short_cover';
+          const gainLoss = window.koTradeDetail.calcRowGainLoss(r);
+          rows.push(dataRow([r.trade.date, withId(isCover?'Leerverkauf (Eindeckung)':'Veräußerung', r.trade), fmtQty(r.trade.qty),
             fmtP(r.trade.price), fmtP(grossWhrg), fmtP(feeWhrg),
             (r.trade.fxRateToBase||1).toFixed(4), fmt(r.proceedsEur) + ' (' + (gainLoss>=0?'+':'') + fmt(gainLoss) + ')']));
           for (const l of r.consumedLots) {
             rows.push(noteRow(l.synthetic
               ? '↳ Altbestand unbekannt (' + fmtQty(l.qty) + ' Stück, Kosten 0 € — s. Warnung oben)'
-              : '↳ Zuordnung zu Anschaffung am ' + l.date + ': ' + fmtQty(l.qty) + ' Stück, ' + fmt(l.costEur)));
+              : '↳ Zuordnung zu ' + (isCover?'Leerverkauf-Eröffnung':'Anschaffung') + ' am ' + l.date + ': ' + fmtQty(l.qty) + ' Stück, ' + fmt(l.costEur)));
           }
         }
       }
