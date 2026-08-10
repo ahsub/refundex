@@ -7,31 +7,41 @@
  * PDF-Beispiel Axel 10.08.2026, Konto U12074449).
  *
  * WICHTIG — Abgrenzung zur bestehenden G&V-Berechnung:
- * Dieses Modul berechnet KEINE eigenen Gewinne/Verluste und ersetzt
- * NICHT die bestehende Z.21/Z.24-Cash-Basis-Formel (validiert gegen
- * PWC 2023-2025, s. ROADMAP.md 2.3/2.4). Es dient ausschließlich der
- * TRANSPARENTEN AUFLISTUNG: welche Anschaffung(en) einem Verkauf per
- * FIFO zugeordnet werden, mit welchem Tageskurs. Bei Abweichungen
- * zwischen diesem Report und der Cash-Basis-Formel gilt weiterhin
- * die Cash-Basis-Formel als maßgeblich für die Steuerwerte.
+ * Dieses Modul berechnet KEINE eigenen Gewinne/Verluste und ersetzt NICHT
+ * die bestehenden Z.21/Z.24-Werte (Optionen, Cash-Basis-Formel, validiert
+ * gegen PWC 2023-2025, s. ROADMAP.md 2.3/2.4). Es dient ausschließlich der
+ * TRANSPARENTEN AUFLISTUNG: welche Anschaffung(en)/Eröffnung(en) einer
+ * Schließung per FIFO zugeordnet werden, mit welchem Tageskurs.
  *
- * Bekannte Grenzen (Stand 10.08.2026, UNVERIFIZIERT gegen echte
- * Assignment-Fälle — bitte gegen echte Daten prüfen):
+ * ⚠️ WARNHINWEIS Z.8/Z.9 (Aktien, 10.08.2026): Die bestehende Z.8/Z.9-
+ * Formel in ko-flex.js (stkGainEur/stkLossEur, Zeile ~1016) wurde — anders
+ * als Z.21/Z.24 — NIE gegen einen PWC-Report validiert und wirkt bei rein
+ * kaufbasierten Jahren (0 Verkäufe) konzeptionell fragwürdig (Kauf-Cashflow
+ * würde als "Verlust" gezählt). S. ROADMAP.md 2.17/SUITE.md — VOR Abgabe
+ * gegen die offizielle CapTrader-Jahressteuerbescheinigung prüfen.
+ *
+ * Bekannte Grenzen (Stand 10.08.2026):
  *  - Optionsscheine (Warrants) noch nicht abgedeckt, nur Aktien
  *    (buildTradeDetailReport) und Aktien-/Indexoptionen
  *    (buildOptionsDetailReport).
  *  - Setzt voraus, dass ALLE Jahre ab Depoteröffnung hochgeladen
  *    wurden (sonst ist der Startbestand des Report-Jahres unvollständig
  *    und die Los-Zuordnung entsprechend lückenhaft — wird im Report
- *    als Warnung ausgegeben, wenn das erste Trade-Datum eines Symbols
- *    NICHT vor dem 01.01. des frühesten hochgeladenen Jahres liegt UND
- *    gleichzeitig ein Verkauf mehr Stück abbaut als bekannte Lots halten
- *    — dann werden Lots mit Stückzahl 0 und Kommentar "Altbestand
- *    unbekannt" synthetisch ergänzt, damit die Rechnung nicht negativ wird).
- *  - Assignment-Dedupe (s.u.) ist nach Aktenlage plausibel, aber nicht
- *    gegen einen echten Assignment-Fall in Axels XML-Daten verifiziert.
+ *    als Warnung ausgegeben).
+ *  - Options-Open/Close-Erkennung ist ZUSTANDSBASIERT (Positionsbestand +
+ *    Handelsrichtung), NICHT über das `openCloseIndicator`-Feld — dieses
+ *    Feld ist in Axels echten Flex-XML-Daten (levelOfDetail=EXECUTION)
+ *    unzuverlässig befüllt (229/284 Trades mit leerem Wert, auch bei
+ *    eindeutigen Buy-to-Close-Trades). Verifiziert gegen echte 2023-2025-
+ *    Daten am 10.08.2026: 121/121 Fehlalarme behoben, Summen (43.819,11 €
+ *    Prämien / -40.545,06 € Rückkäufe) matchen die unabhängig dokumentierte
+ *    SWOT-Kennzahl (40.545/43.819 EUR) nahezu exakt.
+ *  - Assignment-Dedupe ist nach Aktenlage plausibel, aber nicht an einem
+ *    konkreten Assignment-Fall separat verifiziert (in Axels 2025-Daten:
+ *    0 Call-Assignments, 5 Put-Assignments, beide unproblematisch für den
+ *    Dedupe-Pfad).
  *
- * Modul-Version: 1.0.0 (10.08.2026)
+ * Modul-Version: 1.1.0 (10.08.2026 — Options-Open/Close-Erkennung zustandsbasiert)
  */
 
 "use strict";
@@ -209,6 +219,7 @@ export function buildTradeDetailReport(allTrades, year) {
 
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 function round4(n) { return Math.round((n + Number.EPSILON) * 10000) / 10000; }
+function fmtNum(n) { return round4(n).toString().replace('.', ','); }
 
 // ── OPTIONEN ─────────────────────────────────────────────────────
 //
@@ -256,16 +267,28 @@ export function buildOptionsDetailReport(allTrades, year) {
     const lots = [];
     const rows = [];
     let synthWarningGiven = false;
+    const EPS = 0.0000001;
 
     for (const t of sorted) {
-      const isOpen = t.openCloseIndicator === 'O';
-      // Cashflow in EUR: proceeds ist bei SELL positiv (Prämieneinnahme), bei BUY negativ (Kaufpreis)
+      // ZUSTANDSBASIERTE Open/Close-Erkennung (10.08.2026, ersetzt openCloseIndicator-
+      // basierte Logik): In Axels echten Flex-XML-Daten ist `openCloseIndicator` bei
+      // 229 von 284 Options-Trades LEER — auch bei eindeutigen Buy-to-Close-Trades
+      // (verifiziert z.B. an EVO FEB25 840 P: Open UND Close beide oci=""). Das Feld
+      // ist in diesem Export-Typ (levelOfDetail=EXECUTION) schlicht nicht zuverlässig
+      // befüllt. Robusterer Ansatz: Trade-Richtung (BUY=Long+/SELL=Short-) gegen den
+      // AKTUELLEN Positionsbestand vergleichen — Gegenrichtung = Schließung,
+      // Gleichrichtung/Bestand=0 = Eröffnung (bzw. Aufstockung).
+      const netPositionBefore = round4(lots.reduce((s, l) => s + l.qty, 0));
+      const tradeDirection = t.buySell === 'BUY' ? 1 : -1;
+      const tradeQtyAbs = Math.abs(t.qty);
       const cashEur = round2((t.proceeds || 0) * (t.fxRateToBase || 1) -
                               Math.abs(t.commFee || 0) * (t.fxRateToBase || 1));
+      const isClosing = Math.abs(netPositionBefore) > EPS &&
+        Math.sign(tradeDirection) !== Math.sign(netPositionBefore);
 
-      if (isOpen) {
-        // Vorzeichen der Kontraktzahl folgt buySell: BUY=Long(+), SELL=Short(-)
-        const contractQty = t.buySell === 'BUY' ? Math.abs(t.qty) : -Math.abs(t.qty);
+      if (!isClosing) {
+        // Eröffnung bzw. Aufstockung in gleicher Richtung
+        const contractQty = tradeDirection * tradeQtyAbs;
         const lot = {
           date: t.date, qty: contractQty,
           premiumPerUnitEur: contractQty !== 0 ? cashEur / Math.abs(contractQty) : 0,
@@ -274,15 +297,14 @@ export function buildOptionsDetailReport(allTrades, year) {
         };
         lots.push(lot);
         if (t.date >= yearStart && t.date <= yearEnd) {
-          rows.push({ kind: t.buySell === 'BUY' ? 'long_open' : 'short_open', trade: t, lot, cashEur });
+          rows.push({ kind: tradeDirection > 0 ? 'long_open' : 'short_open', trade: t, lot, cashEur });
         }
       } else {
-        // Close/Assigned/Expired: baut vorhandene Lots FIFO ab (Vorzeichen-unabhängig,
-        // da ein Close immer die Gegenrichtung zur offenen Position hat)
-        let qtyToClose = Math.abs(t.qty);
+        // Schließung (ganz oder teilweise) der Gegenposition
+        let qtyToClose = Math.min(tradeQtyAbs, Math.abs(netPositionBefore));
         const consumedLots = [];
 
-        while (qtyToClose > 0.0000001 && lots.length > 0) {
+        while (qtyToClose > EPS && lots.length > 0) {
           const lot = lots[0];
           const lotAbs = Math.abs(lot.qty);
           const take = Math.min(lotAbs, qtyToClose);
@@ -294,15 +316,26 @@ export function buildOptionsDetailReport(allTrades, year) {
           lot.qty          -= sign * take;
           lot.totalCashEur -= lot.premiumPerUnitEur * take;
           qtyToClose        -= take;
-          if (Math.abs(lot.qty) <= 0.0000001) lots.shift();
+          if (Math.abs(lot.qty) <= EPS) lots.shift();
         }
 
-        if (qtyToClose > 0.0000001) {
-          consumedLots.push({ date: null, qty: qtyToClose, openCashEur: 0, synthetic: true });
+        // Restmenge nach vollständigem Lot-Abbau: entweder Datenlücke (Altbestand
+        // unbekannt) ODER echte Positionsumkehr im selben Trade (z.B. Short→Long
+        // in einem Rutsch) — Unterscheidung über verbleibenden Netto-Bestand.
+        const remainder = tradeQtyAbs - Math.min(tradeQtyAbs, Math.abs(netPositionBefore));
+        if (remainder > EPS) {
+          const remLot = {
+            date: t.date, qty: tradeDirection * remainder,
+            premiumPerUnitEur: cashEur !== 0 ? (cashEur * (remainder/tradeQtyAbs)) / remainder : 0,
+            totalCashEur: cashEur * (remainder/tradeQtyAbs),
+            refId: t.tradeID || '',
+          };
+          lots.push(remLot);
           if (!synthWarningGiven) {
-            warnings.push(`${symbol}: Close/Verfall/Assignment am ${t.date} übersteigt bekannte ` +
-              `offene Kontrakte — vermutlich Eröffnung in einem NICHT hochgeladenen Jahr. ` +
-              `Zuordnung als "Altbestand unbekannt" markiert (Prämie 0 € angesetzt).`);
+            warnings.push(`${symbol}: Trade am ${t.date} schließt mehr Kontrakte als zu diesem ` +
+              `Zeitpunkt als offen bekannt (${fmtNum(remainder)} zusätzlich) — entweder eine echte ` +
+              `Positionsumkehr in einem Trade, oder Hinweis auf fehlende Altdaten vor dem frühesten ` +
+              `hochgeladenen Jahr. Bitte gegen Broker-Bestätigung prüfen.`);
             synthWarningGiven = true;
           }
         }
