@@ -21748,6 +21748,7 @@ async function extractPdfLines(pdf) {
   const allLines = [];
   const TOL = 2.5;
   for (let p = 1; p <= pdf.numPages; p++) {
+    console.log(`[PWC-PDF] Seite ${p}/${pdf.numPages}…`);
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
     const items = content.items
@@ -21824,8 +21825,25 @@ function fallbackFromTransactionList(lines) {
 async function parsePWCpdf(arrayBuffer) {
   if (!window.pdfjsLib) throw new Error('PDF.js nicht geladen — bitte Seite neu laden.');
 
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const lines = await extractPdfLines(pdf);
+  // Diagnose-Timeout (10.08.2026): verhindert stummes Hängen bei
+  // Worker-Init-Problemen (Cross-Origin-Worker-Restriktion, CDN-Ausfall etc.)
+  // — nach 20s klarer Fehler statt endlosem "wird analysiert…".
+  const withTimeout = (promise, label, ms = 20000) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`Zeitüberschreitung bei "${label}" (>${ms/1000}s) — ` +
+        `möglicherweise PDF.js-Worker-Problem. Browser-Konsole prüfen, Seite neu laden und erneut versuchen.`)),
+      ms))
+  ]);
+
+  console.log('[PWC-PDF] Start: getDocument()…');
+  const pdf = await withTimeout(
+    pdfjsLib.getDocument({ data: arrayBuffer }).promise,
+    'PDF laden (getDocument)'
+  );
+  console.log(`[PWC-PDF] getDocument() ok, ${pdf.numPages} Seite(n). Starte Textextraktion…`);
+  const lines = await withTimeout(extractPdfLines(pdf), 'Textextraktion (extractPdfLines)');
+  console.log(`[PWC-PDF] Textextraktion ok, ${lines.length} Zeilen.`);
   const warnings = [];
 
   // Metadaten
