@@ -23777,7 +23777,10 @@ async function buildDOCXinBrowser(data) {
           p(''),
         ] : []),
 
-        h('5. Rechtliche Hinweise', HeadingLevel.HEADING_1),
+        ...(await buildTradeDetailDocxSection({ Paragraph, TextRun, Table, TableRow, TableCell,
+          AlignmentType, HeadingLevel, WidthType, ShadingType, borders, cell, p, h, year })),
+
+        h('6. Rechtliche Hinweise', HeadingLevel.HEADING_1),
         p('Dieses Dokument wurde automatisiert erstellt und ersetzt keine professionelle Steuerberatung. ' +
           'Alle Angaben ohne Gewähr. Maßgeblich sind die offiziellen CapTrader-Belege.',
           {italic:true, color:'7F7F7F'}),
@@ -23788,6 +23791,121 @@ async function buildDOCXinBrowser(data) {
   });
 
   return await Packer.toBlob(doc);
+}
+
+/**
+ * Trade-Detail-Anhang für DOCX (ROADMAP 2.16, 10.08.2026): vollständige Aktien-
+ * und Options-Auflistung mit FIFO-/Eröffnungs-Los-Zuordnung, analog zur
+ * Bildschirmansicht (renderStockRows/renderOptionRows). Nutzt dieselbe Engine
+ * (ko-tradedetail.js) wie die Bildschirmansicht, damit beide Ausgaben konsistent
+ * bleiben. Gibt ein Array von docx-Elementen zurück (leer, falls keine Flex-
+ * Trades vorhanden — z.B. bei reinem PDF/CSV-Import ohne Flex-Query-XML).
+ */
+async function buildTradeDetailDocxSection(ctx) {
+  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, borders, cell, p, h, HeadingLevel, year } = ctx;
+
+  if (!Array.isArray(flexAllTrades) || flexAllTrades.length === 0) return [];
+
+  try {
+    if (!window.koTradeDetail) {
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@07d3c474/modules/ko-tradedetail.js');
+    }
+  } catch (e) {
+    return [p('(Trade-Detail-Anhang konnte nicht geladen werden: ' + e.message + ')', {italic:true, color:'CC6600'})];
+  }
+
+  const report    = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
+  const optReport = window.koTradeDetail.buildOptionsDetailReport(flexAllTrades, String(year));
+
+  if (report.securities.length === 0 && optReport.contracts.length === 0) return [];
+
+  const noteRow = (text) => new TableRow({ children: [
+    new TableCell({ columnSpan: 5, borders, margins:{top:20,bottom:20,left:240,right:60},
+      shading:{ fill:'F2F2F2', type:ShadingType.CLEAR, color:'F2F2F2' },
+      children:[new Paragraph({ children:[new TextRun({ text, italics:true, font:'Arial', size:16, color:'666666' })] })] })
+  ]});
+
+  const dataRow = (cells) => new TableRow({ children: cells.map((c,i) =>
+    cell(c, { w: [1200,3600,1200,1200,1360][i], right: i>=2 })) });
+
+  const headerRow = () => new TableRow({ tableHeader:true, children: [
+    cell('Datum',{w:1200,bold:true,fill:'D6E4F0'}), cell('Beschreibung',{w:3600,bold:true,fill:'D6E4F0'}),
+    cell('Stück',{w:1200,bold:true,fill:'D6E4F0',right:true}), cell('Kurs',{w:1200,bold:true,fill:'D6E4F0',right:true}),
+    cell('EUR',{w:1360,bold:true,fill:'D6E4F0',right:true}),
+  ]});
+
+  const elements = [h('5. Trade-Detail-Anhang — Einzeltransaktionen mit Los-Zuordnung', HeadingLevel.HEADING_1)];
+  elements.push(p('Vollständige Auflistung aller Aktien- und Options-Transaktionen im Steuerjahr mit ' +
+    'FIFO-/Eröffnungs-Zuordnung und tagesaktuellem Wechselkurs. Ergänzende Transparenz-Ansicht — die in ' +
+    'Abschnitt 1 ausgewiesenen KAP-Werte beruhen weiterhin auf der validierten Cash-Basis-Formel.',
+    {italic:true, color:'7F7F7F', size:16}));
+  elements.push(p(''));
+
+  if (report.warnings.length > 0 || optReport.warnings.length > 0) {
+    for (const w of [...report.warnings, ...optReport.warnings]) {
+      elements.push(p('⚠ ' + w, {color:'CC6600', size:16}));
+    }
+    elements.push(p(''));
+  }
+
+  if (report.securities.length > 0) {
+    elements.push(p('Aktien', {bold:true, size:22, color:'2E75B6', before:120, after:60}));
+    for (const sec of report.securities) {
+      elements.push(p(sec.symbol + (sec.isin ? '  (' + sec.isin + ')' : '') +
+        '  —  Endbestand: ' + fmtQty(sec.endbestand.stueck) + ' Stück, ' + fmt(sec.endbestand.kostenEur),
+        {bold:true, size:18, before:100, after:40}));
+      const rows = [headerRow()];
+      for (const r of sec.rows) {
+        if (r.kind === 'buy') {
+          rows.push(dataRow([r.trade.date, 'Anschaffung', '+' + fmtQty(r.trade.qty),
+            (r.trade.fxRateToBase||1).toFixed(4), fmt(r.eurCost)]));
+        } else {
+          const totalCost = r.consumedLots.reduce((s,l) => s + l.costEur, 0);
+          const gainLoss = round2(r.proceedsEur - totalCost);
+          rows.push(dataRow([r.trade.date, 'Veräußerung', fmtQty(r.trade.qty),
+            (r.trade.fxRateToBase||1).toFixed(4), fmt(r.proceedsEur) + ' (' + (gainLoss>=0?'+':'') + fmt(gainLoss) + ')']));
+          for (const l of r.consumedLots) {
+            rows.push(noteRow(l.synthetic
+              ? '↳ Altbestand unbekannt (' + fmtQty(l.qty) + ' Stück, Kosten 0 € — s. Warnung oben)'
+              : '↳ Zuordnung zu Anschaffung am ' + l.date + ': ' + fmtQty(l.qty) + ' Stück, ' + fmt(l.costEur)));
+          }
+        }
+      }
+      elements.push(new Table({ width:{size:9360,type:WidthType.DXA}, columnWidths:[1200,3600,1200,1200,1360], rows }));
+      elements.push(p(''));
+    }
+  }
+
+  if (optReport.contracts.length > 0) {
+    const KIND_LABEL = { long_open:'Kauf (eröffnend)', short_open:'Stillhalter-Eröffnung',
+      close:'Glattstellung', expired:'Verfall (wertlos)', assigned:'Zuteilung/Ausübung' };
+    elements.push(p('Optionen', {bold:true, size:22, color:'2E75B6', before:160, after:60}));
+    for (const c of optReport.contracts) {
+      elements.push(p(c.symbol + '  —  Offen am Jahresende: ' + fmtQty(c.offenAmJahresende) + ' Kontrakt(e)',
+        {bold:true, size:18, before:100, after:40}));
+      const rows = [headerRow()];
+      for (const r of c.rows) {
+        if (r.kind === 'long_open' || r.kind === 'short_open') {
+          rows.push(dataRow([r.trade.date, KIND_LABEL[r.kind], fmtQty(Math.abs(r.trade.qty)),
+            (r.trade.fxRateToBase||1).toFixed(4), fmt(r.cashEur)]));
+        } else {
+          const openCash = r.consumedLots.reduce((s,l) => s + l.openCashEur, 0);
+          const gainLoss = round2(openCash + r.cashEur);
+          rows.push(dataRow([r.trade.date, KIND_LABEL[r.kind] || r.kind, fmtQty(Math.abs(r.trade.qty)),
+            (r.trade.fxRateToBase||1).toFixed(4), fmt(r.cashEur) + ' (' + (gainLoss>=0?'+':'') + fmt(gainLoss) + ')']));
+          for (const l of r.consumedLots) {
+            rows.push(noteRow(l.synthetic
+              ? '↳ Altbestand unbekannt (' + fmtQty(l.qty) + ' Kontrakt(e) — s. Warnung oben)'
+              : '↳ Zuordnung zu Eröffnung am ' + l.date + ': ' + fmtQty(l.qty) + ' Kontrakt(e), ' + fmt(l.openCashEur)));
+          }
+        }
+      }
+      elements.push(new Table({ width:{size:9360,type:WidthType.DXA}, columnWidths:[1200,3600,1200,1200,1360], rows }));
+      elements.push(p(''));
+    }
+  }
+
+  return elements;
 }
 
 
