@@ -22149,7 +22149,7 @@ async function onFileFlex(event) {
 
   try {
     if (!window.koFlex) {
-      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@a533917f/modules/ko-flex.js');
+      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1e4dc47d/modules/ko-flex.js');
       window.koFlex = mod;
     }
 
@@ -22410,7 +22410,7 @@ function loadFlexYearFile(targetYear) {
 
     try {
       if (!window.koFlex) {
-        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@a533917f/modules/ko-flex.js');
+        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@1e4dc47d/modules/ko-flex.js');
         window.koFlex = mod;
       }
 
@@ -23846,13 +23846,13 @@ async function buildTradeDetailDocxSection(ctx) {
 
   if (report.securities.length === 0 && optReport.contracts.length === 0) return [];
 
+  const COL_W = [850, 1900, 700, 850, 1200, 1060, 850, 1950]; // Datum,Beschr.,Stück,Kurs,Brutto,Gebühr,EZB-Kurs,Netto EUR (Summe=9360, 10.08.2026 verbreitert wg. Umbruch-Problem)
+
   const noteRow = (text) => new TableRow({ children: [
-    new TableCell({ columnSpan: 8, borders, margins:{top:20,bottom:20,left:240,right:60},
+    new TableCell({ columnSpan: 8, borders, width:{size:9360,type:WidthType.DXA}, margins:{top:20,bottom:20,left:240,right:60},
       shading:{ fill:'F2F2F2', type:ShadingType.CLEAR, color:'F2F2F2' },
       children:[new Paragraph({ children:[new TextRun({ text, italics:true, font:'Arial', size:16, color:'666666' })] })] })
   ]});
-
-  const COL_W = [900, 2400, 900, 900, 1000, 900, 900, 1460]; // Datum,Beschr.,Stück,Kurs,Brutto,Gebühr,EZB-Kurs,Netto EUR
 
   const dataRow = (cells) => new TableRow({ children: cells.map((c,i) =>
     cell(c, { w: COL_W[i], right: i>=2 })) });
