@@ -371,7 +371,7 @@
         <div class="kap-card">
           <div class="kc-label">Anrechenbare Quellensteuer</div>
           <div class="kc-value" id="ov-wht">—</div>
-          <div class="kc-sub">Max. 15% DBA-Satz anrechenbar</div>
+          <div class="kc-sub" id="ov-wht-sub">Max. 15% DBA-Satz anrechenbar</div>
           <div class="kc-zeile">KAP Zeile 41</div>
         </div>
         <div class="kap-card positive">
@@ -22108,7 +22108,7 @@ async function onFileFlex(event) {
 
   try {
     if (!window.koFlex) {
-      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c6ebbc9b/modules/ko-flex.js');
+      const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@a533917f/modules/ko-flex.js');
       window.koFlex = mod;
     }
 
@@ -22206,6 +22206,20 @@ async function onFileFlex(event) {
       rawData.whtEurFlex  = 0;
       rawData.zinsenFlex  = 0;
       rawData.flexCash    = false;
+    }
+
+    // Flex XML (parseActivityXML) — WHT-Split Divi/Zins (Punkt A, 09.08.2026).
+    // Nur divWhtEur ist Z.41-relevant; interestWhtEur ist inländische Zins-
+    // Abzugssteuer und wird separat/informativ geführt (SUITE.md-Kommentar
+    // in ko-flex.js, Zeile ~1024).
+    if (yr.divWhtEur !== undefined) {
+      rawData.divWhtEurFlex      = yr.divWhtEur      || 0;
+      rawData.interestWhtEurFlex = yr.interestWhtEur || 0;
+      rawData.flexXml             = true;
+    } else {
+      rawData.divWhtEurFlex      = 0;
+      rawData.interestWhtEurFlex = 0;
+      rawData.flexXml             = false;
     }
 
     // ── AUTOMATISCHE KONTO-ERKENNUNG ──────────────────────────
@@ -22335,7 +22349,7 @@ function loadFlexYearFile(targetYear) {
 
     try {
       if (!window.koFlex) {
-        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c6ebbc9b/modules/ko-flex.js');
+        const mod = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@a533917f/modules/ko-flex.js');
         window.koFlex = mod;
       }
 
@@ -22430,6 +22444,17 @@ function applyFlexYear(year) {
     rawData.flexCash   = false;
   }
 
+  // Flex XML WHT-Split (Punkt A) — IMMER explizit setzen, gleiche Begründung
+  if (yr.divWhtEur !== undefined) {
+    rawData.divWhtEurFlex      = yr.divWhtEur      || 0;
+    rawData.interestWhtEurFlex = yr.interestWhtEur || 0;
+    rawData.flexXml             = true;
+  } else {
+    rawData.divWhtEurFlex      = 0;
+    rawData.interestWhtEurFlex = 0;
+    rawData.flexXml             = false;
+  }
+
   // Banner aktualisieren — zeigt aktives Jahr, verfügbare Jahre als Kontext
   const banner = document.getElementById('flex-info');
   if (banner) {
@@ -22472,7 +22497,7 @@ function recalculate() {
   const brutto = calcKAP(rawData, year);
   const kap    = projiziereErgebnis(brutto, kontoTyp);
 
-  const { divEur, whtEur, divSource, zinsEur,
+  const { divEur, whtEur, divSource, interestWhtEur, zinsEur,
           optGain, optLoss, akGain, akLoss,
           fxSaldo, fxSource, fsa, vorabpauschale } = kap;
 
@@ -22501,6 +22526,7 @@ function recalculate() {
     z14_zinsen:     round2(zinsEur),
     z17_fsa:        round2(kap.fsa),
     z41_wht:        round2(whtEur),
+    interest_wht:   round2(interestWhtEur||0),  // NEU (Punkt A): informativ, NICHT Z.41
     opt_saldo:      round2(optSaldo),
     opt_vortrag:    round2(vortrag),
     ak_saldo:       round2(akSaldo),
@@ -22604,11 +22630,18 @@ function calcKAP(d, year) {
     : divData                               ? divData.totalDivEur
     : toEur(d.divNAV,'USD',year);
 
-  const whtEur = d.flexCash ? (d.whtEurFlex||0)
+  // WHT-Priorität: Flex XML (divWhtEur, Divi/Zins getrennt, Punkt A 09.08.2026,
+  // end-to-end gegen echte 2023-2025-Daten getestet) vor Flex Cash (z41_quellensteuer
+  // mischt Divi- und Zins-QSt undifferenziert, methodisch ungenauer) vor PDF/EZB/NAV.
+  const whtEur = d.flexXml ? (d.divWhtEurFlex||0)
+    : d.flexCash ? (d.whtEurFlex||0)
     : (_pdfDiv>0)                           ? (pdfData.creditableWht||0)
     : (_hasExactRates && _exactWhtEur>0)    ? _exactWhtEur
     : divData                               ? divData.totalWhtEur
     : toEur(d.whtNAV,'USD',year);
+
+  // Zins-Quellensteuer separat (NICHT Z.41-relevant), nur informativ, nur bei Flex XML verfügbar
+  const interestWhtEur = d.flexXml ? (d.interestWhtEurFlex||0) : 0;
 
   const divSource = d.flexCash           ? '(IBKR exakt)'
     : (_pdfDiv>0)                        ? '(exakt PDF)'
@@ -22639,6 +22672,7 @@ function calcKAP(d, year) {
 
   return {
     divEur, whtEur, divSource,
+    interestWhtEur,  // NEU (Punkt A): informativ, NICHT Z.41-relevant
     zinsEur,
     optGain, optLoss,
     akGain, akLoss,
@@ -23007,6 +23041,11 @@ function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG,
   setText('ov-div',     fmt(div) + ds);
   setText('ov-div-sub', `WHT einbehalten: ${fmt(wht)}${ds}`);
   setText('ov-wht',     fmt(wht) + ds);
+  // Zins-QSt separat anzeigen (Punkt A, 09.08.2026) — NICHT Z.41-relevant, nur informativ
+  const interestWht = kap?.interest_wht || 0;
+  setText('ov-wht-sub', interestWht > 0
+    ? `Max. 15% DBA-Satz anrechenbar · zzgl. ${fmt(interestWht)} Zins-QSt (nicht Z.41)`
+    : 'Max. 15% DBA-Satz anrechenbar');
   setText('ov-zins',    fmt(zins));  // EUR-Betrag, kein FX nötig
   setText('ov-opt',     fmt(optSaldo) + os);
   setText('ov-opt-sub', `Einnahmen: ${fmt(optG)}${os} | Verluste: ${fmt(optL)}${os}`);
@@ -23071,6 +23110,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
     { z:'17', text:'Freistellungsauftrag CapTrader' + (isJoint ? ' ('+fmt(fsa)+' gesamt, '+fmt(fsa/2)+' je Ehegatte)' : '') + jointNote, val:kap.z17_fsa, cls:'neutral' },
     { type:'header', text:'C — Anrechenbare Steuerabzugsbeträge' },
     { z:'41', text:`Anrechenbare Kapitalertragsteuer (Quellensteuer aus Ausland)${jointNote}`,  val:kap.z41_wht, cls: kap.z41_wht > 0 ? 'pos' : 'neutral', approx: divSrc==='~' },
+    ...(kap.interest_wht > 0 ? [{ type:'note', text:`Zins-Quellensteuer ${fmt(kap.interest_wht)} einbehalten — NICHT in Zeile 41 (nur ausländische Divi-QSt anrechenbar); Zinsen bereits netto in Z.14 enthalten.` }] : []),
   ];
 
   const form = document.getElementById('kap-form-output');
@@ -23087,6 +23127,7 @@ function renderKAPForm(kap, year, isJoint, spouse, kontoName, kontoNr, divSrc, f
     <div class="kap-form-body">
       ${rows.map(r => {
         if (r.type === 'header') return `<div class="kap-row"><div class="kap-section-header">${r.text}</div></div>`;
+        if (r.type === 'note') return `<div class="kap-row"><div class="kap-beschr" style="font-size:11px;color:var(--muted);font-style:italic;padding-left:0.5rem">ℹ ${r.text}</div></div>`;
         const isFx = parseFloat(r.val) !== 0;
         return `
           <div class="kap-row">
