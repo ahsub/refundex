@@ -21424,6 +21424,8 @@ let divData   = null;  // Dividenden HTML Daten
 let fxData    = null;  // FX-Einkünfte CSV Daten
 let fxRateMap = {};    // { "USD:2024-04-15": 0.9291, ... }
 let flexYearlyResults = {};
+let flexAllTrades     = [];  // Einzeltransaktionen ALLER hochgeladenen Jahre (10.08.2026, Trade-Detail-Report 2.16)
+let flexAllDividends  = [];  // Dividenden/WHT-Buchungen ALLER hochgeladenen Jahre (dto.)
 let flexKontoName     = '';
 let flexIsJoint       = false;
 let flexInhaber       = [];
@@ -22174,6 +22176,26 @@ async function onFileFlex(event) {
       }
       totalTrades += result.trades?.length || 0;
       totalDivs   += result.cashTransactions?.dividenden?.length || 0;
+
+      // Trade-Detail-Report (2.16, 10.08.2026): Einzeltransaktionen + Dividenden
+      // ALLER hochgeladenen Dateien global akkumulieren (mehrjährige FIFO-Lot-
+      // Fortführung braucht Rohdaten aus allen Jahren, nicht nur Aggregate).
+      // Dedupe über Referenz-ID (tradeID/transactionID), da CapTrader/IBKR bei
+      // Mehrfach-Uploads überlappende Randtage liefern kann.
+      if (Array.isArray(result.trades)) {
+        const seen = new Set(flexAllTrades.map(t => t.tradeID || `${t.date}|${t.symbol}|${t.qty}|${t.price}`));
+        for (const t of result.trades) {
+          const key = t.tradeID || `${t.date}|${t.symbol}|${t.qty}|${t.price}`;
+          if (!seen.has(key)) { flexAllTrades.push(t); seen.add(key); }
+        }
+      }
+      if (Array.isArray(result.dividends)) {
+        const seenD = new Set(flexAllDividends.map(d => `${d.date}|${d.symbol}|${d.activityCode}|${d.amount}`));
+        for (const d of result.dividends) {
+          const key = `${d.date}|${d.symbol}|${d.activityCode}|${d.amount}`;
+          if (!seenD.has(key)) { flexAllDividends.push(d); seenD.add(key); }
+        }
+      }
     }
 
     if (kontoName) { flexKontoName = kontoName; flexIsJoint = isJoint; flexInhaber = inhaber; }
@@ -22397,6 +22419,22 @@ function loadFlexYearFile(targetYear) {
         for (const [yr, data] of resultYears2) {
           if (yr === primaryYr2 || !flexYearlyResults[yr]) {
             flexYearlyResults[yr] = { ...data };
+          }
+        }
+
+        // Trade-Detail-Report (2.16): auch hier in globale Arrays akkumulieren (dedupe s. onFileFlex)
+        if (Array.isArray(result.trades)) {
+          const seen2 = new Set(flexAllTrades.map(t => t.tradeID || `${t.date}|${t.symbol}|${t.qty}|${t.price}`));
+          for (const t of result.trades) {
+            const key = t.tradeID || `${t.date}|${t.symbol}|${t.qty}|${t.price}`;
+            if (!seen2.has(key)) { flexAllTrades.push(t); seen2.add(key); }
+          }
+        }
+        if (Array.isArray(result.dividends)) {
+          const seenD2 = new Set(flexAllDividends.map(d => `${d.date}|${d.symbol}|${d.activityCode}|${d.amount}`));
+          for (const d of result.dividends) {
+            const key = `${d.date}|${d.symbol}|${d.activityCode}|${d.amount}`;
+            if (!seenD2.has(key)) { flexAllDividends.push(d); seenD2.add(key); }
           }
         }
       }
