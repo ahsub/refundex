@@ -23132,16 +23132,18 @@ async function renderTradeDetailSektion(year) {
 
   try {
     if (!window.koTradeDetail) {
-      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c9aa2fce/modules/ko-tradedetail.js');
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@07d3c474/modules/ko-tradedetail.js');
     }
     const report = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
-    _tradeDetailCache = { year, report };
+    const optReport = window.koTradeDetail.buildOptionsDetailReport(flexAllTrades, String(year));
+    _tradeDetailCache = { year, report, optReport };
 
-    // Warnungen
+    // Warnungen (Aktien + Optionen zusammengeführt)
     const warnEl = document.getElementById('tradedetail-warnings');
-    if (report.warnings.length > 0) {
+    const allWarnings = [...report.warnings, ...optReport.warnings];
+    if (allWarnings.length > 0) {
       warnEl.style.display = 'block';
-      warnEl.innerHTML = report.warnings.map(w =>
+      warnEl.innerHTML = allWarnings.map(w =>
         `<div class="hinweis warn" style="margin-bottom:0.5rem"><span>⚠️</span><span>${escapeHtml(w)}</span></div>`
       ).join('');
     } else {
@@ -23150,12 +23152,13 @@ async function renderTradeDetailSektion(year) {
 
     // Body nur neu rendern wenn gerade sichtbar (Performance bei vielen Symbolen)
     const body = document.getElementById('tradedetail-body');
+    const totalCount = report.meta.symbolCount + optReport.meta.contractCount;
     if (body.style.display !== 'none') {
-      body.innerHTML = renderTradeDetailBody(report);
+      body.innerHTML = renderTradeDetailBody(report, optReport);
     } else {
       // Titel-Zähler aktualisieren auch wenn eingeklappt
       const btn = document.getElementById('tradedetail-toggle-btn');
-      if (btn) btn.textContent = `▸ Anzeigen (${report.meta.symbolCount} Wertpapiere)`;
+      if (btn) btn.textContent = `▸ Anzeigen (${report.meta.symbolCount} Aktien, ${optReport.meta.contractCount} Optionen)`;
     }
   } catch (err) {
     section.style.display = 'block';
@@ -23171,11 +23174,12 @@ function toggleTradeDetailVisibility() {
   if (!body || !_tradeDetailCache) return;
   const nowVisible = body.style.display === 'none';
   body.style.display = nowVisible ? 'block' : 'none';
+  const { report, optReport } = _tradeDetailCache;
   if (nowVisible) {
-    body.innerHTML = renderTradeDetailBody(_tradeDetailCache.report);
+    body.innerHTML = renderTradeDetailBody(report, optReport);
     btn.textContent = '▾ Ausblenden';
   } else {
-    btn.textContent = `▸ Anzeigen (${_tradeDetailCache.report.meta.symbolCount} Wertpapiere)`;
+    btn.textContent = `▸ Anzeigen (${report.meta.symbolCount} Aktien, ${optReport.meta.contractCount} Optionen)`;
   }
 }
 
@@ -23183,10 +23187,19 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function renderTradeDetailBody(report) {
-  if (report.securities.length === 0) {
-    return `<div style="color:var(--muted);font-size:13px;padding:0.5rem 0">Keine Aktien-Transaktionen im gewählten Steuerjahr gefunden.</div>`;
+function renderTradeDetailBody(report, optReport) {
+  if (report.securities.length === 0 && optReport.contracts.length === 0) {
+    return `<div style="color:var(--muted);font-size:13px;padding:0.5rem 0">Keine Aktien- oder Options-Transaktionen im gewählten Steuerjahr gefunden.</div>`;
   }
+  const stocksHtml = report.securities.length === 0 ? '' :
+    `<div style="font-weight:600;font-size:13px;margin:0.8rem 0 0.5rem">Aktien</div>` + renderStockRows(report);
+  const optionsHtml = optReport.contracts.length === 0 ? '' :
+    `<div style="font-weight:600;font-size:13px;margin:1.2rem 0 0.5rem">Optionen</div>` + renderOptionRows(optReport);
+  return stocksHtml + optionsHtml +
+    `<div style="font-size:11px;color:var(--muted);margin-top:0.5rem">Stand: Modul v${report.meta.moduleVersion}</div>`;
+}
+
+function renderStockRows(report) {
   return report.securities.map(sec => {
     const rowsHtml = sec.rows.map(r => {
       if (r.kind === 'buy') {
@@ -23234,7 +23247,65 @@ function renderTradeDetailBody(report) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-  }).join('') + `<div style="font-size:11px;color:var(--muted);margin-top:0.5rem">Stand: ${escapeHtml(report.meta.moduleVersion)} · ${report.meta.scope}</div>`;
+  }).join('');
+}
+
+function renderOptionRows(optReport) {
+  const KIND_LABEL = {
+    long_open:  'Kauf (eröffnend)',
+    short_open: 'Stillhalter-Eröffnung',
+    close:      'Glattstellung',
+    expired:    'Verfall (wertlos)',
+    assigned:   'Zuteilung/Ausübung',
+  };
+  return optReport.contracts.map(c => {
+    const rowsHtml = c.rows.map(r => {
+      if (r.kind === 'long_open' || r.kind === 'short_open') {
+        return `<tr>
+          <td>${escapeHtml(r.trade.date)}</td>
+          <td>${KIND_LABEL[r.kind]}</td>
+          <td style="text-align:right">${fmtQty(Math.abs(r.trade.qty))}</td>
+          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
+          <td style="text-align:right">${fmt(r.cashEur)}</td>
+        </tr>`;
+      } else {
+        const lotRefs = r.consumedLots.map(l =>
+          l.synthetic
+            ? `<div style="font-size:11px;color:var(--amber)">↳ Altbestand unbekannt (${fmtQty(l.qty)} Kontrakt(e) — s. Warnung oben)</div>`
+            : `<div style="font-size:11px;color:var(--muted)">↳ Zuordnung zu Eröffnung am ${escapeHtml(l.date)}: ${fmtQty(l.qty)} Kontrakt(e), ${fmt(l.openCashEur)}</div>`
+        ).join('');
+        const openCash = r.consumedLots.reduce((s,l) => s + l.openCashEur, 0);
+        const gainLoss = round2(openCash + r.cashEur); // Prämie (Open, meist +) + Close-Cashflow (meist -)
+        return `<tr>
+          <td>${escapeHtml(r.trade.date)}</td>
+          <td>${KIND_LABEL[r.kind] || escapeHtml(r.kind)}${lotRefs}</td>
+          <td style="text-align:right">${fmtQty(Math.abs(r.trade.qty))}</td>
+          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
+          <td style="text-align:right">${fmt(r.cashEur)} <span style="color:${gainLoss>=0?'var(--green)':'var(--red)'};font-size:11px">(${gainLoss>=0?'+':''}${fmt(gainLoss)})</span></td>
+        </tr>`;
+      }
+    }).join('');
+
+    return `
+      <div style="margin-bottom:1.5rem;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="background:var(--bg3);padding:0.6rem 1rem;font-weight:600;font-size:13px;display:flex;justify-content:space-between">
+          <span>${escapeHtml(c.symbol)}</span>
+          <span style="color:var(--muted);font-weight:400;font-size:11px">Offen am Jahresende: ${fmtQty(c.offenAmJahresende)} Kontrakt(e)</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
+              <th style="padding:0.4rem 1rem">Datum</th><th>Beschreibung</th>
+              <th style="text-align:right">Kontrakte</th><th style="text-align:right">Whrg.</th>
+              <th style="text-align:right">Kurs (Tageskurs)</th><th style="text-align:right;padding-right:1rem">EUR</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }).join('');
 }
 
 function fmtQty(n) {
