@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 2.5
+**Version:** 2.6
 **Stand:** 10.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -114,6 +114,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
 | 2.3 | 09.08.2026 | Gegenprüfung alle 3 Jahre (2023/2024/2025 XML vs. PWC-PDF): 2023 ✅ (0 Trades/0 EUR), 2024 ✅ (Δ=0,01/0,00 EUR), 2025 ✅ (Δ=0,06/0,11 EUR gegen Transaktionsliste). PWC-Summary-Bug 2025 entdeckt: Line 21 fehlt komplett, Line 24 unter falscher Zeile (Line 22). Dual-Mode-Gate bereinigt: FIFO raus, Cash-Basis rein, Gegenprüfungen bestätigt. Beta-Anforderung: PDF-Upload neben XML nötig. Neuer ROADMAP-Punkt Phase F. |
+| 2.6 | 10.08.2026 | **🔴 KRITISCHER OFFENER BEFUND (Punkt 2.17):** Z.8/Z.9-Formel (Aktienveräußerungsgewinne/-verluste, `ko-flex.js` Zeile ~1016 `stkGainEur`/`stkLossEur`) nutzt Vorzeichen von `netCashEur` — bei Optionen (Z.21/Z.24) korrekt (Cash-Basis-Prinzip, gegen PWC validiert), bei Aktien aber konzeptionell fragwürdig: ein Aktienkauf hat negativen Cashflow und würde fälschlich als "Verlust" gezählt, obwohl ein Kauf steuerlich nie ein Verlust ist (Gewinn/Verlust entsteht erst beim Verkauf). Gegen Axels echte 2025-Daten verifiziert: alle 46 Aktien-Trades 2025 sind Käufe (0 Verkäufe) — würden nach aktueller Formel alle als Verlust gezählt. Eigene Nachrechnung (-40.057,62 €) stimmt NICHT mit dem von Axel hochgeladenen DOCX überein (-68.868,46 € bei 50%-Anteil) — Diskrepanz ungeklärt, evtl. anderer Datenstand/Zwischenversion. **Anders als Z.21/Z.24 wurde Z.8/Z.9 nie gegen einen PWC-Report validiert.** Axel-Entscheidung 10.08.2026: als eigenständiger, priorisierter Punkt behandeln, NICHT im laufenden Trade-Detail-Report-Sprint nebenbei fixen. **Bis zur Klärung: aktuelle Z.8/Z.9-Werte vor Abgabe manuell gegen die offizielle CapTrader-Jahressteuerbescheinigung prüfen.** Nebenbefund: `_xmlConvertEAE` STK-Assignment setzte bei JEDEM Assignment qty positiv/BUY (falsch bei Call-Assignment, Aktien fließen ab) — gefixt (Commit `1e4dc47d`), betrifft aber laut Datenlage nicht Axels 2025-Konto (0 Call-Assignments dort). Trade-Detail-Report (2.16) selbst: Options-Engine grundlegend überarbeitet (zustandsbasierte Open/Close-Erkennung statt unzuverlässigem `openCloseIndicator`-Feld, s. `ko-tradedetail.js` v1.1.0/Commit `8f85bed5`), gegen echte Daten validiert (Summen matchen SWOT-Referenzkennzahl). |
 | 2.5 | 10.08.2026 | **SUITE.md-Ausnahme (Axel-Entscheidung, bewusst):** Maintenance-Mode-Regel (§4 SUITE.md, nur Bugfixes/<1h) für dieses eine Feature durchbrochen. Kontext: Live-Browser-Test kap.html (erstmals seit PDF-Upload-Bau) deckte zwei blockierende SyntaxErrors auf (siehe kap.html-Commits `2c10f5d2`, `2ccff146` — `profile-btn`-Quoting-Fehler seit 08.08./Commit `23678830`, `BASISZINS`-Doppeldeklaration seit 07.08./Commit `ccf79f33`; beide bestanden vor dieser Session, blockierten komplette Skriptausführung). Nach Fix: Axel-Anforderung neues Feature 2.15 — vollständige Trade-Auflistung mit tagesaktuellem EZB-Kurs im Steuerreport, Vorbild BubbleTax-Wettbewerbsprodukt (Anhang A.1–A.5: Einzeltransaktionen inkl. FIFO-Zuordnung, Referenz-IDs, Fremdwährungs-FIFO-Pools je Währung). Kein <1h-Bugfix, echtes Ausbau-Feature — Axel hat Ausnahme bewusst bestätigt. |
 | 2.4 | 09.08.2026 | Phase F umgesetzt: kap.html PDF-Upload deterministisch (PDF.js-Textparser statt Claude-API — kein API-Key, kein Drittanbieter-Datenfluss, Bestätigungs-Dialog vor Engine-Übernahme lt. Nicht-Ziel 4). Fallback auf Transaktionsliste bei PWC-Summary-Bug automatisiert. Getestet gegen echte 2023/2024/2025-PDFs, alle Werte exakt. **2.14 erledigt** (Buchungs-Datums-Filter, defensiv, 0 Treffer in Axels Daten) — dabei kritischerer Bug gefunden+gefixt: CashTransaction-Filter nutzte nicht-existentes `activityCode`-Attribut statt `type`, `dividends`-Array war bei echten Daten immer leer (betraf komplette Divi/WHT-Pipeline). |
 | 2.2 | 08.08.2026 | Steuerrechtliche Klarstellung: Z.21/Z.24 Cash-Basis §20 EStG (kein FIFO); ko-flex.js v1.3 + kap.html CDN+Badge; 2.13 ENTFÄLLT |
@@ -347,3 +348,78 @@ deutlich mehr Positionen mit Verlust zurückgekauft — Axel-Einordnung:
 „zu viele schlechte Options-Trades, das war der Beweggrund für dieses Projekt."
 Dieser Befund ist ein konkreter Datenpunkt für die OptionsDoktor-Lernmuster-
 Engine (ROADMAP 2.12 / SUITE.md №37, Trigger 01.10.2026).
+
+## 🔴 KRITISCHER BEFUND 10.08.2026 — Z.8/Z.9-Formel Aktien unvalidiert (2.17)
+
+**Status: OFFEN, ungeklärt. Axel-Entscheidung: eigenständig behandeln, nicht
+im Trade-Detail-Report-Sprint nebenbei fixen.**
+
+### Befund
+
+`ko-flex.js` (Zeile ~1016, `stkGainEur`/`stkLossEur` innerhalb der
+`yearlyResults`-Konstruktion in `parseActivityXML`) bestimmt Z.8/Z.9
+(Aktienveräußerungsgewinne/-verluste) über das **Vorzeichen von
+`netCashEur`** — dasselbe Cash-Basis-Prinzip, das bei Optionen (Z.21/Z.24)
+steuerlich korrekt ist (Stillhalterprämie ist im Zuflussjahr sofort
+Einkommen, § 20 Abs. 1 Nr. 11 EStG).
+
+Bei **Aktien** ist dieses Prinzip aber konzeptionell fragwürdig: Ein
+Aktienkauf hat einen negativen Cashflow (Geld fließt ab) — die aktuelle
+Formel würde das als "Verlust" zählen, obwohl ein Kauf steuerlich niemals
+ein Verlust ist. Der Gewinn/Verlust entsteht erst beim späteren Verkauf,
+als Differenz aus Veräußerungserlös und Anschaffungskosten (FIFO), nicht
+aus der Kauf-Cashflow-Richtung.
+
+Ein Code-Kommentar eine Zeile über der Formel behauptet "IBKR
+FifoPnlRealized × FXRateToBase" — tatsächlich verwendet wird aber
+`netCashEur`, nicht `fifoPnlEur`. Kommentar und Code stimmen nicht überein.
+
+### Verifikation gegen echte Daten (10.08.2026, Node+jsdom, Axels
+2023-2025-XML-Dateien)
+
+- Alle **46 Aktien-Trades im Steuerjahr 2025 sind Käufe** — 0 Verkäufe.
+- Nach der aktuellen Formel würden **alle 46** als Verlust gezählt
+  (negativer Cashflow bei jedem Kauf).
+- Eigene Nachrechnung der Summe: **-40.057,62 €**.
+- **Stimmt NICHT** mit dem von Axel hochgeladenen DOCX-Begleitdokument
+  überein (Z.9 = -68.868,46 € bei 50%-Anteil, entspräche ~-137.736,92 €
+  Vollkonto). Diskrepanz **ungeklärt** — möglicherweise wurde das DOCX mit
+  einem anderen Datenstand oder einer Zwischenversion aus der laufenden
+  Session erzeugt. Muss vor jeder Korrektur der Formel selbst geklärt
+  werden, sonst besteht Gefahr einer Verschlimmbesserung.
+
+### Wichtige Abgrenzung
+
+**Anders als Z.21/Z.24 (Optionen) wurde Z.8/Z.9 (Aktien) nie gegen einen
+PWC German Tax Report validiert.** Die in ROADMAP 2.3/2.4 dokumentierte
+Gegenprüfung (Δ=0,01–0,11 €) bezog sich ausschließlich auf die
+Options-Formel. Für Aktien fehlt diese Validierung komplett — dieser Fund
+entstand zufällig beim Debuggen des Trade-Detail-Reports (2.16), nicht
+durch gezielte Prüfung.
+
+### Bis zur Klärung
+
+**Axel: aktuelle Z.8/Z.9-Werte vor Abgabe der Steuererklärung 2025 manuell
+gegen die offizielle CapTrader-Jahressteuerbescheinigung abgleichen.**
+
+### Nächste Schritte (nicht in dieser Session begonnen)
+
+1. Diskrepanz zwischen eigener Nachrechnung und DOCX-Wert aufklären
+   (welcher Datenstand erzeugte das hochgeladene DOCX?).
+2. Klären, ob eine echte FIFO-Gewinn/Verlust-Berechnung für Aktien nötig
+   ist (ggf. Wiederaufnahme von `ko-fifo.js`, s. dortige Dormant-Notiz vom
+   25.06.2026) oder ob IBKRs `FifoPnlRealized`-Feld direkt nutzbar ist
+   (das Feld existiert pro Trade, wird aber aktuell für die
+   `yearlyResults`-Aggregation nicht verwendet).
+3. Gegenprüfung gegen PWC German Tax Report 2023/2024/2025 für Z.8/Z.9,
+   analog zur bereits erfolgten Z.21/Z.24-Gegenprüfung.
+
+### Nebenbefund (bereits behoben)
+
+`_xmlConvertEAE` (STK-Assignment-Events aus der OptionEAE-Sektion) setzte
+bei **jedem** Assignment `qty` positiv und `buySell:'BUY'` — korrekt für
+Put-Assignment (Aktien fließen zu), aber falsch für Call-Assignment (Aktien
+fließen ab, wäre ein Verkauf). Gefixt in Commit `1e4dc47d`. Betrifft laut
+Datenlage NICHT Axels 2025-Konto (0 Call-Assignments dort, nur 5
+Put-Assignments) — daher auch nicht die Ursache der obigen Diskrepanz,
+aber ein reeller, unabhängig sinnvoller Fix für andere Jahre/Konten.
