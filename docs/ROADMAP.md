@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 2.8
+**Version:** 2.9
 **Stand:** 10.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -114,6 +114,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
 | 2.3 | 09.08.2026 | Gegenprüfung alle 3 Jahre (2023/2024/2025 XML vs. PWC-PDF): 2023 ✅ (0 Trades/0 EUR), 2024 ✅ (Δ=0,01/0,00 EUR), 2025 ✅ (Δ=0,06/0,11 EUR gegen Transaktionsliste). PWC-Summary-Bug 2025 entdeckt: Line 21 fehlt komplett, Line 24 unter falscher Zeile (Line 22). Dual-Mode-Gate bereinigt: FIFO raus, Cash-Basis rein, Gegenprüfungen bestätigt. Beta-Anforderung: PDF-Upload neben XML nötig. Neuer ROADMAP-Punkt Phase F. |
+| 2.9 | 10.08.2026 | Architektur-Recherche-Notiz 2.18 ergänzt: modulare ES6-Struktur für V2, inspiriert von externem Referenzprojekt (uebber/ibkr-german-tax-declaration-engine, Python). Konkrete übernehmenswerte Muster dokumentiert: Corporate-Actions-Parser-Modul, SOY/EOY-Validierungs-Gate, strukturierte Data-Gap-Sammlung, Options↔Aktien-Matching statt Dedupe, Law-as-data-Registry-Muster. Reine Recherche/Doku, kein Bau — unter Refundex-Maintenance-Modus zulässig. |
 | 2.8 | 10.08.2026 | **✅ 2.17 GESCHLOSSEN.** Alle 4 Klärungsschritte durchlaufen: Diskrepanz aufgeklärt (DOCX-Metadaten-Zeitstempel → falscher Vergleichswert, war 2024er- statt 2025er-Daten), Methodik geklärt (netCashEur fehlerhaft, FifoPnlRealized unbrauchbar → FIFO-Nachrechnung via ko-tradedetail.js), PWC-Gegenprüfung mit Axels echten 2023-2025-Reports (2023/2025 exakt, 2024 Δ=0,03%), Fix implementiert (`updateAktienGainLossFIFO`, Commits `913a4332`/`d9ce69a8`/`8664f95b`). Nebenfund: echter Leerverkauf (CVS 13.05.2024) wurde als Datenlücke fehlinterpretiert — Aktien-FIFO auf zustandsbasierte Long/Short-Erkennung generalisiert (analog Options-Logik), verbessert 2024-Δ von 73,69€ auf 2,33€. Kein weiterer Handlungsbedarf. |
 | 2.7 | 10.08.2026 | 2.17 Governance geklärt: als Bugfix eingestuft (jederzeit erlaubt, keine §4-Ausnahme nötig). Klärungsplan vereinbart (4 Schritte: Diskrepanz aufklären → Methodik prüfen → PWC-Gegenprüfung → Fix). Axel prüft eigenständig Herkunft/Datenstand des ursprünglichen DOCX. |
 | 2.6 | 10.08.2026 | **🔴 KRITISCHER OFFENER BEFUND (Punkt 2.17):** Z.8/Z.9-Formel (Aktienveräußerungsgewinne/-verluste, `ko-flex.js` Zeile ~1016 `stkGainEur`/`stkLossEur`) nutzt Vorzeichen von `netCashEur` — bei Optionen (Z.21/Z.24) korrekt (Cash-Basis-Prinzip, gegen PWC validiert), bei Aktien aber konzeptionell fragwürdig: ein Aktienkauf hat negativen Cashflow und würde fälschlich als "Verlust" gezählt, obwohl ein Kauf steuerlich nie ein Verlust ist (Gewinn/Verlust entsteht erst beim Verkauf). Gegen Axels echte 2025-Daten verifiziert: alle 46 Aktien-Trades 2025 sind Käufe (0 Verkäufe) — würden nach aktueller Formel alle als Verlust gezählt. Eigene Nachrechnung (-40.057,62 €) stimmt NICHT mit dem von Axel hochgeladenen DOCX überein (-68.868,46 € bei 50%-Anteil) — Diskrepanz ungeklärt, evtl. anderer Datenstand/Zwischenversion. **Anders als Z.21/Z.24 wurde Z.8/Z.9 nie gegen einen PWC-Report validiert.** Axel-Entscheidung 10.08.2026: als eigenständiger, priorisierter Punkt behandeln, NICHT im laufenden Trade-Detail-Report-Sprint nebenbei fixen. **Bis zur Klärung: aktuelle Z.8/Z.9-Werte vor Abgabe manuell gegen die offizielle CapTrader-Jahressteuerbescheinigung prüfen.** Nebenbefund: `_xmlConvertEAE` STK-Assignment setzte bei JEDEM Assignment qty positiv/BUY (falsch bei Call-Assignment, Aktien fließen ab) — gefixt (Commit `1e4dc47d`), betrifft aber laut Datenlage nicht Axels 2025-Konto (0 Call-Assignments dort). Trade-Detail-Report (2.16) selbst: Options-Engine grundlegend überarbeitet (zustandsbasierte Open/Close-Erkennung statt unzuverlässigem `openCloseIndicator`-Feld, s. `ko-tradedetail.js` v1.1.0/Commit `8f85bed5`), gegen echte Daten validiert (Summen matchen SWOT-Referenzkennzahl). |
@@ -485,3 +486,96 @@ fließen ab, wäre ein Verkauf). Gefixt in Commit `1e4dc47d`. Betrifft laut
 Datenlage NICHT Axels 2025-Konto (0 Call-Assignments dort, nur 5
 Put-Assignments) — daher auch nicht die Ursache der obigen Diskrepanz,
 aber ein reeller, unabhängig sinnvoller Fix für andere Jahre/Konten.
+
+## 📐 ARCHITEKTUR-IDEE 10.08.2026 — Modulare ES6-Struktur für V2 (2.18)
+
+**Status: Recherche-Notiz, kein Bau begonnen.** Axel-Wunsch nach Sichtung
+eines externen Referenzprojekts, dokumentiert als V2-Zielbild — passt unter
+"Recherche-Gates laufen weiter" im Refundex-Maintenance-Modus (SUITE.md §4),
+KEIN Verstoß gegen die Bau-Sperre.
+
+### Auslöser
+
+Axel zeigte `github.com/uebber/ibkr-german-tax-declaration-engine` (Python,
+öffentlich, MIT-artig strukturiert) — ein IBKR→Anlage-KAP-Tool mit deutlich
+sauberer Modul-Trennung als unser aktueller `kap.html`-Monolith (~25.000
+Zeilen, UI+Berechnung+Rendering in einer Datei). Axels Wunsch: eine
+vergleichbar modulare Struktur, aber in ES6 statt Python, für eine spätere
+V2-Version von Refundex.
+
+### Referenz-Architektur (Python, zur Orientierung)
+
+```
+src/
+  parsers/         trades_parser.py, corporate_actions_parser.py,
+                   cash_transactions_parser.py, options_eae_parser.py,
+                   positions_parser.py, cash_balance_parser.py
+  domain/          assets.py, events.py, enums.py, exceptions.py, results.py
+  identification/  asset_resolver.py
+  classification/  asset_classifier.py
+  engine/          fifo_manager.py, loss_offsetting.py, replay.py,
+                   calculation_engine.py, vorabpauschale_attribution.py,
+                   ledger_views.py
+  processing/      data_gaps.py, enrichment.py, option_trade_linker.py,
+                   withholding_tax_linker.py, fund_prices.py,
+                   vorabpauschale_declarations.py
+  tax_law/         registry.py (Basiszins/Teilfreistellung, jeweils mit
+                   Gesetzeszitat), holding_period.py
+  reporting/       console_reporter.py, pdf_generator.py, form_rules.py
+```
+
+### Übertragbares ES6-Analogon (Skizze, NICHT final)
+
+```
+modules/
+  parsers/         ko-flex-xml-parser.js, ko-corporate-actions-parser.js,
+                   ko-cash-transactions-parser.js, ko-options-eae-parser.js,
+                   ko-positions-parser.js
+  domain/          trade-event.js, option-lifecycle-event.js,
+                   corp-action-event.js, enums.js
+  engine/          ko-fifo-manager.js (Nachfolger von ko-tradedetail.js),
+                   ko-loss-offsetting.js
+  processing/      ko-data-gaps.js, ko-option-trade-linker.js,
+                   ko-withholding-tax-linker.js
+  tax-law/         ko-tax-registry.js (Basiszins/Teilfreistellung
+                   versioniert, jeweils mit Gesetzeszitat im Kommentar)
+  reporting/       ko-docx-generator.js, ko-screen-renderer.js
+```
+
+`ko-flex.js` und `ko-tradedetail.js` (heutiger Stand) wären in dieser
+Struktur grob die Vorläufer von `parsers/` bzw. `engine/` — bereits ein
+Schritt in diese Richtung, aber `kap.html` selbst bündelt weiterhin
+UI-Rendering, Berechnung und DOCX-Erzeugung ungetrennt.
+
+### Konkret übernehmenswerte Muster (unabhängig vom Sprachwechsel), s. auch
+Recherche-Notiz vom selben Tag (Chat-Verlauf, nicht separat dokumentiert):
+
+1. **Corporate-Actions-Parsing** als eigenständiges Modul — aktuell in
+   `ko-flex.js` komplett fehlend (bestätigter blinder Fleck, s. 2.17-Historie).
+2. **SOY/EOY-Positions-Abgleich als hartes Validierungs-Gate** — berechnete
+   Endposition gegen vom Broker gemeldete Position prüfen, bei Abweichung
+   Abbruch statt stiller Weiterverarbeitung. Leitsatz des Referenzprojekts:
+   *"There is no safe direction to be wrong."* Hätte den 2.17-Befund
+   (Z.8/Z.9-Formel) vermutlich sofort sichtbar gemacht, statt erst beim
+   zufälligen Debuggen des Trade-Detail-Reports.
+3. **Strukturierte Data-Gap-Sammlung** (Code + Severity `WARNING`/
+   `FAIL_FAST` + Subjekt + Detailtext) statt loser `warnings.push(String)`-
+   Arrays wie aktuell in `ko-tradedetail.js`.
+4. **Options↔Aktien-Verknüpfung über Match-Key** (Datum + Underlying-ConID +
+   Stückzahl) statt Dedupe-Heuristik — methodisch sauberer als unser
+   `dedupeAssignmentTrades()`-Ansatz vom 10.08., auch wenn der bei Axels
+   Daten bisher nicht sichtbar falsch lag (0 Call-Assignments 2025).
+5. **Law-as-data Registry mit Gesetzeszitat pro Eintrag** — Basiszins-Werte
+   dort (2.53% für 2025, 3.20% für 2026) stimmen exakt mit unseren überein,
+   gute Cross-Validierung unserer bestehenden Werte.
+6. **`Open/CloseIndicator` explizit als "CRITICAL" in der Flex-Query-Konfig
+   markiert** — evtl. Wurzelursache, warum das Feld bei Axels Export oft leer
+   war (s. 2.16-Historie, zustandsbasierter Workaround). Prüfenswert: liegt
+   es an der Flex-Query-Feldauswahl selbst, nicht nur am Parsing?
+
+### Nächste Schritte (nicht terminiert, kein Bau-Zeitpunkt festgelegt)
+
+- Bleibt Recherche-Notiz bis zu einer expliziten V2-Kickoff-Entscheidung.
+- Bei V2-Start: Punkt 1 (Corporate Actions) und Punkt 2 (SOY/EOY-Gate) haben
+  laut heutiger Session-Erfahrung den höchsten Sofort-Nutzen, unabhängig
+  vom Zeitpunkt des größeren Modul-Umbaus.
