@@ -23202,12 +23202,18 @@ function renderTradeDetailBody(report, optReport) {
 function renderStockRows(report) {
   return report.securities.map(sec => {
     const rowsHtml = sec.rows.map(r => {
+      const grossWhrg = round2(Math.abs(r.trade.proceeds || 0));
+      const feeWhrg   = round2(Math.abs(r.trade.commFee || 0));
+      const netWhrg   = round2(grossWhrg - feeWhrg);
+      const idSub = r.trade.tradeID ? `<div style="font-size:10px;color:var(--muted)">ID: ${escapeHtml(r.trade.tradeID)}</div>` : '';
       if (r.kind === 'buy') {
         return `<tr>
           <td>${escapeHtml(r.trade.date)}</td>
-          <td>Anschaffung${r.trade.classification !== 'stock_buy' ? ' (' + escapeHtml(r.trade.classification) + ')' : ''}</td>
+          <td>Anschaffung${r.trade.classification !== 'stock_buy' ? ' (' + escapeHtml(r.trade.classification) + ')' : ''}${idSub}</td>
           <td style="text-align:right">+${fmtQty(r.trade.qty)}</td>
-          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${fmtPrice(r.trade.price)}</td>
+          <td style="text-align:right">${fmtPrice(grossWhrg)}</td>
+          <td style="text-align:right">${fmtPrice(feeWhrg)}</td>
           <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
           <td style="text-align:right">${fmt(r.eurCost)}</td>
         </tr>`;
@@ -23221,9 +23227,11 @@ function renderStockRows(report) {
         const gainLoss = round2(r.proceedsEur - totalCost);
         return `<tr>
           <td>${escapeHtml(r.trade.date)}</td>
-          <td>Veräußerung${lotRefs}</td>
+          <td>Veräußerung${idSub}${lotRefs}</td>
           <td style="text-align:right">${fmtQty(r.trade.qty)}</td>
-          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${fmtPrice(r.trade.price)}</td>
+          <td style="text-align:right">${fmtPrice(grossWhrg)}</td>
+          <td style="text-align:right">${fmtPrice(feeWhrg)}</td>
           <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
           <td style="text-align:right">${fmt(r.proceedsEur)} <span style="color:${gainLoss>=0?'var(--green)':'var(--red)'};font-size:11px">(${gainLoss>=0?'+':''}${fmt(gainLoss)})</span></td>
         </tr>`;
@@ -23240,14 +23248,22 @@ function renderStockRows(report) {
           <thead>
             <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
               <th style="padding:0.4rem 1rem">Datum</th><th>Beschreibung</th>
-              <th style="text-align:right">Stück</th><th style="text-align:right">Whrg.</th>
-              <th style="text-align:right">Kurs (Tageskurs)</th><th style="text-align:right;padding-right:1rem">EUR</th>
+              <th style="text-align:right">Stück</th>
+              <th style="text-align:right">Kurs (${escapeHtml(sec.currency)})</th>
+              <th style="text-align:right">Brutto (${escapeHtml(sec.currency)})</th>
+              <th style="text-align:right">Gebühren (${escapeHtml(sec.currency)})</th>
+              <th style="text-align:right">EZB-Kurs</th>
+              <th style="text-align:right;padding-right:1rem">Netto EUR</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
   }).join('');
+}
+
+function fmtPrice(n) {
+  return (n==null||isNaN(n)) ? '—' : (n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function renderOptionRows(optReport) {
@@ -23260,12 +23276,17 @@ function renderOptionRows(optReport) {
   };
   return optReport.contracts.map(c => {
     const rowsHtml = c.rows.map(r => {
+      const grossWhrg = round2(Math.abs(r.trade.proceeds || 0));
+      const feeWhrg   = round2(Math.abs(r.trade.commFee || 0));
+      const idSub = r.trade.tradeID ? `<div style="font-size:10px;color:var(--muted)">ID: ${escapeHtml(r.trade.tradeID)}</div>` : '';
       if (r.kind === 'long_open' || r.kind === 'short_open') {
         return `<tr>
           <td>${escapeHtml(r.trade.date)}</td>
-          <td>${KIND_LABEL[r.kind]}</td>
+          <td>${KIND_LABEL[r.kind]}${idSub}</td>
           <td style="text-align:right">${fmtQty(Math.abs(r.trade.qty))}</td>
-          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${fmtPrice(r.trade.price)}</td>
+          <td style="text-align:right">${fmtPrice(grossWhrg)}</td>
+          <td style="text-align:right">${fmtPrice(feeWhrg)}</td>
           <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
           <td style="text-align:right">${fmt(r.cashEur)}</td>
         </tr>`;
@@ -23279,9 +23300,11 @@ function renderOptionRows(optReport) {
         const gainLoss = round2(openCash + r.cashEur); // Prämie (Open, meist +) + Close-Cashflow (meist -)
         return `<tr>
           <td>${escapeHtml(r.trade.date)}</td>
-          <td>${KIND_LABEL[r.kind] || escapeHtml(r.kind)}${lotRefs}</td>
+          <td>${KIND_LABEL[r.kind] || escapeHtml(r.kind)}${idSub}${lotRefs}</td>
           <td style="text-align:right">${fmtQty(Math.abs(r.trade.qty))}</td>
-          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${fmtPrice(r.trade.price)}</td>
+          <td style="text-align:right">${fmtPrice(grossWhrg)}</td>
+          <td style="text-align:right">${fmtPrice(feeWhrg)}</td>
           <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
           <td style="text-align:right">${fmt(r.cashEur)} <span style="color:${gainLoss>=0?'var(--green)':'var(--red)'};font-size:11px">(${gainLoss>=0?'+':''}${fmt(gainLoss)})</span></td>
         </tr>`;
@@ -23298,8 +23321,12 @@ function renderOptionRows(optReport) {
           <thead>
             <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
               <th style="padding:0.4rem 1rem">Datum</th><th>Beschreibung</th>
-              <th style="text-align:right">Kontrakte</th><th style="text-align:right">Whrg.</th>
-              <th style="text-align:right">Kurs (Tageskurs)</th><th style="text-align:right;padding-right:1rem">EUR</th>
+              <th style="text-align:right">Kontrakte</th>
+              <th style="text-align:right">Kurs (${escapeHtml(c.currency)})</th>
+              <th style="text-align:right">Brutto (${escapeHtml(c.currency)})</th>
+              <th style="text-align:right">Gebühren (${escapeHtml(c.currency)})</th>
+              <th style="text-align:right">EZB-Kurs</th>
+              <th style="text-align:right;padding-right:1rem">Netto EUR</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
@@ -23820,24 +23847,31 @@ async function buildTradeDetailDocxSection(ctx) {
   if (report.securities.length === 0 && optReport.contracts.length === 0) return [];
 
   const noteRow = (text) => new TableRow({ children: [
-    new TableCell({ columnSpan: 5, borders, margins:{top:20,bottom:20,left:240,right:60},
+    new TableCell({ columnSpan: 8, borders, margins:{top:20,bottom:20,left:240,right:60},
       shading:{ fill:'F2F2F2', type:ShadingType.CLEAR, color:'F2F2F2' },
       children:[new Paragraph({ children:[new TextRun({ text, italics:true, font:'Arial', size:16, color:'666666' })] })] })
   ]});
 
-  const dataRow = (cells) => new TableRow({ children: cells.map((c,i) =>
-    cell(c, { w: [1200,3600,1200,1200,1360][i], right: i>=2 })) });
+  const COL_W = [900, 2400, 900, 900, 1000, 900, 900, 1460]; // Datum,Beschr.,Stück,Kurs,Brutto,Gebühr,EZB-Kurs,Netto EUR
 
-  const headerRow = () => new TableRow({ tableHeader:true, children: [
-    cell('Datum',{w:1200,bold:true,fill:'D6E4F0'}), cell('Beschreibung',{w:3600,bold:true,fill:'D6E4F0'}),
-    cell('Stück',{w:1200,bold:true,fill:'D6E4F0',right:true}), cell('Kurs',{w:1200,bold:true,fill:'D6E4F0',right:true}),
-    cell('EUR',{w:1360,bold:true,fill:'D6E4F0',right:true}),
+  const dataRow = (cells) => new TableRow({ children: cells.map((c,i) =>
+    cell(c, { w: COL_W[i], right: i>=2 })) });
+
+  const headerRow = (whrgLabel) => new TableRow({ tableHeader:true, children: [
+    cell('Datum',{w:COL_W[0],bold:true,fill:'D6E4F0'}), cell('Beschreibung',{w:COL_W[1],bold:true,fill:'D6E4F0'}),
+    cell('Stück',{w:COL_W[2],bold:true,fill:'D6E4F0',right:true}), cell('Kurs ('+whrgLabel+')',{w:COL_W[3],bold:true,fill:'D6E4F0',right:true}),
+    cell('Brutto ('+whrgLabel+')',{w:COL_W[4],bold:true,fill:'D6E4F0',right:true}), cell('Gebühr ('+whrgLabel+')',{w:COL_W[5],bold:true,fill:'D6E4F0',right:true}),
+    cell('EZB-Kurs',{w:COL_W[6],bold:true,fill:'D6E4F0',right:true}), cell('Netto EUR',{w:COL_W[7],bold:true,fill:'D6E4F0',right:true}),
   ]});
+
+  const fmtP = (n) => (n==null||isNaN(n)) ? '—' : n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const withId = (text, t) => t.tradeID ? text + '  (ID: ' + t.tradeID + ')' : text;
 
   const elements = [h('5. Trade-Detail-Anhang — Einzeltransaktionen mit Los-Zuordnung', HeadingLevel.HEADING_1)];
   elements.push(p('Vollständige Auflistung aller Aktien- und Options-Transaktionen im Steuerjahr mit ' +
-    'FIFO-/Eröffnungs-Zuordnung und tagesaktuellem Wechselkurs. Ergänzende Transparenz-Ansicht — die in ' +
-    'Abschnitt 1 ausgewiesenen KAP-Werte beruhen weiterhin auf der validierten Cash-Basis-Formel.',
+    'FIFO-/Eröffnungs-Zuordnung, Brutto-/Gebühren-/Netto-Aufschlüsselung und tagesaktuellem Wechselkurs. ' +
+    'Ergänzende Transparenz-Ansicht — die in Abschnitt 1 ausgewiesenen KAP-Werte beruhen weiterhin auf der ' +
+    'validierten Cash-Basis-Formel.',
     {italic:true, color:'7F7F7F', size:16}));
   elements.push(p(''));
 
@@ -23854,15 +23888,19 @@ async function buildTradeDetailDocxSection(ctx) {
       elements.push(p(sec.symbol + (sec.isin ? '  (' + sec.isin + ')' : '') +
         '  —  Endbestand: ' + fmtQty(sec.endbestand.stueck) + ' Stück, ' + fmt(sec.endbestand.kostenEur),
         {bold:true, size:18, before:100, after:40}));
-      const rows = [headerRow()];
+      const rows = [headerRow(sec.currency)];
       for (const r of sec.rows) {
+        const grossWhrg = round2(Math.abs(r.trade.proceeds || 0));
+        const feeWhrg   = round2(Math.abs(r.trade.commFee || 0));
         if (r.kind === 'buy') {
-          rows.push(dataRow([r.trade.date, 'Anschaffung', '+' + fmtQty(r.trade.qty),
+          rows.push(dataRow([r.trade.date, withId('Anschaffung', r.trade), '+' + fmtQty(r.trade.qty),
+            fmtP(r.trade.price), fmtP(grossWhrg), fmtP(feeWhrg),
             (r.trade.fxRateToBase||1).toFixed(4), fmt(r.eurCost)]));
         } else {
           const totalCost = r.consumedLots.reduce((s,l) => s + l.costEur, 0);
           const gainLoss = round2(r.proceedsEur - totalCost);
-          rows.push(dataRow([r.trade.date, 'Veräußerung', fmtQty(r.trade.qty),
+          rows.push(dataRow([r.trade.date, withId('Veräußerung', r.trade), fmtQty(r.trade.qty),
+            fmtP(r.trade.price), fmtP(grossWhrg), fmtP(feeWhrg),
             (r.trade.fxRateToBase||1).toFixed(4), fmt(r.proceedsEur) + ' (' + (gainLoss>=0?'+':'') + fmt(gainLoss) + ')']));
           for (const l of r.consumedLots) {
             rows.push(noteRow(l.synthetic
@@ -23871,7 +23909,7 @@ async function buildTradeDetailDocxSection(ctx) {
           }
         }
       }
-      elements.push(new Table({ width:{size:9360,type:WidthType.DXA}, columnWidths:[1200,3600,1200,1200,1360], rows }));
+      elements.push(new Table({ width:{size:9360,type:WidthType.DXA}, columnWidths:COL_W, rows }));
       elements.push(p(''));
     }
   }
@@ -23883,15 +23921,19 @@ async function buildTradeDetailDocxSection(ctx) {
     for (const c of optReport.contracts) {
       elements.push(p(c.symbol + '  —  Offen am Jahresende: ' + fmtQty(c.offenAmJahresende) + ' Kontrakt(e)',
         {bold:true, size:18, before:100, after:40}));
-      const rows = [headerRow()];
+      const rows = [headerRow(c.currency)];
       for (const r of c.rows) {
+        const grossWhrg = round2(Math.abs(r.trade.proceeds || 0));
+        const feeWhrg   = round2(Math.abs(r.trade.commFee || 0));
         if (r.kind === 'long_open' || r.kind === 'short_open') {
-          rows.push(dataRow([r.trade.date, KIND_LABEL[r.kind], fmtQty(Math.abs(r.trade.qty)),
+          rows.push(dataRow([r.trade.date, withId(KIND_LABEL[r.kind], r.trade), fmtQty(Math.abs(r.trade.qty)),
+            fmtP(r.trade.price), fmtP(grossWhrg), fmtP(feeWhrg),
             (r.trade.fxRateToBase||1).toFixed(4), fmt(r.cashEur)]));
         } else {
           const openCash = r.consumedLots.reduce((s,l) => s + l.openCashEur, 0);
           const gainLoss = round2(openCash + r.cashEur);
-          rows.push(dataRow([r.trade.date, KIND_LABEL[r.kind] || r.kind, fmtQty(Math.abs(r.trade.qty)),
+          rows.push(dataRow([r.trade.date, withId(KIND_LABEL[r.kind] || r.kind, r.trade), fmtQty(Math.abs(r.trade.qty)),
+            fmtP(r.trade.price), fmtP(grossWhrg), fmtP(feeWhrg),
             (r.trade.fxRateToBase||1).toFixed(4), fmt(r.cashEur) + ' (' + (gainLoss>=0?'+':'') + fmt(gainLoss) + ')']));
           for (const l of r.consumedLots) {
             rows.push(noteRow(l.synthetic
@@ -23900,7 +23942,7 @@ async function buildTradeDetailDocxSection(ctx) {
           }
         }
       }
-      elements.push(new Table({ width:{size:9360,type:WidthType.DXA}, columnWidths:[1200,3600,1200,1200,1360], rows }));
+      elements.push(new Table({ width:{size:9360,type:WidthType.DXA}, columnWidths:COL_W, rows }));
       elements.push(p(''));
     }
   }
