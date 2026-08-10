@@ -114,72 +114,97 @@ export function buildTradeDetailReport(allTrades, year) {
     const hasActivityInYear = sorted.some(t => t.date >= yearStart && t.date <= yearEnd);
     if (!hasActivityInYear) continue;
 
-    const lots = [];          // FIFO-Stack: {date, qty, costPerUnitEur, totalCostEur}
-    const rows = [];          // Zeitleisten-Zeilen für den Report (nur relevanter Bereich)
-    let synthWarningGiven = false;
-
-    const startBestandLots = [];
-    let processedAnyBeforeYear = false;
+    // Positions-Stack: {date, qty (Vorzeichen: + Long, - Short), costPerUnitEur
+    // (bei Long: Anschaffungskosten je Stück; bei Short: erhaltener Verkaufserlös
+    // je Stück, als "Kosten" mit gleichem Rechenweg wiederverwendet), totalCostEur}
+    const lots = [];
+    const rows = [];
+    let openShortWarningGiven = false;
+    const EPS = 0.0000001;
 
     for (const t of sorted) {
-      const isBuy = t.qty > 0;
-      const eurCost = round2((Math.abs(t.proceeds || 0) + Math.abs(t.commFee || 0)) * (t.fxRateToBase || 1));
+      // ZUSTANDSBASIERTE Long/Short-Erkennung (10.08.2026, ROADMAP 2.17-Nebenfund):
+      // Ein Verkauf, der den Bestand übersteigt, ist nicht zwangsläufig eine
+      // Datenlücke — kann ein echter Leerverkauf sein (verifiziert an Axels
+      // CVS-Trade 13.05.2024: Verkauf 11:10 Uhr VOR jedem Kauf, Eindeckung
+      // 13:37 Uhr selber Tag — § 20 EStG-Leerverkaufsregel, Rn. 196 BMF: Verkauf
+      // gilt als Veräußerung im Zeitpunkt des Leerverkaufs, Eindeckung liefert
+      // nachträglich die Anschaffungskosten). Modell wie bei Optionen: Netto-
+      // Position + Handelsrichtung statt reinem Kauf/Verkauf-Vorzeichen.
+      const netPositionBefore = round4(lots.reduce((s, l) => s + l.qty, 0));
+      const tradeDirection = t.qty > 0 ? 1 : -1;
+      const tradeQtyAbs = Math.abs(t.qty);
+      const cashEur = round2(t.qty > 0
+        ? -(Math.abs(t.proceeds || 0) + Math.abs(t.commFee || 0)) * (t.fxRateToBase || 1)   // Kauf: Cash-Abfluss
+        :  (Math.abs(t.proceeds || 0) - Math.abs(t.commFee || 0)) * (t.fxRateToBase || 1)); // Verkauf: Cash-Zufluss
+      const isClosing = Math.abs(netPositionBefore) > EPS &&
+        Math.sign(tradeDirection) !== Math.sign(netPositionBefore);
 
-      if (isBuy) {
+      if (!isClosing) {
+        // Anschaffung (Long) bzw. Eröffnung/Aufstockung Leerverkauf (Short)
+        const qty = tradeDirection * tradeQtyAbs;
         const lot = {
-          date:         t.date,
-          qty:          t.qty,
-          costPerUnitEur: t.qty !== 0 ? eurCost / t.qty : 0,
-          totalCostEur: eurCost,
-          currency:     t.currency,
-          fxRateToBase: t.fxRateToBase,
-          refId:        t.tradeID || '',
-          classification: t.classification,
+          date: t.date, qty,
+          costPerUnitEur: qty !== 0 ? -cashEur / qty : 0,  // Long: Kosten positiv; Short: "Kosten" = -erhaltener Erlös/Stück
+          totalCostEur: -cashEur,
+          currency: t.currency, fxRateToBase: t.fxRateToBase,
+          refId: t.tradeID || '', classification: t.classification,
         };
         lots.push(lot);
-        if (t.date < yearStart) processedAnyBeforeYear = true;
         if (t.date >= yearStart && t.date <= yearEnd) {
-          rows.push({ kind: 'buy', trade: t, lot, eurCost });
+          rows.push({ kind: tradeDirection > 0 ? 'buy' : 'short_open', trade: t, lot, eurCost: -cashEur, cashEur });
         }
-      } else if (t.qty < 0) {
-        let qtyToSell = Math.abs(t.qty);
-        const proceedsEur = round2(Math.abs(t.proceeds || 0) * (t.fxRateToBase || 1) -
-                                    Math.abs(t.commFee || 0) * (t.fxRateToBase || 1));
+      } else {
+        // Veräußerung (Long-Bestand) bzw. Eindeckung (Short-Bestand)
+        let qtyToClose = Math.min(tradeQtyAbs, Math.abs(netPositionBefore));
         const consumedLots = [];
 
-        while (qtyToSell > 0.0000001 && lots.length > 0) {
+        while (qtyToClose > EPS && lots.length > 0) {
           const lot = lots[0];
-          const take = Math.min(lot.qty, qtyToSell);
-          consumedLots.push({
-            date: lot.date, qty: take,
-            costEur: round2(lot.costPerUnitEur * take),
-          });
-          lot.qty          -= take;
+          const lotAbs = Math.abs(lot.qty);
+          const take = Math.min(lotAbs, qtyToClose);
+          consumedLots.push({ date: lot.date, qty: take, costEur: round2(lot.costPerUnitEur * take) });
+          const sign = lot.qty > 0 ? 1 : -1;
+          lot.qty          -= sign * take;
           lot.totalCostEur -= lot.costPerUnitEur * take;
-          qtyToSell         -= take;
-          if (lot.qty <= 0.0000001) lots.shift();
+          qtyToClose        -= take;
+          if (Math.abs(lot.qty) <= EPS) lots.shift();
         }
 
-        if (qtyToSell > 0.0000001) {
-          // Verkauf übersteigt bekannte Lots → Altbestand vor dem frühesten
-          // hochgeladenen Jahr unbekannt. Synthetisches Lot mit Kosten 0,
-          // damit die Rechnung nicht negativ/falsch wird — als Warnung markiert.
-          consumedLots.push({ date: null, qty: qtyToSell, costEur: 0, synthetic: true });
-          if (!synthWarningGiven) {
-            warnings.push(`${symbol}: Verkauf am ${t.date} übersteigt bekannte Lots — ` +
-              `vermutlich Altbestand aus einem NICHT hochgeladenen Jahr vor dem ` +
-              `frühesten verfügbaren Datenjahr. Los-Zuordnung für diese Menge ` +
-              `als "Altbestand unbekannt" markiert, Kosten mit 0 € angesetzt ` +
-              `(führt zu ÜBERHÖHTEM ausgewiesenem Gewinn für diesen Anteil — ` +
-              `bitte gegen Broker-Jahresbescheinigung prüfen).`);
-            synthWarningGiven = true;
-          }
-          qtyToSell = 0;
+        // Restmenge = Trade übersteigt bekannten Gegenbestand → neue Position
+        // in Trade-Richtung eröffnen (z.B. Verkauf über Long-Bestand hinaus =
+        // zusätzlicher Leerverkauf für den Rest). Kein Alarm-Wort mehr, da dies
+        // größtenteils echte Leerverkäufe sind, keine Datenlücken (s.o.).
+        const remainder = tradeQtyAbs - Math.min(tradeQtyAbs, Math.abs(netPositionBefore));
+        if (remainder > EPS) {
+          const remQty = tradeDirection * remainder;
+          const remCashEur = cashEur * (remainder / tradeQtyAbs);
+          lots.push({
+            date: t.date, qty: remQty,
+            costPerUnitEur: remQty !== 0 ? -remCashEur / remQty : 0,
+            totalCostEur: -remCashEur,
+            currency: t.currency, fxRateToBase: t.fxRateToBase,
+            refId: t.tradeID || '', classification: t.classification,
+          });
         }
 
+        const proceedsOrCostEur = Math.abs(cashEur); // 'sell': Verkaufserlös; 'short_cover': Eindeckungskosten
         if (t.date >= yearStart && t.date <= yearEnd) {
-          rows.push({ kind: 'sell', trade: t, proceedsEur, consumedLots });
+          rows.push({ kind: tradeDirection > 0 ? 'short_cover' : 'sell', trade: t, proceedsEur: proceedsOrCostEur, consumedLots, cashEur });
         }
+      }
+    }
+
+    // Warnung NUR wenn am Ende der verarbeiteten Daten noch ein Short offen ist
+    // (unüblich bei reinen Long-Depots — echter Hinweis auf möglicherweise
+    // fehlende Vorjahresdaten, im Gegensatz zu einem sauber eingedeckten
+    // untertägigen Leerverkauf wie CVS).
+    {
+      const finalNet = round4(lots.reduce((s, l) => s + l.qty, 0));
+      if (finalNet < -EPS) {
+        warnings.push(`${symbol}: Am Ende der verarbeiteten Daten ${fmtNum(Math.abs(finalNet))} Stück ` +
+          `Leerverkaufs-Position offen (nicht eingedeckt). Falls das kein bewusster ` +
+          `Leerverkauf war, könnten Anschaffungen aus einem NICHT hochgeladenen Jahr fehlen.`);
       }
     }
 
@@ -215,6 +240,19 @@ export function buildTradeDetailReport(allTrades, year) {
       scope: 'Aktien only (Optionen/Optionsscheine folgen später)',
     },
   };
+}
+
+/**
+ * Berechnet den realisierten Gewinn/Verlust einer 'sell'- oder 'short_cover'-Zeile.
+ * 'sell' (Long-Veräußerung): Erlös − Anschaffungskosten der konsumierten Lots.
+ * 'short_cover' (Leerverkauf-Eindeckung): bei Short-Eröffnung erhaltener Erlös
+ * (in consumedLots.costEur gespeichert) − jetzige Eindeckungskosten.
+ */
+export function calcRowGainLoss(row) {
+  const totalConsumed = row.consumedLots.reduce((s,l) => s + l.costEur, 0);
+  return row.kind === 'short_cover'
+    ? round2(totalConsumed - row.proceedsEur)
+    : round2(row.proceedsEur - totalConsumed);
 }
 
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
