@@ -1,6 +1,6 @@
 # Refundex — Roadmap
 
-**Version:** 2.9
+**Version:** 2.10
 **Stand:** 10.08.2026
 **Ablage:** `ahsub/refundex/docs/ROADMAP.md`
 **Referenzrahmen:** `docs/STRATEGIE.md` v1.0 — jedes Roadmap-Item hat den Vier-Fragen-Filter (Belegkette / 80-20 / ES6-Modularität / StBerG) bestanden oder ist entsprechend markiert.
@@ -114,6 +114,7 @@ Diese Liste ist Teil der Roadmap, damit sie nicht in jeder Session neu diskutier
 | 1.6 | 06.08.2026 | Phase 2: 2.10
 | 1.7 | 07.08.2026 |
 | 2.3 | 09.08.2026 | Gegenprüfung alle 3 Jahre (2023/2024/2025 XML vs. PWC-PDF): 2023 ✅ (0 Trades/0 EUR), 2024 ✅ (Δ=0,01/0,00 EUR), 2025 ✅ (Δ=0,06/0,11 EUR gegen Transaktionsliste). PWC-Summary-Bug 2025 entdeckt: Line 21 fehlt komplett, Line 24 unter falscher Zeile (Line 22). Dual-Mode-Gate bereinigt: FIFO raus, Cash-Basis rein, Gegenprüfungen bestätigt. Beta-Anforderung: PDF-Upload neben XML nötig. Neuer ROADMAP-Punkt Phase F. |
+| 2.10 | 10.08.2026 | Lizenz-Klärung 2.18: `uebber/ibkr-german-tax-declaration-engine` steht unter MIT-Lizenz (LICENSE-Datei geprüft) — kein rechtliches Hindernis für Übernahme in V2. Würdigungs-Plan dokumentiert (THIRD-PARTY-NOTICES.md bei V2-Start, Quellenangabe bei konkreter Code-/Muster-Übernahme). |
 | 2.9 | 10.08.2026 | Architektur-Recherche-Notiz 2.18 ergänzt: modulare ES6-Struktur für V2, inspiriert von externem Referenzprojekt (uebber/ibkr-german-tax-declaration-engine, Python). Konkrete übernehmenswerte Muster dokumentiert: Corporate-Actions-Parser-Modul, SOY/EOY-Validierungs-Gate, strukturierte Data-Gap-Sammlung, Options↔Aktien-Matching statt Dedupe, Law-as-data-Registry-Muster. Reine Recherche/Doku, kein Bau — unter Refundex-Maintenance-Modus zulässig. |
 | 2.8 | 10.08.2026 | **✅ 2.17 GESCHLOSSEN.** Alle 4 Klärungsschritte durchlaufen: Diskrepanz aufgeklärt (DOCX-Metadaten-Zeitstempel → falscher Vergleichswert, war 2024er- statt 2025er-Daten), Methodik geklärt (netCashEur fehlerhaft, FifoPnlRealized unbrauchbar → FIFO-Nachrechnung via ko-tradedetail.js), PWC-Gegenprüfung mit Axels echten 2023-2025-Reports (2023/2025 exakt, 2024 Δ=0,03%), Fix implementiert (`updateAktienGainLossFIFO`, Commits `913a4332`/`d9ce69a8`/`8664f95b`). Nebenfund: echter Leerverkauf (CVS 13.05.2024) wurde als Datenlücke fehlinterpretiert — Aktien-FIFO auf zustandsbasierte Long/Short-Erkennung generalisiert (analog Options-Logik), verbessert 2024-Δ von 73,69€ auf 2,33€. Kein weiterer Handlungsbedarf. |
 | 2.7 | 10.08.2026 | 2.17 Governance geklärt: als Bugfix eingestuft (jederzeit erlaubt, keine §4-Ausnahme nötig). Klärungsplan vereinbart (4 Schritte: Diskrepanz aufklären → Methodik prüfen → PWC-Gegenprüfung → Fix). Axel prüft eigenständig Herkunft/Datenstand des ursprünglichen DOCX. |
@@ -573,9 +574,47 @@ Recherche-Notiz vom selben Tag (Chat-Verlauf, nicht separat dokumentiert):
    war (s. 2.16-Historie, zustandsbasierter Workaround). Prüfenswert: liegt
    es an der Flex-Query-Feldauswahl selbst, nicht nur am Parsing?
 
+### Lizenz-Klärung + Würdigungs-Plan (10.08.2026, Axel-Auftrag)
+
+**Rechtlich geklärt:** `uebber/ibkr-german-tax-declaration-engine` steht unter
+**MIT-Lizenz** (Copyright (c) 2025 uebber) — geprüft direkt in der
+`LICENSE`-Datei des Repos, nicht nur behauptet. MIT ist maximal permissiv:
+Nutzung, Kopie, Modifikation, auch kommerziell, uneingeschränkt erlaubt.
+**Einzige Bedingung:** Copyright-Hinweis + Lizenztext müssen bei Übernahme
+"wesentlicher Teile" (substantial portions) erhalten bleiben. **Kein
+rechtliches Hindernis für die Übernahme in V2.**
+
+Das Repo hat zusätzlich einen eigenen README-Disclaimer-Abschnitt (getrennt
+von der MIT-Lizenz): *"This software is provided 'as is'... The output is
+intended for informational purposes only and does not constitute tax
+advice."* — inhaltlich identisch zu unseren eigenen Refundex-Disclaimern
+("Rechenwerk, ersetzt keine Steuerberatung"). Gute Bestätigung, dass wir
+mit unserer bestehenden Formulierung richtig liegen — kein Nachbau nötig,
+nur als Cross-Check erwähnenswert.
+
+**Würdigungs-Plan für V2:**
+1. Neue Datei `THIRD-PARTY-NOTICES.md` (o.ä.) im Refundex-V2-Repo, sobald
+   V2-Bau beginnt: MIT-Lizenztext + Copyright-Hinweis von `uebber`
+   vollständig zitiert, mit Verweis welche Architektur-Muster/Konstanten
+   übernommen wurden (Corporate-Actions-Parser-Struktur, SOY/EOY-Gate,
+   Data-Gap-Channel, Options-Matching-Ansatz, Basiszins-Registry-Muster —
+   s. Punkte 1-6 oben).
+2. Bei wörtlicher Code-Übernahme (auch nur einzelner Funktionen/Konstanten-
+   Tabellen, portiert von Python nach ES6): Kommentar-Header im jeweiligen
+   Zieldateikopf mit Quellenangabe (Repo-URL + Commit-Hash zum Zeitpunkt der
+   Übernahme + "adapted from, MIT License, Copyright (c) 2025 uebber").
+3. Da wir laut heutiger Recherche eher **Architektur-Muster und Konzepte**
+   übernehmen als 1:1-Code (Python→ES6-Sprachwechsel ohnehin), ist die
+   Würdigungspflicht niedrigschwellig — aber wird bei jedem konkret
+   übernommenen Baustein einzeln vermerkt, nicht nur pauschal einmal.
+4. **Kein Blocker für den Zeitpunkt des V2-Starts** — bleibt wie der
+   gesamte Punkt 2.18 eine Recherche-/Planungsnotiz ohne Bau-Zeitpunkt.
+
 ### Nächste Schritte (nicht terminiert, kein Bau-Zeitpunkt festgelegt)
 
 - Bleibt Recherche-Notiz bis zu einer expliziten V2-Kickoff-Entscheidung.
 - Bei V2-Start: Punkt 1 (Corporate Actions) und Punkt 2 (SOY/EOY-Gate) haben
   laut heutiger Session-Erfahrung den höchsten Sofort-Nutzen, unabhängig
   vom Zeitpunkt des größeren Modul-Umbaus.
+- Lizenz ist geklärt (s. o.) — reine Bau-Priorisierungsfrage, kein
+  rechtliches Hindernis mehr.
