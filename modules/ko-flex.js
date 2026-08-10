@@ -1215,6 +1215,17 @@ function _xmlConvertEAE(el) {
 
   const assetClass = assetCat === 'OPT' ? 'Aktien- und Indexoptionen' : 'Aktien';
 
+  // BUGFIX 10.08.2026 (gefunden via Trade-Detail-Report, ROADMAP 2.16):
+  // War zuvor fest "Assignment → immer positiv/BUY" — korrekt für Put-Assignment
+  // (Aktien fließen ZU), aber FALSCH für Call-Assignment (Aktien fließen AB,
+  // werden zum Strike "weggerufen" = Verkauf). Betrifft NICHT die offiziellen
+  // Z.8/Z.9-Werte (die laufen über netCashEur, das bei EAE-Records gar nicht
+  // gesetzt ist — s. buildActivitySummary), sondern nur die FIFO-Bestandsführung
+  // im Trade-Detail-Report (ko-tradedetail.js), wo Call-Assignments dadurch als
+  // zusätzlicher Kauf statt als Bestandsabgang verbucht wurden.
+  const isCallAssignmentStk = classification === 'call_assignment';
+  const isStkOutflow = txType === 'Sell' || isCallAssignmentStk;
+
   return {
     assetClass,
     currency:    el.getAttribute('currency')         || 'USD',
@@ -1223,12 +1234,12 @@ function _xmlConvertEAE(el) {
     description: el.getAttribute('description')      || '',
     dateTime:    el.getAttribute('date') ? el.getAttribute('date') + ' 00:00:00' : '',
     date:        el.getAttribute('date') || '',
-    qty:         txType === 'Sell' ? -Math.abs(qty) : Math.abs(qty),
+    qty:         isStkOutflow ? -Math.abs(qty) : Math.abs(qty),
     price:       parseFloat(el.getAttribute('tradePrice') || '0'),
     proceeds:    parseFloat(el.getAttribute('proceeds') || '0'),
     commFee:     parseFloat(el.getAttribute('commisionsAndTax') || '0'),
     codes:       [txType],
-    buySell:     txType === 'Sell' ? 'SELL' : 'BUY',
+    buySell:     isStkOutflow ? 'SELL' : 'BUY',
     openCloseIndicator: 'C',  // EAE = immer Close-Event
     classification,
     putCall:     el.getAttribute('putCall')    || '',
