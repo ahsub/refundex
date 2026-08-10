@@ -22574,7 +22574,7 @@ function recalculate() {
     if (el) {
       const hasKiSt = kist.i1.kist > 0 || (kist.i2 && kist.i2.kist > 0);
       if (!hasKiSt) {
-        el.innerHTML = '<div style="font-size:12px;color:var(--muted)">Keine Kirchensteuerpflicht konfiguriert — <a href="#" onclick="document.getElementById('profile-btn').click();return false" style="color:var(--accent)">Profil öffnen</a></div>';
+        el.innerHTML = '<div style="font-size:12px;color:var(--muted)">Keine Kirchensteuerpflicht konfiguriert — <a href="#" onclick="document.getElementById(&quot;profile-btn&quot;).click();return false" style="color:var(--accent)">Profil öffnen</a></div>';
       } else {
         const fmtKiSt = v => v > 0 ? fmt(v) : '—';
         let html = '<div style="font-size:12px;font-weight:600;margin-bottom:0.4rem">Kirchensteuer (Anlage KAP Z. 57)</div>';
