@@ -227,9 +227,9 @@
 
   <!-- UPLOAD -->
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;max-width:900px">
-    <div class="upload-zone" onclick="document.getElementById('file-flex').click()" title="Flex Query CSV">
+    <div class="upload-zone" onclick="document.getElementById('file-flex').click()" title="Flex Query XML oder CSV">
       <div style="font-size:1.5rem;margin-bottom:0.4rem">📈</div>
-      <div class="upload-title" style="font-size:13px">Flex Query <span style="font-size:10px;background:#0d2a1a;padding:1px 5px;border-radius:3px;color:#22c55e">.CSV</span></div>
+      <div class="upload-title" style="font-size:13px">Flex Query <span style="font-size:10px;background:#0d2a1a;padding:1px 5px;border-radius:3px;color:#22c55e">.XML/.CSV</span></div>
       <div class="upload-hint">IBKR · Account Info + Trades + Cash</div>
       <div id="status-flex" style="margin-top:0.5rem;font-size:11px;color:var(--accent)">Nicht geladen</div>
     </div>
@@ -502,6 +502,27 @@
     <div id="etf-empty" style="color:var(--muted);font-size:13px;padding:0.5rem 0">
       Kein ETF eingetragen — bei reinen Aktien-/Options-Depots nicht relevant.
     </div>
+  </div>
+
+  <!-- TRADE-DETAIL-REPORT (ROADMAP 2.16, 10.08.2026) — vollständige Trade-Auflistung
+       mit FIFO-Los-Zuordnung, Vorbild BubbleTax Anhang A.1. Nur sichtbar bei
+       geladenen Flex-Query-Daten. Aktuell NUR Aktien (Optionen folgen später). -->
+  <div class="section" id="tradedetail-section" style="margin-top:1rem;display:none">
+    <div class="section-title">
+      Trade-Detail-Report <span style="font-size:11px;color:var(--muted);font-weight:400">Einzeltransaktionen mit FIFO-Los-Zuordnung</span>
+      <button class="btn" onclick="toggleTradeDetailVisibility()" id="tradedetail-toggle-btn" style="font-size:11px;padding:0.2rem 0.6rem">▸ Anzeigen</button>
+    </div>
+    <div class="hinweis info" style="margin-bottom:0.75rem">
+      <span>ℹ️</span>
+      <span>Ergänzende Transparenz-Ansicht — zeigt für jede Aktienveräußerung, welche
+      Anschaffung(en) per FIFO zugeordnet werden. <strong>Ersetzt nicht</strong> die oben
+      ausgewiesenen KAP-Werte (die beruhen weiterhin auf der validierten Cash-Basis-Formel).
+      Aktuell nur Aktien; Optionen folgen in einem späteren Ausbauschritt. Setzt voraus, dass
+      Flex-Query-Daten <strong>ab Depoteröffnung</strong> hochgeladen wurden — bei fehlenden
+      Vorjahren erscheint eine Warnung.</span>
+    </div>
+    <div id="tradedetail-warnings"></div>
+    <div id="tradedetail-body" style="display:none"></div>
   </div>
 
   <!-- LEER -->
@@ -22561,6 +22582,9 @@ function recalculate() {
   const etfFocused = document.activeElement?.closest?.('#etf-section');
   if (!etfFocused) renderEtfSektion(year);
 
+  // Trade-Detail-Report (ROADMAP 2.16) — async, nicht blockierend
+  renderTradeDetailSektion(year);
+
   const optSaldo = round2(optGain + optLoss);
   const akSaldo  = round2(akGain  + akLoss);
   const optLossAbs = Math.abs(optLoss);
@@ -23088,6 +23112,133 @@ function renderEtfSektion(year) {
   if (shareLabel) shareLabel.textContent = isJoint ? '50%-Anteil je Ehegatte' : 'Einzelkonto';
   document.getElementById('etf-total-val').textContent = fmt(gesamtAnzeige) + (basiszins !== undefined ? ` (Basiszins ${year}: ${(basiszins*100).toFixed(2)}%)` : '');
   totalEl.style.display = 'flex';
+}
+
+// ============================================================
+// TRADE-DETAIL-REPORT (ROADMAP 2.16, 10.08.2026)
+// Vollständige Trade-Auflistung mit FIFO-Los-Zuordnung, Vorbild BubbleTax A.1.
+// ============================================================
+let _tradeDetailCache = null;  // {year, report} — vermeidet Neuberechnung bei jedem Recalc
+
+async function renderTradeDetailSektion(year) {
+  const section = document.getElementById('tradedetail-section');
+  if (!section) return;
+
+  if (!Array.isArray(flexAllTrades) || flexAllTrades.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  try {
+    if (!window.koTradeDetail) {
+      window.koTradeDetail = await import('https://cdn.jsdelivr.net/gh/ahsub/refundex@c9aa2fce/modules/ko-tradedetail.js');
+    }
+    const report = window.koTradeDetail.buildTradeDetailReport(flexAllTrades, String(year));
+    _tradeDetailCache = { year, report };
+
+    // Warnungen
+    const warnEl = document.getElementById('tradedetail-warnings');
+    if (report.warnings.length > 0) {
+      warnEl.style.display = 'block';
+      warnEl.innerHTML = report.warnings.map(w =>
+        `<div class="hinweis warn" style="margin-bottom:0.5rem"><span>⚠️</span><span>${escapeHtml(w)}</span></div>`
+      ).join('');
+    } else {
+      warnEl.innerHTML = '';
+    }
+
+    // Body nur neu rendern wenn gerade sichtbar (Performance bei vielen Symbolen)
+    const body = document.getElementById('tradedetail-body');
+    if (body.style.display !== 'none') {
+      body.innerHTML = renderTradeDetailBody(report);
+    } else {
+      // Titel-Zähler aktualisieren auch wenn eingeklappt
+      const btn = document.getElementById('tradedetail-toggle-btn');
+      if (btn) btn.textContent = `▸ Anzeigen (${report.meta.symbolCount} Wertpapiere)`;
+    }
+  } catch (err) {
+    section.style.display = 'block';
+    document.getElementById('tradedetail-warnings').innerHTML =
+      `<div class="hinweis warn"><span>⚠️</span><span>Trade-Detail-Report konnte nicht geladen werden: ${escapeHtml(err.message)}</span></div>`;
+    console.error('[TradeDetail]', err);
+  }
+}
+
+function toggleTradeDetailVisibility() {
+  const body = document.getElementById('tradedetail-body');
+  const btn  = document.getElementById('tradedetail-toggle-btn');
+  if (!body || !_tradeDetailCache) return;
+  const nowVisible = body.style.display === 'none';
+  body.style.display = nowVisible ? 'block' : 'none';
+  if (nowVisible) {
+    body.innerHTML = renderTradeDetailBody(_tradeDetailCache.report);
+    btn.textContent = '▾ Ausblenden';
+  } else {
+    btn.textContent = `▸ Anzeigen (${_tradeDetailCache.report.meta.symbolCount} Wertpapiere)`;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderTradeDetailBody(report) {
+  if (report.securities.length === 0) {
+    return `<div style="color:var(--muted);font-size:13px;padding:0.5rem 0">Keine Aktien-Transaktionen im gewählten Steuerjahr gefunden.</div>`;
+  }
+  return report.securities.map(sec => {
+    const rowsHtml = sec.rows.map(r => {
+      if (r.kind === 'buy') {
+        return `<tr>
+          <td>${escapeHtml(r.trade.date)}</td>
+          <td>Anschaffung${r.trade.classification !== 'stock_buy' ? ' (' + escapeHtml(r.trade.classification) + ')' : ''}</td>
+          <td style="text-align:right">+${fmtQty(r.trade.qty)}</td>
+          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
+          <td style="text-align:right">${fmt(r.eurCost)}</td>
+        </tr>`;
+      } else {
+        const lotRefs = r.consumedLots.map(l =>
+          l.synthetic
+            ? `<div style="font-size:11px;color:var(--amber)">↳ Altbestand unbekannt (${fmtQty(l.qty)} Stück, Kosten 0 € — s. Warnung oben)</div>`
+            : `<div style="font-size:11px;color:var(--muted)">↳ Zuordnung zu Anschaffung am ${escapeHtml(l.date)}: ${fmtQty(l.qty)} Stück, ${fmt(l.costEur)}</div>`
+        ).join('');
+        const totalCost = r.consumedLots.reduce((s,l) => s + l.costEur, 0);
+        const gainLoss = round2(r.proceedsEur - totalCost);
+        return `<tr>
+          <td>${escapeHtml(r.trade.date)}</td>
+          <td>Veräußerung${lotRefs}</td>
+          <td style="text-align:right">${fmtQty(r.trade.qty)}</td>
+          <td style="text-align:right">${escapeHtml(r.trade.currency)}</td>
+          <td style="text-align:right">${(r.trade.fxRateToBase||1).toFixed(4)}</td>
+          <td style="text-align:right">${fmt(r.proceedsEur)} <span style="color:${gainLoss>=0?'var(--green)':'var(--red)'};font-size:11px">(${gainLoss>=0?'+':''}${fmt(gainLoss)})</span></td>
+        </tr>`;
+      }
+    }).join('');
+
+    return `
+      <div style="margin-bottom:1.5rem;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="background:var(--bg3);padding:0.6rem 1rem;font-weight:600;font-size:13px;display:flex;justify-content:space-between">
+          <span>${escapeHtml(sec.symbol)} ${sec.isin ? `<span style="color:var(--muted);font-weight:400;font-size:11px">${escapeHtml(sec.isin)}</span>` : ''}</span>
+          <span style="color:var(--muted);font-weight:400;font-size:11px">Endbestand: ${fmtQty(sec.endbestand.stueck)} Stück · ${fmt(sec.endbestand.kostenEur)}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
+              <th style="padding:0.4rem 1rem">Datum</th><th>Beschreibung</th>
+              <th style="text-align:right">Stück</th><th style="text-align:right">Whrg.</th>
+              <th style="text-align:right">Kurs (Tageskurs)</th><th style="text-align:right;padding-right:1rem">EUR</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }).join('') + `<div style="font-size:11px;color:var(--muted);margin-top:0.5rem">Stand: ${escapeHtml(report.meta.moduleVersion)} · ${report.meta.scope}</div>`;
+}
+
+function fmtQty(n) {
+  return (n || 0).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
 function renderOverview(kap, div, wht, zins, optSaldo, optG, optL, akSaldo, akG, akL, fxSaldo, divSrc, fxSrc, d) {
